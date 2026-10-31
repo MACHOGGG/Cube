@@ -17,6 +17,7 @@
  * 这个门要开浏览器，所以留在本地手跑，不进 CI（见 ci.yml 开头那段）。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2] || 'http://localhost:8818/';
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
@@ -29,6 +30,7 @@ const check = (n, ok, extra = '') => {
 
 const PIECES = '#boardWrap .tile, #boardWrap .ball, #boardWrap .tri';
 const ctx = await browser.newContext({ viewport: { width: 1920, height: 900 } });
+await unlockAll(ctx);
 await ctx.addInitScript(() => {
   for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
     localStorage.setItem(k, '1');

@@ -13,6 +13,7 @@
  * TESTMONTH 一台服务器只能兑一次——重跑请换端口重开服务器。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 /**
  * 按住那颗《还是离开》。
@@ -50,6 +51,7 @@ const shown = (page, sel) => page.$eval(sel, (el) => el.classList.contains('show
 
 async function newPlayer(label, unseen = []) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await unlockAll(ctx);
   await ctx.addInitScript((skip) => {
     const keys = { square: 'slides_tutorial_seen', circle: 'slides_tutorial_seen_circle', triangle: 'slides_tutorial_seen_triangle' };
     for (const [fam, k] of Object.entries(keys)) if (!skip.includes(fam)) localStorage.setItem(k, '1');

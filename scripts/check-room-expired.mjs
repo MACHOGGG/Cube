@@ -32,6 +32,7 @@
  *   ⑥ 重连页（启动那一问没打通，挂着「正在把您接回小屋」）之后收到 ended：同一句、座位清掉。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2];
 if (!BASE) {
@@ -48,6 +49,7 @@ const errs = [];
 
 async function newPlayer(label) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await unlockAll(ctx);
   await ctx.addInitScript(() => {
     if (sessionStorage.getItem('gate_primed') === '1') return;
     sessionStorage.setItem('gate_primed', '1');

@@ -18,6 +18,7 @@
  * 的高度只剩一半。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2];
 if (!BASE) {
@@ -220,11 +221,9 @@ const PAGES = [
     go: async (p) => {
       await p.click('#navProfile');
       await p.waitForSelector('.profile-page', { timeout: 10000 });
-      await p.evaluate(() => {
-        const b = [...document.querySelectorAll('button, a')].find((e) =>
-          /Slides\s*(天才|Genius|Génie)/i.test(e.textContent || ''));
-        b?.click();
-      });
+      // 推12（10-31 Z-J02 F-1）起那颗徽章的字是「登录 / 注册」（becomeGenius 改字），不再写「Slides 天才」——按字找就
+      // 找不到了。id 没变，按 id 点。
+      await p.click('#becomeGeniusBtn');
     },
     // 第 17 推起没开通的人看到的这一扇叫 .invite-modal（原先和帐号窗共用一个 .genius-modal）。
     ready: '.invite-modal',
@@ -239,6 +238,7 @@ const PAGES = [
 for (const size of SIZES) {
   for (const lang of LANGS) {
     const ctx = await browser.newContext({ viewport: { width: size.width, height: size.height } });
+    await unlockAll(ctx);
     await ctx.addInitScript((l) => {
       for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
         localStorage.setItem(k, '1');
@@ -444,6 +444,7 @@ for (const size of SIZES) {
 // check-redesign-fit 里，这儿只钉断点。）
 {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  await unlockAll(ctx);
   await ctx.addInitScript(() => {
     localStorage.setItem('slides_lang', 'zhHans');
     localStorage.setItem('slides_intro_seen', '1');

@@ -177,6 +177,7 @@ export function createSquareGame(): ShapeGame {
         noCountdown: !!opts?.noCountdown,
         // 每日挑战页开的局：重开时倒数页照那一页摆（10-31 整合版 Z-C05 ①）。
         dailyStage: opts?.dailyStage,
+        bulbKey: opts?.bulbKey,
         // 单人、非种子的老虎机局：《再来一局》重新抽一个目标（站长 10-31）。种子局、小屋局目标由码决定，不给。
         // 「种子局」指码是敲进来的 / 每日的 / 小屋的（目标由码决定，重开不换）；单人老虎机那一屏自己随手抽的那串
         // （source 'random'）不算——控制器重开时本来就照新目标另挑一串（plantSeed 的 seedForTarget）。

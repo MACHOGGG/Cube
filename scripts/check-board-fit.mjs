@@ -38,6 +38,7 @@
  * 个写的）。把松手后也一起断言，量的就不是这个 bug 了。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2] || 'http://localhost:8815/';
 const TOL = 0.5;
@@ -190,6 +191,7 @@ const VIEWPORTS = want ? ALL_VIEWPORTS.filter((v) => v.key === want) : ALL_VIEWP
 
 for (const vp of VIEWPORTS) {
   const ctx = await browser.newContext({ viewport: { width: vp.width, height: vp.height } });
+  await unlockAll(ctx);
   await ctx.addInitScript(() => {
     for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
       localStorage.setItem(k, '1');
@@ -218,6 +220,8 @@ for (const vp of VIEWPORTS) {
       JSON.stringify({
         active: true,
         channel: 'code',
+        // 兑过的那张码（10-31 方案推12：更多布局要登着，「兑过码」也算登着——engine/geniusContent.ts 的 isSignedIn）。
+        code: 'GATEUNLOCK',
         until: Date.now() + 365 * 24 * 60 * 60 * 1000,
       }),
     );

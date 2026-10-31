@@ -69,6 +69,7 @@
  * ─────────────────────────────────────────────────────────────────────────
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 import { vetRun } from '../api/_maxscore.js';
 import { afterRestart } from './lib/afterRestart.mjs';
 
@@ -89,6 +90,7 @@ const errs = [];
 p.on('pageerror', (e) => errs.push(String(e)));
 
 // 语言选好、三族教学都看过：直接落在主菜单上。
+await unlockAll(p);
 await p.addInitScript(() => {
   try {
     // 'zhHans'，不是 'zh-Hans'。写错的那一版等于没写：语言回落到英文，而这一台此前
@@ -237,6 +239,7 @@ async function openSquare(page, timed) {
 
 {
   const c4 = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await unlockAll(c4);
   await c4.addInitScript(seed);
   const q = await c4.newPage();
   const e4 = [];
@@ -269,6 +272,7 @@ async function openSquare(page, timed) {
 }
 {
   const c5 = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await unlockAll(c5);
   await c5.addInitScript(seed);
   const q = await c5.newPage();
   const e5 = [];
@@ -429,8 +433,11 @@ check('6（尺子）兑到了码、拿到了登录的钥匙', !!signedIn);
  */
 async function scoreThenEnd({ flip = false, delayMs, answer = null, scoreFirst = false, noScore = false }) {
   const c = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await unlockAll(c);
   await c.addInitScript(seed);
+  await unlockAll(c);
   await c.addInitScript((ent) => localStorage.setItem('slides_genius', ent), signedIn);
+  await unlockAll(c);
   await c.addInitScript(LEAD_SPY);
   const q = await c.newPage();
   const errs = [];
@@ -540,6 +547,7 @@ for (const { flip, delayMs, scoreFirst } of [
 // ---------------------------------------------------------------------------
 {
   const c8 = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await unlockAll(c8);
   await c8.addInitScript(seed);
   const q = await c8.newPage();
   const e8 = [];
@@ -577,6 +585,7 @@ for (const { flip, delayMs, scoreFirst } of [
 // ---------------------------------------------------------------------------
 {
   const c9 = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await unlockAll(c9);
   await c9.addInitScript(seed);
   const q = await c9.newPage();
   const e9 = [];
@@ -623,6 +632,7 @@ for (const { flip, delayMs, scoreFirst } of [
 // ---------------------------------------------------------------------------
 {
   const c10 = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await unlockAll(c10);
   await c10.addInitScript(seed);
   const q = await c10.newPage();
   const e10 = [];
@@ -663,6 +673,7 @@ for (const { flip, delayMs, scoreFirst } of [
 // ---------------------------------------------------------------------------
 {
   const c11 = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await unlockAll(c11);
   await c11.addInitScript(seed);
   const q = await c11.newPage();
   const e11 = [];
@@ -713,6 +724,7 @@ for (const { flip, delayMs, scoreFirst } of [
 // ---------------------------------------------------------------------------
 {
   const c12 = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await unlockAll(c12);
   await c12.addInitScript(seed);
   await c12.addInitScript(() => {
     const live = new Set();

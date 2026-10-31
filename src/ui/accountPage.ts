@@ -36,6 +36,7 @@ import { applyPaletteToTree } from '../engine/palettePref';
 import { isStoreChannel } from '../engine/channel';
 import { isGenius, signedInEmail } from '../engine/subscription';
 import { sessionExpired } from '../engine/cloudScores';
+import { isSignedIn } from '../engine/geniusContent';
 import {
   openAuthWindow,
   openGeniusWindow,
@@ -107,6 +108,7 @@ export function renderAccountPage(
   // is the only identity it has; the store builds have none, because Apple
   // and Google already know who is holding the phone — so what would have
   // been 登录通道 there is 恢复购买, the only "sign in" they need.
+  // 只剩那颗宽键的字在问它（「账号状态」还是「账号」）。锁、徽章都改问登录了（10-31 方案推12），见下面 lockGlyph。
   const subscribed = isGenius();
   /**
    * 登着的人，哪怕此刻没有权限，那颗大键也该带他去《账户》。
@@ -117,6 +119,11 @@ export function renderAccountPage(
    * 不代表有权限」，这一行就是那句话在代码里的样子。
    */
   const signedIn = Boolean(signedInEmail());
+  /**
+   * 「登录后可用」那几样开不开（10-31 方案推12 Z-J02 E 第 3 条）：问 engine/geniusContent.ts 的 isSignedIn——兑过内部码、没绑
+   * 邮箱的人也算登着（上面那个 signedIn 只认邮箱，管的是那颗宽键带他去哪儿）。
+   */
+  const unlocked = isSignedIn();
   /**
    * 登着、可令牌在服务器那头已经不作数了（10-11 方案 A-12）：别的设备上改过密码、这台设备的令牌被登出
    * 作废了、或者从签发起满了一年。看榜、交卷都回 401（engine/cloudScores.ts 的 sessionExpired 记着），
@@ -134,8 +141,12 @@ export function renderAccountPage(
       : isStoreChannel()
         ? s.restoreBtn
         : s.loginGateway;
-  /** 没开通的人，做好了的那几行行首挂的那把小锁。 */
-  const lockGlyph = subscribed
+  /**
+   * 没登录的人，要登录才能用的那几行行首挂的那把小锁（10-31 方案推12 Z-J02 E 第 3 条：天才层取消之后，这块面板叫
+   * 「登录后可用」）。挂锁的是深色界面、更多配色、「速度」、世界排名、更多布局（按 layoutLock，四副全是）；多人游玩、
+   * 老虎机模式、更多得分目标、更多玩法不挂——那几样不用登录。点了锁着的那几行开登录窗。
+   */
+  const lockGlyph = unlocked
     ? ''
     : `<span class="profile-row-glyph profile-row-glyph--lock">${ICON_LOCK}</span>`;
   /**
@@ -240,9 +251,9 @@ export function renderAccountPage(
             <!-- 这一块的主角是那个牌子：正中一个大吉祥物，底下一枚徽章（「成为 / 你已经是
                  Slides 天才」），再底下才是十二行。 -->
             <div class="genius-crest">${geniusLogoVar(90, 'genius-logo--crest')}</div>
-            <button class="genius-badge" id="becomeGeniusBtn">${
-              subscribed ? s.subscribedTitle : s.becomeGenius
-            }</button>
+            <!-- 徽章只给没登录的人：「登录 / 注册」（10-31 方案推12；id 保留，好几道门点它）。登着的人不摆——原先写
+                 「你已经是 Slides 天才」，天才层取消之后那块牌子没有话可说了。 -->
+            ${unlocked ? '' : `<button class="genius-badge" id="becomeGeniusBtn">${s.becomeGenius}</button>`}
             <!--
               **《内部码》那一行撤了**（E41，2026-10 的改制）。后端 api/redeem.js 一行没动，已经
               发出去的码照旧兑得了。
@@ -266,7 +277,7 @@ export function renderAccountPage(
                 <span class="profile-row-text">
                   <span class="profile-row-label">${privileges[0]}</span>
                   ${
-                    subscribed
+                    unlocked
                       ? `<span class="profile-row-sub">${colorblindOn() ? CVD_NAME[cvdVariant()] : VARIANT_NAME[pieceVariant()]}</span>`
                       : ''
                   }
@@ -280,7 +291,7 @@ export function renderAccountPage(
                    一段里，所以行首多一把锁：没开通的按下去不是没反应，是带他去开通那
                    一页——和这一段里别的锁着的几行一个样。 -->
               <button class="profile-row" id="themeRow" role="switch"
-                      aria-checked="${subscribed && pickedTheme() === 'dark'}"${subscribed ? '' : ' aria-disabled="true"'}>
+                      aria-checked="${unlocked && pickedTheme() === 'dark'}"${unlocked ? '' : ' aria-disabled="true"'}>
                 ${lockGlyph}
                 <span class="profile-row-label">${s.themeTitle}</span>
                 <span class="pill-switch" aria-hidden="true"><span class="pill-switch-knob"></span></span>
@@ -292,7 +303,7 @@ export function renderAccountPage(
                 ${lockGlyph}
                 <span class="profile-row-text">
                   <span class="profile-row-label">${s.flipSpeedTitle}</span>
-                  ${subscribed ? `<span class="profile-row-sub">${flipLabel(flipStep())}</span>` : ''}
+                  ${unlocked ? `<span class="profile-row-sub">${flipLabel(flipStep())}</span>` : ''}
                 </span>
                 <span class="profile-row-value">&rsaquo;</span>
               </button>
@@ -300,7 +311,6 @@ export function renderAccountPage(
                    的人进去看得见三台转着的机器、按得动那颗 STOP，只是没有右下角那颗
                    《开始 〉》，开不了局。 -->
               <button class="profile-row" id="randomRow">
-                ${lockGlyph}
                 <span class="profile-row-label">${s.randomTargetTitle}</span>
                 <span class="profile-row-value">&rsaquo;</span>
               </button>
@@ -308,7 +318,6 @@ export function renderAccountPage(
                    的世界排名。都是「看得见」的东西——没开通的人一样点得开，只是行
                    首挂着锁：图案和布局他玩不到，榜他看不清（那一页由服务器判）。 -->
               <button class="profile-row" id="moreTargetsRow">
-                ${lockGlyph}
                 <span class="profile-row-label">${privileges[2]}</span>
                 <span class="profile-row-value">&rsaquo;</span>
               </button>
@@ -329,7 +338,6 @@ export function renderAccountPage(
                    左边那个标题还长，于是这一行和上下几行对不齐，整段的排版被它一行撑歪。
                    那三个名字点进去第一屏就是，不必在门口先念一遍。 -->
               <button class="profile-row" id="moreModesRow">
-                ${lockGlyph}
                 <span class="profile-row-label">${privileges[4]}</span>
                 <span class="profile-row-value">&rsaquo;</span>
               </button>
@@ -517,7 +525,7 @@ export function renderAccountPage(
    * 话，而且它既没告诉人有什么，也没给人任何想开通的理由。
    */
   function openPalettePicker() {
-    const locked = !isGenius();
+    const locked = !unlocked;
     // 色盲友好开着的时候，这里挑的是色盲那三套；关着的时候，挑的是棋子那三
     // 套。两组互斥（见 themedPalette），所以同一个窗口按开关切内容，而不是并
     // 排列出一堆对他不生效的选项。
@@ -555,7 +563,7 @@ export function renderAccountPage(
     pushLayer(close, overlay);
     overlay.querySelector<HTMLButtonElement>('#palGo')?.addEventListener('click', () => {
       close();
-      openGeniusWindow(lang, refresh);
+      openAuthWindow(lang, refresh);
     });
     const opts = Array.from(overlay.querySelectorAll<HTMLButtonElement>('.pal-opt'));
     const mark = (v: string) => {
@@ -598,7 +606,7 @@ export function renderAccountPage(
    * 只是拉不动。
    */
   function openFlipSpeedPicker() {
-    const locked = !isGenius();
+    const locked = !unlocked;
     // 演示那枚棋子用玩家自己这套配色里的两支：正面一支实色，反面一颗点。
     // 跟着色盲开关走，因为棋盘也跟着它走。
     const swatch = colorblindOn() ? cvdSwatch(cvdVariant()) : variantSwatch(pieceVariant());
@@ -711,7 +719,7 @@ export function renderAccountPage(
     };
     overlay.querySelector<HTMLButtonElement>('#flipGo')?.addEventListener('click', () => {
       close();
-      openGeniusWindow(lang, refresh);
+      openAuthWindow(lang, refresh);
     });
     pushLayer(close, overlay);
     overlay.querySelector<HTMLButtonElement>('#flipClose')!.addEventListener('click', close);
@@ -744,8 +752,8 @@ export function renderAccountPage(
    * 在 <html> 上换一个属性，这一页连同底下的主菜单当场就变了。
    */
   on('themeRow', () => {
-    if (!isGenius()) {
-      openGeniusWindow(lang, refresh);
+    if (!unlocked) {
+      openAuthWindow(lang, refresh);
       return;
     }
     const dark = pickedTheme() !== 'dark';

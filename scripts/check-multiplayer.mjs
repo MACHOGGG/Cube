@@ -12,6 +12,7 @@
  * step of that chain stops working, not only the seeding.
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 import { build } from 'esbuild';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -48,6 +49,7 @@ async function newPlayer(label, unseen = []) {
   const ctx = await browser.newContext({ viewport: { width: 420, height: 900 } });
   // unseen 里写的那几族，这台设备当作「没看过教学」——开局前那一句
   //《会……的规则吗？》就是照这个判断要不要问的。
+  await unlockAll(ctx);
   await ctx.addInitScript((skip) => {
     const keys = {
       square: 'slides_tutorial_seen',
@@ -126,15 +128,16 @@ const gate = await B.page.$eval('#mpCreate', (el) => {
   // 它自己那一颗（.mp-create），不再借订阅窗那颗 .genius-cta 的样子。
   return { locked: el.classList.contains('mp-create--locked'), lock: size('.cta-lock'), crest: size('.genius-logo') };
 });
-check('没订阅的人，《开房间》上挂着锁和天才招牌', gate.locked && gate.lock > 0 && gate.crest > 0,
+check('没登录的人，《开房间》上挂着锁和天才招牌', gate.locked && gate.lock > 0 && gate.crest > 0,
   JSON.stringify(gate));
 check('招牌是主菜单那块的一半（40px 上下）', Math.abs(gate.crest - 40) <= 2, `${gate.crest}px`);
 await B.page.click('#mpCreate');
-// 第 17 推起没开通的人看到的这一扇叫 .invite-modal（原先和帐号窗共用一个 .genius-modal）。
-const paywall = await B.page.waitForSelector('.invite-modal', { timeout: 5000 }).catch(() => null);
-check('非天才点开房间，看到的是付费墙而不是报错', !!paywall);
+// 10-31 方案推12（10-14 F-1 h）：开小屋只要登录，没登录的人按下去看到的是登录窗（#authMailForm）——原先是订阅那一扇
+// （.invite-modal，「付费墙」），天才层取消了。
+const paywall = await B.page.waitForSelector('#authMailForm', { timeout: 5000 }).catch(() => null);
+check('没登录的人点开房间，看到的是登录窗而不是报错', !!paywall);
 check('而且没有真的开出房间来', (await B.page.$('.mp-code')) === null);
-if (paywall) await B.page.click('#geniusClose');
+if (paywall) await B.page.click('#authClose');
 
 // ---- the host opens a room ---------------------------------------------
 await A.page.click('#navProfile');
@@ -148,7 +151,7 @@ const opened = await A.page.$eval('#mpCreate', (el) => ({
   lock: !!el.querySelector('.cta-lock'),
   crest: !!el.querySelector('.genius-logo'),
 }));
-check('开通了的人，锁没了，招牌还在', opened.locked === false && opened.lock === false && opened.crest === true,
+check('登着的人，锁没了，招牌还在', opened.locked === false && opened.lock === false && opened.crest === true,
   JSON.stringify(opened));
 await A.page.fill('#mpName', '甲');
 await A.page.click('#mpCreate');

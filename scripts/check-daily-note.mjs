@@ -30,6 +30,7 @@
  * 用电脑的视口：每日挑战轮到七色圆球那一天，竖着拿手机倒数底下多一句「请横屏」——这一台量的不是那个。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2];
 if (!BASE) {
@@ -53,6 +54,7 @@ const check = (n, ok, extra = '') => {
  */
 async function playDaily(shiftDays, code) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  await unlockAll(ctx);
   await ctx.addInitScript(() => {
     localStorage.setItem('slides_lang', 'zhHans');
     localStorage.setItem('slides_intro_seen', '1');

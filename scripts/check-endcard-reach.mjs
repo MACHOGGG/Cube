@@ -25,6 +25,7 @@
  * `auto|scroll`，以及真的有没有超出的内容。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2];
 if (!BASE) { console.log('用法：node scripts/check-endcard-reach.mjs http://localhost:8945/'); process.exit(2); }
@@ -41,6 +42,7 @@ const check = (n, ok, extra = '') => {
  */
 async function newPage(w, h, tipSeen = false) {
   const ctx = await browser.newContext({ viewport: { width: w, height: h } });
+  await unlockAll(ctx);
   await ctx.addInitScript((tipSeen) => {
     for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle']) localStorage.setItem(k, '1');
     localStorage.setItem('slides_lang', 'zhHans');

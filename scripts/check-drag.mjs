@@ -14,6 +14,7 @@
  * 得比半个格子还大，这条就会红。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2] || 'http://localhost:8815/';
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
@@ -25,6 +26,7 @@ const check = (n, ok, extra = '') => {
 };
 
 const ctx = await browser.newContext({ viewport: { width: 430, height: 900 } });
+await unlockAll(ctx);
 await ctx.addInitScript(() => {
   for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
     localStorage.setItem(k, '1');

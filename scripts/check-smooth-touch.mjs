@@ -39,6 +39,7 @@
  * 撤掉对应的改法，各节都红（⑤⑥ 换回旧 drag.ts，⑦ 换回旧的 onBeforeStart，六副一副不落）。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -112,6 +113,7 @@ const PROBE = () => ({
 
 if (PART !== 'boards') for (const [w, h, touch, label] of [[390, 844, true, '① 手机 390×844（触屏）'], [1280, 800, false, '② 电脑 1280×800（鼠标）']]) {
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, isMobile: touch, hasTouch: touch });
+  await unlockAll(ctx);
   await ctx.addInitScript(SEED);
   const page = await ctx.newPage();
   const errs = [];
@@ -138,6 +140,7 @@ if (PART !== 'boards') for (const [w, h, touch, label] of [[390, 844, true, '①
 // ── ④ 两根手指（10-11 方案 B-3）─────────────────────────────────────────────
 if (PART !== 'boards') {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await unlockAll(ctx);
   await ctx.addInitScript(SEED + `
     for (const k of ['square', 'circle', 'triangle']) localStorage.setItem('slides_tutorial_seen_' + k, '1');
     localStorage.setItem('slides_played_totaltip', '1');
@@ -229,8 +232,9 @@ if (PART !== 'boards') {
     for (const k of ['square', 'circle', 'finished', 'bomb', 'slot', 'flip', 'puzzle', 'timed', 'layout', 'totaltip']) {
       localStorage.setItem('slides_played_' + k, '1');
     }
-    localStorage.setItem('slides_genius', JSON.stringify({ active: true, channel: 'code', until: Date.now() + 365 * 864e5 }));
+    localStorage.setItem('slides_genius', JSON.stringify({ active: true, channel: 'code', code: 'GATEUNLOCK', until: Date.now() + 365 * 864e5 }));
   });
+  await unlockAll(ctx);
   // 每冒一个「+N」气泡（engine/scoreReel.ts 的 showGain）记一笔：⑦ 的尺子拿它认「这一手真得了分」。分数那一格
   // （#scoreReel 的 dataset.score）要等那一串动画走完才写，盘面静下来的那一刻常常还没写上。
   await ctx.addInitScript(() => {

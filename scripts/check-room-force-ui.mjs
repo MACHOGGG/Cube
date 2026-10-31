@@ -34,6 +34,7 @@
  *      「继续」：盘面变了；他随后交卷，存档里这一局 1 步。原先那一问的「继续」不取暂停中收着的那一步，这一步静默丢了。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2];
 if (!BASE) {
@@ -49,6 +50,7 @@ const check = (n, ok, extra = '') => {
 
 async function newPlayer() {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await unlockAll(ctx);
   await ctx.addInitScript(() => {
     // 预设「看过教学」：量的是等待页，不是头一局的教学条（CLAUDE.md「跑门时的坑」）。
     for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])

@@ -17,6 +17,7 @@
  * 身份是 dev-server 自己种的测试码兑出来的真令牌（甲 TESTMONTH、乙 TESTYEAR），who 是 'code:<码>'。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = (process.argv[2] || 'http://localhost:8940/').replace(/\/*$/, '/');
 let fail = 0;
@@ -27,6 +28,7 @@ const check = (n, ok, extra = '') => {
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+await unlockAll(ctx);
 await ctx.addInitScript(() => {
   if (sessionStorage.getItem('pq_primed') === '1') return;
   sessionStorage.setItem('pq_primed', '1');

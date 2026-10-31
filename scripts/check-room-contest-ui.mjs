@@ -31,6 +31,7 @@
  * 屏幕上摆不摆得下，不是十九台设备的联机。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 import { build } from 'esbuild';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -67,6 +68,7 @@ async function hostPage(code = 'TESTMONTH') {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const p = await ctx.newPage();
   p.on('pageerror', (e) => errs.push(e.message));
+  await unlockAll(p);
   await p.addInitScript(() => {
     for (const [k, v] of Object.entries({
       slides_lang: 'zhHans', slides_intro_seen: '1', slides_played_square: '1',
@@ -121,6 +123,7 @@ async function contestantPage(code, seat, [width, height] = [390, 844]) {
   const cctx = await browser.newContext({ viewport: { width, height }, isMobile: true, hasTouch: true });
   const c = await cctx.newPage();
   c.on('pageerror', (e) => errs.push(e.message));
+  await unlockAll(c);
   await c.addInitScript(([code, seat]) => {
     for (const [k, v] of Object.entries({
       slides_lang: 'zhHans', slides_intro_seen: '1', slides_played_square: '1',

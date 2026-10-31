@@ -18,6 +18,7 @@
  *   · 棋盘外的移动一个都不许吃——不然就成了「整页都不能动」，那是另一个 bug。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2] || 'http://localhost:8815/';
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
@@ -59,6 +60,7 @@ for (const vp of [
     viewport: { width: vp.width, height: vp.height },
     hasTouch: true, isMobile: true,
   });
+  await unlockAll(ctx);
   await ctx.addInitScript(() => {
     for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
       localStorage.setItem(k, '1');

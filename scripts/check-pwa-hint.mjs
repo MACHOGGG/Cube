@@ -33,6 +33,7 @@
  *      的位置必须一样——多出来的那一行只能从中间那张图里让）；图还在（没被挤没）。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 import { readFileSync } from 'node:fs';
 import { afterRestart } from './lib/afterRestart.mjs';
 
@@ -100,6 +101,7 @@ async function device({ w = 390, h = 844, ua, standalone, lang = 'zhHans', local
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, reducedMotion: 'reduce', ...(ua ? { userAgent: ua } : {}) });
   if (standalone === 'navigator') await ctx.addInitScript(viaNavigator);
   if (standalone === 'media') await ctx.addInitScript(viaMediaQuery);
+  await unlockAll(ctx);
   await ctx.addInitScript(([l, key, r, s, t]) => {
     if (sessionStorage.getItem('pwa-hint-seeded')) return;
     sessionStorage.setItem('pwa-hint-seeded', '1');

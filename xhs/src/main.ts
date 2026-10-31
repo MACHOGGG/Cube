@@ -57,6 +57,7 @@ import { registerCards } from '../../src/shapes/registry';
 import { installOldKernel } from './oldKernel';
 import { installTopInset } from './topInset';
 import { knowsHow, setCvdOfferKey, setKnowHowKey } from '../../src/engine/firstPlay';
+import { setBulbPrefix } from '../../src/engine/hintBulb';
 import { openTutorial, storySeen, markStorySeen, RULE_ART_CIRCLE, RULE_ART_SQUARE } from './tutorial';
 import { bombTip, flipTip, puzzleTip, slotTip } from '../../src/ui/modeTips';
 import { renderXhsMenu, XHS_ADVANCED_MODES, type XhsMode } from './menu';
@@ -217,7 +218,11 @@ function showGame(game: ShapeGame, opts: ShapeGameOpts, onBack: () => void) {
       // 写在 ...opts 前面（和网页一样）；这一端的 opts 里没人放 onLive。
       onLive: (live) => {
         // 这一局走到结算页了：教学 / 一句话提示算看过。只写一次。
-        if (!live) for (const m of marks.splice(0)) m();
+        if (!live) {
+          for (const m of marks.splice(0)) m();
+          // 主菜单跟着升一步（10-31 方案推12 Z-J02 D-8：小球教学局 → 方块出现；方块教学局 → 其余全部出现）。
+          syncXhsStage();
+        }
       },
       ...opts,
       lang: LANG,
@@ -377,15 +382,109 @@ const FIRST_RUN_KEY = 'slides.xhs.firstRun';
 type FirstKey = 'square' | 'bomb' | 'slot' | 'flip' | 'puzzle' | 'endcard' | 'totaltip';
 const OPENED_KEY = (k: FirstKey) => `slides.xhs.opened.${k}`;
 
-/** 小球和方块都打过一遍了没有——主菜单要不要再压暗别的玩法，看这个。 */
-function basicsDone(): boolean {
-  // 按过《我会玩》就当路已经走完了——那颗按钮撤掉的就是这套路标（见
-  // src/engine/firstPlay.ts 的 knowsHow）。
-  if (knowsHow()) return true;
+/**
+ * 主菜单到了第几步（10-31 方案推12 Z-J02 D-8；网页那一端是五步，engine/menuStage.ts，这一端另一套、不 import 它）：
+ *
+ *   第 1 步  经典小球 ＋《我会玩》
+ *   第 2 步  经典方块出现（在小球前面）     ← 小球教学局走到结算页（storySeen('circle')，推06 起结算才写）
+ *   第 3 步  每日挑战、炸弹、老虎机、无限反转、步步为营   ← 方块教学局走到结算页（!firstTimeIn('square')），或《我会玩》
+ *
+ * 键都在这一端自己的 slides.xhs. 前缀里（slides.xhs.stage / stageShown / 哨兵 stageMigrated）：这一前缀属隐私政策「调
+ * 试（不写进政策）」那一类，不登记。只升不降；存不进 localStorage 当第 3 步（全部摆出来）。
+ *
+ * 第 1 步那一屏只在「第一次打开直接进的那局小球，没打到结算就退出」时看得到（firstScreen：下次打开还会再进那一局）。
+ */
+const XHS_STAGE_KEY = 'slides.xhs.stage';
+const XHS_SHOWN_KEY = 'slides.xhs.stageShown';
+const XHS_MIGRATED_KEY = 'slides.xhs.stageMigrated';
+type XhsStage = 1 | 2 | 3;
+const clampXhs = (n: number): XhsStage => Math.max(1, Math.min(3, Math.floor(n) || 1)) as XhsStage;
+
+/** 存得进 localStorage 吗（只试一次）。读得出、一写就抛的环境，那一步永远记不住——当第 3 步，全部摆出来。 */
+let xhsWritable: boolean | null = null;
+function xhsCanStore(): boolean {
+  if (xhsWritable !== null) return xhsWritable;
   try {
-    return storySeen('circle') && !firstTimeIn('square');
+    localStorage.setItem('slides.xhs.probe', '1');
+    localStorage.removeItem('slides.xhs.probe');
+    xhsWritable = true;
   } catch {
-    return true;
+    xhsWritable = false;
+  }
+  return xhsWritable;
+}
+
+function xhsStage(): XhsStage {
+  if (!xhsCanStore()) return 3;
+  try {
+    const raw = localStorage.getItem(XHS_STAGE_KEY);
+    return raw === null ? 1 : clampXhs(Number(raw));
+  } catch {
+    return 3;
+  }
+}
+
+function raiseXhsStage(n: XhsStage): XhsStage {
+  const next = clampXhs(Math.max(xhsStage(), n));
+  try {
+    localStorage.setItem(XHS_STAGE_KEY, String(next));
+  } catch {
+    return 3;
+  }
+  return next;
+}
+
+/** 按顺序算这一步、只升不降写回。走到结算页、按《我会玩》、开机都叫它。 */
+function syncXhsStage(): XhsStage {
+  let e2 = false;
+  let e3 = false;
+  try {
+    const knows = knowsHow();
+    e2 = knows || storySeen('circle');
+    e3 = knows || !firstTimeIn('square');
+  } catch {
+    return 3;
+  }
+  return raiseXhsStage(e2 ? (e3 ? 3 : 2) : 1);
+}
+
+/** 主菜单真的画出来过的是第几步（判「哪几张是新的」用）。没有就当和现在一样（不演）。 */
+function xhsStageShown(): XhsStage {
+  if (!xhsCanStore()) return 3;
+  try {
+    const raw = localStorage.getItem(XHS_SHOWN_KEY);
+    return raw === null ? xhsStage() : clampXhs(Number(raw));
+  } catch {
+    return 3;
+  }
+}
+
+function markXhsShown(n: XhsStage): void {
+  try {
+    localStorage.setItem(XHS_SHOWN_KEY, String(n));
+  } catch {
+    /* 存不进：下次照样当演过 */
+  }
+}
+
+/**
+ * 开机一次性迁移（哨兵 slides.xhs.stageMigrated）：本机还没有 slides.xhs.stage 的老玩家——开过炸弹 / 老虎机 / 无限反转 /
+ * 步步为营、见过结算页（slides.xhs.opened.*），或者本机存档里有局——直接第 3 步，菜单和他昨天看到的一样多。第一次画主菜单
+ * 不演「新卡浮出」。
+ */
+function migrateXhsStageOnce(): void {
+  try {
+    if (localStorage.getItem(XHS_MIGRATED_KEY) === '1') return;
+    if (localStorage.getItem(XHS_STAGE_KEY) === null) {
+      const opened = (['bomb', 'slot', 'flip', 'puzzle', 'endcard'] as const).some((k) => localStorage.getItem(OPENED_KEY(k)) === '1');
+      const played = loadAllRuns(BOOKS.map((b) => b.card.bestKey + b.suffix)).length > 0;
+      if (opened || played) raiseXhsStage(3);
+      syncXhsStage();
+      markXhsShown(xhsStage());
+    }
+    localStorage.setItem(XHS_MIGRATED_KEY, '1');
+  } catch {
+    /* 存不进：xhsStage 读不到当第 3 步 */
   }
 }
 
@@ -459,7 +558,7 @@ function firstScreen(): void {
   //
   // 记成「看过」而不是绕过闸口：小球那一段的内容他已经在这一局里边玩边学过
   // 了。开局本来就不再自动放分镜（见 showGame），所以这一笔管的是别处——主菜
-  // 单要不要压暗其余玩法（basicsDone 读的就是它），以及首玩期那几句提示还认不
+  // 单到了第几步（syncXhsStage 读的就是它：小球教学局走到结算页 → 方块出现），以及首玩期那几句提示还认不
   // 认他是新人。方块那一格不动：他还没碰过方块。
   pendingMarks.push(() => markStorySeen('circle'));
   // coach：棋盘底下那块教学条（ui/coachBar.ts）。头一局才给——这一局的规矩全
@@ -471,7 +570,8 @@ function firstScreen(): void {
   // 盘底下那句话，比先让他对着四个数字等四秒管用。往后每一局照旧数。
   showGame(
     circleGame,
-    { coach: true, coachArt: RULE_ART_CIRCLE, noCountdown: true },
+    // bulbKey：局中灯泡按哪个玩法数（10-31 方案推12 Z-J03，同网页；这一端的计数键带 slides.xhs.bulb. 前缀）。
+    { coach: true, coachArt: RULE_ART_CIRCLE, noCountdown: true, bulbKey: 'circle' },
     showMenu,
   );
 }
@@ -480,10 +580,12 @@ function firstScreen(): void {
 
 function showMenu() {
   teardown();
+  const stage = syncXhsStage();
   renderXhsMenu(root, LANG, {
-    // 主菜单不再单独点亮某一张：基础那两个正常亮，其余几个调暗一档（玩家
-    // 定的「基础的两个玩法是明亮的，剩下的轻微暗淡」，见 menu.ts 的 soon）。
-    glow: [],
+    // 第 1 步小球那张亮着；第 2 步方块那张（还没打过的话）亮着；第 3 步一张都不常亮（10-31 方案推12 Z-J02 D-8）。
+    glow: stage === 1 ? ['circle'] : stage === 2 && firstTimeIn('square') ? ['square'] : [],
+    stage,
+    shown: xhsStageShown(),
     /**
      * 炸弹 / 老虎机 / 无限反转 / 步步为营：完整版里还有更进阶的玩法，这儿标一块牌子
      * 当预告。这一版它们照样免费——牌子不拦手，点开就能玩。牌子是常驻的。
@@ -494,12 +596,12 @@ function showMenu() {
      * 的轻微暗淡」。少的不是功能，是一屏卡说不到一块去。
      */
     soon: XHS_ADVANCED_MODES,
-    // 暗淡只在头几局当路标：小球和方块都打过一遍之后就撤掉（玩家定的）。
-    // 那时候路他自己认得了，再压着别的玩法只剩「这几个不太重要」这一层意
-    // 思，不是我们想说的。
-    dim: basicsDone() ? [] : XHS_ADVANCED_MODES,
-    // 按了《我会玩》就地重画：上面那三样（glow / soon / dim）都由 basicsDone 算。
-    onKnowHow: showMenu,
+    // 原先这儿还有一位 dim：小球、方块都打过之前，其余几张压暗一档当路标。10-31 方案推12 起没到的卡根本不摆，压暗删了。
+    // 按了《我会玩》：直接到第 3 步，就地重画（新出来的几张浮上来）。
+    onKnowHow: () => {
+      syncXhsStage();
+      showMenu();
+    },
     onPlay: (mode: XhsMode) => {
       // 一档一条，**不留落空的默认分支**。从前最后一档写的是 `return showFlip()`
       // 兜底：补《步步为营》那天，这一句的意思就从「flip 走这儿」悄悄变成了「凡是
@@ -509,7 +611,7 @@ function showMenu() {
         case 'square':
           return showSquare();
         case 'circle':
-          return showGame(circleGame, {}, showMenu);
+          return showGame(circleGame, { bulbKey: 'circle' }, showMenu);
         case 'bomb':
           return showBombPick();
         case 'slot':
@@ -528,6 +630,8 @@ function showMenu() {
   // 主菜单是最外面那一屏：在这儿按返回键（安卓的实体键、浏览器的后退）就该
   // 退出小工具，不再往回走，所以不给它挂返回处理。
   setScreenBack(null);
+  // 新卡演过了：下次画不再演。
+  markXhsShown(stage);
 }
 
 /**
@@ -568,7 +672,17 @@ function launchSeedGame(g: SeedGame, stage: { emblem: string; from: number }) {
             ? tipFor('puzzle', family)
             : {};
   // dailyStage（10-31 方案推06 Z-C05 ①）：《再来一局》的倒数页照那一页第一次数的样子摆。
-  showGame(game, { ...g.opts, ...teach, noCountdown: true, dailyStage: stage }, showDaily);
+  // 局中灯泡：今日那一局按「每日挑战」一个数；输代号的局按它自己的玩法数（同网页 src/main.ts 的 launchSeedGame）。
+  const bulbKey = g.opts.seed?.daily
+    ? 'daily'
+    : mode === 'base'
+      ? g.board === 'square' || g.board === 'circle'
+        ? g.board
+        : 'layout'
+      : mode === 'bombAdv' || mode === 'bombTimed'
+        ? 'bomb'
+        : mode;
+  showGame(game, { ...g.opts, ...teach, noCountdown: true, dailyStage: stage, bulbKey }, showDaily);
 }
 
 /**
@@ -606,7 +720,7 @@ function showSquare(): void {
   if (first) pendingMarks.push(() => markOpened('square'));
   showGame(
     squareGame,
-    first ? { coach: true, coachPlan: 'second', coachArt: RULE_ART_SQUARE } : {},
+    first ? { coach: true, coachPlan: 'second', coachArt: RULE_ART_SQUARE, bulbKey: 'square' } : { bulbKey: 'square' },
     showMenu,
   );
 }
@@ -655,7 +769,7 @@ function showBombPick() {
     title: '炸弹',
     tagline: '红色是危险色 · 四颗连起来这一局就结束',
     onBack: showMenu,
-    onPick: (family) => startWith(family, { bomb: true, ...tipFor('bomb', family) }, showBombPick),
+    onPick: (family) => startWith(family, { bomb: true, ...tipFor('bomb', family), bulbKey: 'bomb' }, showBombPick),
   });
   setScreenBack(showMenu);
 }
@@ -680,7 +794,7 @@ function showSlot() {
       onStart: (family: Family, target: TargetPattern, seed?: string) =>
         startWith(
           family,
-          { target, seed: seed ? { code: seed, source: 'random' } : undefined, ...tipFor('slot', family, target) },
+          { target, seed: seed ? { code: seed, source: 'random' } : undefined, ...tipFor('slot', family, target), bulbKey: 'slot' },
           showSlot,
         ),
       // 这一版全部免费，没有「没开通」这条岔路；给个空函数只是接口要它。
@@ -700,7 +814,7 @@ function showFlip() {
     {
       onBack: showMenu,
       onStart: (family) =>
-        startWith(family, { flip: true, timeLimitSec: FLIP_SECONDS, ...tipFor('flip', family) }, showFlip),
+        startWith(family, { flip: true, timeLimitSec: FLIP_SECONDS, ...tipFor('flip', family), bulbKey: 'flip' }, showFlip),
       onGenius: () => {},
     },
     false,
@@ -723,7 +837,7 @@ function showPuzzle() {
     {
       onBack: showMenu,
       onStart: (family) =>
-        startWith(family, { steps: true, ...tipFor('puzzle', family) }, showPuzzle),
+        startWith(family, { steps: true, ...tipFor('puzzle', family), bulbKey: 'puzzle' }, showPuzzle),
       onGenius: () => {},
     },
     false,
@@ -773,6 +887,8 @@ document.documentElement.setAttribute('data-theme', 'light');
 // 《我会玩》那把钥匙也换成这一版自己的：容器里两版可能共用一个域名下的存档，
 // 一版按过不该把另一版的引导也关掉（整套 slides.xhs. 前缀就是为这件事）。
 setKnowHowKey('slides.xhs.knowHow');
+// 局中灯泡的计数也记在这一端自己的前缀下（10-31 方案推12 Z-J03）。
+setBulbPrefix('slides.xhs.bulb.');
 // 倒数页上那颗色盲开关「摆过没有」同理（10-18 补充 M-2）：这一版首局没有倒数，它的第一次是第二局，
 // 和网页版各记各的。
 setCvdOfferKey('slides.xhs.cvdOffer');
@@ -811,5 +927,7 @@ installBackNav();
 wipeOldRules([squareGame.card.bestKey, circleGame.card.bestKey]);
 // 老虎机的旧局从基础那一本里搬出去（10-11 方案 B-7），网页版同一个函数。
 splitSlotRuns([squareGame.card.bestKey, circleGame.card.bestKey]);
+// 主菜单第几步：老玩家开机就补到第 3 步（10-31 方案推12 Z-J02 D-8），排在挪档之后。
+migrateXhsStageOnce();
 // 开场那段动画和网页版同一份（纯本地，anime.js 打在包里）。放完进第一屏。
 void showLoadingScreen().then(firstScreen);

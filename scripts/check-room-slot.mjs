@@ -18,6 +18,7 @@
  * （各转各的，转出来的那一个必须跟着走到自己的棋盘上去）。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2] || 'http://localhost:8817/';
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
@@ -29,11 +30,13 @@ const check = (n, ok, extra = '') => {
 
 async function newPlayer(label) {
   const ctx = await browser.newContext({ viewport: { width: 420, height: 900 } });
+  await unlockAll(ctx);
   await ctx.addInitScript(() => {
     for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
       localStorage.setItem(k, '1');
     localStorage.setItem('slides_lang', 'zhHans');
   });
+  await unlockAll(ctx);
   await ctx.addInitScript(installProbe);
   const page = await ctx.newPage();
   page.on('pageerror', (e) => console.log(`  [${label} page error] ${e.message}`));

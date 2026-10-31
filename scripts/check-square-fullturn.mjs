@@ -16,6 +16,7 @@
  * 电脑的视口：手机竖屏上拖满一整圈，手指要拖出屏幕。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2];
 if (!BASE) {
@@ -30,6 +31,7 @@ const check = (n, ok, extra = '') => {
 };
 
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+await unlockAll(ctx);
 await ctx.addInitScript(() => {
   localStorage.setItem('slides_lang', 'zhHans');
   localStorage.setItem('slides_intro_seen', '1');

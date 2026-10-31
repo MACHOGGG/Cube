@@ -257,6 +257,7 @@ export function createCircleSevenGame(): ShapeGame {
         noCountdown: !!opts?.noCountdown,
         // 每日挑战页开的局：重开时倒数页照那一页摆（10-31 整合版 Z-C05 ①）。
         dailyStage: opts?.dailyStage,
+        bulbKey: opts?.bulbKey,
         title: `Slides · ${shapeName(lang, 'circleSeven', '七色圆球')}`,
         tagline: SHELL[lang].taglineThreeWay,
         startBody: SHELL[lang].shellStartBody,

@@ -277,7 +277,11 @@ head('静态：词表、调用点、接线');
   check('得分那一拍报 score、消边那一拍报 line（带条数）、降级那一下报 erosion',
     /coach\?\.signal\('score'\)/.test(gc) && /coach\?\.signal\('line', s\.lineBonusGroups\.length\)/.test(gc) && /coach\?\.signal\('erosion'\)/.test(gc));
   check('暂停 / 继续时条子的计时一起停、一起走（doPause → coach.pause，doResume → coach.resume）',
-    /function doPause\(\)[\s\S]{0,400}coach\?\.pause\(\)/.test(gc) && /function doResume\(\)[\s\S]{0,300}coach\?\.resume\(\)/.test(gc));
+    // 推12（10-31 Z-J03 灯泡）把停表、停条子、停连锁那一段从 doPause 抽成 freeze()（灯泡也要停，但不翻暂停面板）：
+    // doPause 先调 freeze()，条子那一句就在 freeze 里。
+    (/function doPause\(\)[\s\S]{0,400}coach\?\.pause\(\)/.test(gc) ||
+      (/function doPause\(\) \{\s*if \(!freeze\(\)\) return;/.test(gc) && /function freeze\(\)[\s\S]{0,400}coach\?\.pause\(\)/.test(gc))) &&
+      /function doResume\(\)[\s\S]{0,300}coach\?\.resume\(\)/.test(gc));
   check('C 那一条 HUD 那块《得分图案》一起亮、一直亮到换条（refreshCoachGlow 问条子的 blockGlow()），局终摘掉',
     /classList\.toggle\('coach-glow-block', hint !== null && Boolean\(coach\?\.blockGlow\(\)\)\)/.test(gc) && /classList\.remove\('coach-glow-block'\)/.test(gc));
   check('C 满 5 秒那一刻正在连锁中途就不换：控制器把「正在结算」交给条子（busy: () => resolving，D77）',

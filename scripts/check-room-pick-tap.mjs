@@ -26,6 +26,7 @@
  *   ⑤ 换一块小屏（360×640，算掉浏览器那几条之后的可视尺寸）再量 ①②。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2];
 if (!BASE) {
@@ -45,6 +46,7 @@ const ctx = await browser.newContext({
   hasTouch: true,
   deviceScaleFactor: 2,
 });
+await unlockAll(ctx);
 await ctx.addInitScript(() => {
   if (sessionStorage.getItem('gate_primed') === '1') return;
   sessionStorage.setItem('gate_primed', '1');

@@ -13,6 +13,7 @@
  * 结算页要真的打完，分享图要等画布画完。这些状态没法凭空造，只能走一遍。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -211,6 +212,7 @@ for (const screen of SCREENS) {
     viewport: { width: screen.w, height: screen.h },
     deviceScaleFactor: 2,
   });
+  await unlockAll(ctx);
   await ctx.addInitScript(() => {
     localStorage.setItem('slides_lang', 'zhHans');
     localStorage.setItem('slides_tutorial_seen', '1');
@@ -221,7 +223,7 @@ for (const screen of SCREENS) {
     // read() 整份丢成 NOBODY），而内部码没过期时 refreshEntitlement 原地掉头，一个
     // 请求都不发。这不是绕过付费墙，是摆一份真实玩家的状态。
     localStorage.setItem('slides_genius', JSON.stringify({
-      active: true, channel: 'code', until: Date.now() + 365 * 864e5,
+      active: true, channel: 'code', code: 'GATEUNLOCK', until: Date.now() + 365 * 864e5,
     }));
   });
   const page = await ctx.newPage();

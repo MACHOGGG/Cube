@@ -17,7 +17,7 @@ import type { Lang } from './i18n';
  *
  * 0 = 还没有写过一条：这一套从 10-11 起才有，线上的旧页面不认 `release`，照旧比 `sha`（见 engine/newVersion.ts）。
  */
-export const RELEASE = 10;
+export const RELEASE = 11;
 
 export type ReleaseNote = Record<Lang, string>;
 
@@ -84,6 +84,14 @@ export const CHANGELOG: Readonly<Record<number, ReleaseNote>> = {
     zhHant: '電腦版個人主頁居中',
     en: 'Profile page centred on desktop',
     fr: 'Profil centré sur ordinateur',
+  },
+  // 10-31 方案推12（Z-J03）：每个玩法前两局，暂停那块牌上多一颗灯泡（附录甲 §1 推12 那一行）。主菜单一步一步出现（Z-J02）
+  // 不另加（站长 10-30：老玩家开机就补到原来那一步，新玩家没有旧版本可比）。
+  11: {
+    zhHans: '新增：局中灯泡提示',
+    zhHant: '新增：局中燈泡提示',
+    en: 'New: a hint bulb in your first games',
+    fr: 'Nouveau\u00a0: l\u2019ampoule d\u2019aide',
   },
 };
 

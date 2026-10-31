@@ -23,8 +23,8 @@ import { claimKnowsHow } from '../engine/firstPlay';
  * 造一颗《我会玩》。按下去先记住、再叫 `onSkip` 让调用方重画自己那张菜单。
  *
  * 只在引导还拦着的时候造它——「引导没在拦，却摆着一颗跳过引导的按钮」是玩家
- * 点名不要的那种「意料之外的界面」。判定留给调用方（网页版看
- * `lockedForFirstPlay()`，小红书那版看它自己的 `basicsDone()`）。
+ * 点名不要的那种「意料之外的界面」。判定留给调用方：两端都是主菜单的第 1、2 步才摆（网页版看
+ * engine/menuStage.ts 的 menuStage()，小红书那版看它自己的 xhsStage()；10-31 方案推12 Z-J02）。
  */
 export function knowHowButton(lang: Lang, onSkip: () => void): HTMLButtonElement {
   const btn = document.createElement('button');

@@ -157,7 +157,11 @@ for (const name of WIRED) {
   }
   // 10-11 方案 B-13.6：那 1.4 秒里按了暂停，原先它照样数完、在暂停面板底下把这一局收掉。真打一遍归
   // check-residue-live ③（手跑，要 vite dev）；这儿只钉接线。
-  const pause = gc.match(/function doPause\(\) \{[\s\S]*?\n  \}/);
+  // 推12（10-31 Z-J03 灯泡）把 doPause 里「停表、停教学条、停连锁、撤死局定时器」那一段抽成 freeze()（灯泡也要停，
+  // 但不翻暂停面板）：doPause 先调 freeze()，撤定时器那几句就在 freeze 里量。
+  const pause0 = gc.match(/function doPause\(\) \{[\s\S]*?\n  \}/);
+  const frz = /\bfreeze\(\)/.test(pause0?.[0] ?? '') ? gc.match(/function freeze\(\)[^{]*\{[\s\S]*?\n  \}/) : null;
+  const pause = frz ? [pause0[0] + frz[0]] : pause0;
   check('暂停时撤掉它、记下还剩多少',
     Boolean(pause) && /window\.clearTimeout\(stuckTimer\)/.test(pause[0]) && /stuckHeldMs = /.test(pause[0]), pause ? '' : '没切出 doPause');
   const resume = gc.match(/function doResume\(\) \{[\s\S]*?\n  \}/);

@@ -26,6 +26,7 @@
  * 不读 data-id、不问游戏自己的状态），多了一个「先挑这一色」。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 import * as SC from '../api/_seedcode.js';
 
 const BASE = process.argv[2];
@@ -91,10 +92,11 @@ async function device({ cvd = true, palette = null } = {}) {
     for (const k of ['square', 'circle', 'finished', 'bomb', 'slot', 'flip', 'puzzle', 'timed', 'layout', 'totaltip']) {
       localStorage.setItem('slides_played_' + k, '1');
     }
-    localStorage.setItem('slides_genius', JSON.stringify({ active: true, channel: 'code', until: Date.now() + 365 * 864e5 }));
+    localStorage.setItem('slides_genius', JSON.stringify({ active: true, channel: 'code', code: 'GATEUNLOCK', until: Date.now() + 365 * 864e5 }));
     if (on) localStorage.setItem('slides_colorblind', '1');
     if (pal) localStorage.setItem('slides_cvd_palette', pal);
   }, [cvd, palette]);
+  await unlockAll(ctx);
   // 每振一下记一笔：控制器每落下一步震 8，得分震 15 或三连（check-smooth-touch 同一套桩）。
   await ctx.addInitScript(() => {
     window.__vib = [];

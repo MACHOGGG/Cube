@@ -147,7 +147,9 @@ async function fitAt(width, height) {
  * 那句承诺。第 17 推之前它在抬头底下那一行（#geniusTag，「注册后免费立即解锁全部内容」）；
  * 方案把那一行删了——和抬头说的是同一件事——所以现在承诺就是**抬头本身**。
  */
-const PROMISE = /仅需注册即可免费/;
+// 10-31 方案推12（附录甲 §7 subscribeTitle）：抬头换成「注册即可开小屋、换配色、用深色界面，战绩存到云端。」——天才层取消，
+// 不再说「免费成为 Slides 天才」，说的是注册了能做什么。
+const PROMISE = /^注册即可开小屋/;
 /** 撤掉的那些字样，一个都不许回来。 */
 const GONE = [/订阅目前不开放/, /还剩\s*\d+\s*个名额/];
 
@@ -169,7 +171,7 @@ head('那一屏：话在、价钱不在、键是《注册》');
   check('主键是《注册》，不是《登录》（读屏念的名字）', s.primary === '注册', s.primary);
   check('键上不写字，只放图标', s.primaryText === '', s.primaryText);
   // E40 的另外三样
-  check('抬头说的是「注册就免费」，不是「成为天才」', /仅需注册/.test(s.title), s.title);
+  check('抬头说的是注册了能做什么，不是「成为天才」', /^注册即可/.test(s.title) && !/天才/.test(s.title), s.title);
   check('一条法务链接都不摆（那三份文档撤了，链过去是 404）', s.legalLinks === 0, String(s.legalLinks));
   check('没有《有兑换码》那一行（E41：内部码前端全撤）', s.redeem === false);
   /*

@@ -828,6 +828,16 @@ try {
   // 免费，锁不在比对范围里，所以这里直接发一张。channel:'code' 是内部码那条
   // 路，subscription.ts 的 read() 对它免检渠道。
   localStorage.setItem('slides_genius', JSON.stringify({ active: true, channel: 'code' }));
+  // 主菜单一步一步出现（10-31 方案推12）：两边都铺成「什么都解锁了」——网页第 5 步、小红书第 3 步，各自画过这一步（不演新卡
+  // 浮出）；局中灯泡两边都记满（只有前两局才有，不是这份脚本要比的东西）。同 scripts/lib/unlockAll.mjs 那两份。
+  for (const [k, v] of Object.entries({
+    slides_played_migrated_v1: '1', slides_played_stage: '5', slides_played_stage_shown: '5', slides_played_tier3: '1', slides_played_tier4: '1',
+    'slides.xhs.stage': '3', 'slides.xhs.stageShown': '3', 'slides.xhs.stageMigrated': '1',
+  })) localStorage.setItem(k, v);
+  for (const b of ['square', 'circle', 'timed', 'bomb', 'slot', 'flip', 'puzzle', 'layout', 'daily']) {
+    localStorage.setItem('slides_bulb_' + b, '2');
+    localStorage.setItem('slides.xhs.bulb.' + b, '2');
+  }
 } catch (e) {}
 `;
 

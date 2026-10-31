@@ -280,6 +280,7 @@ export function createCircleHexGame(): ShapeGame {
         noCountdown: !!opts?.noCountdown,
         // 每日挑战页开的局：重开时倒数页照那一页摆（10-31 整合版 Z-C05 ①）。
         dailyStage: opts?.dailyStage,
+        bulbKey: opts?.bulbKey,
         bomb: isBomb,
         title: `Slides · ${shapeName(lang, 'circleHex', '六边圆球')}`,
         tagline: isBomb ? SHELL[lang].taglineThreeWay + ' · ' + SHELL[lang].taglineBomb : SHELL[lang].taglineThreeWay,

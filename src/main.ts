@@ -6,7 +6,8 @@ import { initAnalytics, trackScreen, trackLanguage } from './engine/analytics';
 import { renderMenu, WIDE_QUERY, type HomeLayout } from './ui/menu';
 import { renderAccountPage } from './ui/accountPage';
 import { renderRecordsPage, type RecordSource } from './ui/recordsPage';
-import { restoreCloudRuns, type RunKeyFor } from './engine/cloudRestore';
+import { onCloudArchive, restoreCloudRuns, type RunKeyFor } from './engine/cloudRestore';
+import { absorbRuns, creditTier, markStageShown, menuStage, migrateMenuStageOnce, stageShown, syncMenuStage } from './engine/menuStage';
 import { suffixFor } from './engine/runKey';
 import { wipeOldRules } from './engine/wipeOldRules';
 import { splitSlotRuns } from './engine/slotSplit';
@@ -23,8 +24,8 @@ import { applyPaletteToTree, onColorblindChange } from './engine/palettePref';
 import './engine/themePref';
 import { showLangSwitchModal } from './ui/langSwitchModal';
 import { applyHtmlLang, loadLang, saveLang, detectLang, markTutorialSeen, isFirstRun, markFirstRunDone, STRINGS, type Lang } from './i18n';
-import { isGenius, onGeniusChange, refreshEntitlement } from './engine/subscription';
-import { openAuthWindow, openGeniusWindow } from './ui/subscribe';
+import { onGeniusChange, refreshEntitlement } from './engine/subscription';
+import { openAuthWindow } from './ui/subscribe';
 import { errorText, renderMultiplayerPage, type MatchStart } from './ui/multiplayer';
 import { mountScoreboard } from './ui/scoreboard';
 import { showRoomCard } from './ui/roomCard';
@@ -36,6 +37,7 @@ import {
   fetchState,
   forgetRoom,
   iAmHost,
+  lastPlayedRound,
   latestRoomState,
   leaveRoom,
   startMatch,
@@ -51,10 +53,8 @@ import {
   BASIC_KEYS,
   claimFirstEndcard,
   claimFirstTotalTip,
-  dailyCardShown,
   firstTimeIn,
   glowingBasics,
-  lockedForFirstPlay,
   markOpened,
   type PlayKey,
 } from './engine/firstPlay';
@@ -64,7 +64,7 @@ import { renderTimedModePage } from './ui/timedMode';
 import { renderBombModePage } from './ui/bombMode';
 import { renderDailyModePage } from './ui/dailyMode';
 import { dailyNow, syncDailyClock } from './engine/dailyClock';
-import { GENIUS_LAYOUTS } from './engine/geniusContent';
+import { advancedBombLock, isSignedIn, layoutLock } from './engine/geniusContent';
 import type { SeedGame } from './engine/seedDeal';
 import { renderPuzzleModePage } from './ui/puzzleMode';
 import { armNewVersionCard } from './ui/newVersionCard';
@@ -636,6 +636,15 @@ function teardown() {
 let pendingMarks: (() => void)[] = [];
 
 /**
+ * 这一局是从哪一档入口开的（10-31 方案推12 Z-J02：主菜单一步一步出现，engine/menuStage.ts）：3 ＝每日挑战页（今日那一局、
+ * 输代号的局）、计时页、炸弹页（三档）；4 ＝老虎机、无限反转、步步为营那三页。由**入口那一页**在调 showGame 之前设好，
+ * showGame 一进来取走（和 pendingMarks 一样），这一局走到结算页时记成证据。基础局、布局局不设。
+ *
+ * 只能记在这儿，不能让控制器猜：入口是哪一页只有这个文件知道（老虎机局的 modeKey 是 'base'）。
+ */
+let pendingTier: 3 | 4 | null = null;
+
+/**
  * 头一回进这个玩法时，摊进开局那个大 opts 里的那一小撮字段。
  *
  * 五个玩法各有一句话，说的都是「这个玩法在基础规则上加的那一层」——炸弹为什
@@ -668,7 +677,7 @@ function tipFor(kind: PlayKey, make: () => { text: string; art: string }): Shape
  *     到之前这块条子不出声。
  *
  * 基础玩法**现在就只有方块和小球两张**（《侵蚀阶梯》v1.2 PR-6 删了三角那一副），
- * 而头一回打开的玩家本来也只能点这两张（engine/firstPlay.ts 的 lockedForFirstPlay）。
+ * 而头一回打开的玩家主菜单上本来也只有这两张（第 1、2 步，engine/menuStage.ts）。
  */
 function basicCoach(id: string): ShapeGameOpts {
   const key: 'square' | 'circle' | null = id === 'square' ? 'square' : id === 'circle' ? 'circle' : null;
@@ -717,14 +726,17 @@ function showMenu() {
     onSelectBase: (id) => {
       if (pickingForRoom) return void startRoundFor(id);
       const game = games.find((g) => g.card.id === id);
-      if (game) showGame(game, basicCoach(id));
+      // bulbKey：局中灯泡按哪个玩法数（10-31 方案推12 Z-J03，engine/hintBulb.ts）——基础两张各数各的。
+      if (game) showGame(game, { ...basicCoach(id), bulbKey: id });
     },
     onSelectLayout: (id) => {
       if (pickingForRoom) return void startRoundFor(id);
       const game = layoutGames.find((g) => g.card.id === id);
-      if (game) showGame(game, tipFor('layout', () => layoutTip(currentLang)));
+      // 更多布局一族共用一个灯泡计数（同 firstPlay 的 'layout'）。
+      if (game) showGame(game, { ...tipFor('layout', () => layoutTip(currentLang)), bulbKey: 'layout' });
     },
-    onLockedLayout: () => openGeniusWindow(currentLang, showMenu),
+    // 天才层取消之后（10-31 方案推12 Z-J02 E），布局卡上的锁只剩「没登录」：点了开登录窗，登回来重画（锁撤掉，不演浮出）。
+    onLockedLayout: () => openAuthWindow(currentLang, showMenu),
     /**
      * 这三张（老虎机 / 无限反转 / 步步为营）按下去进的是**整页**，所以在这儿
      * 包一层 softSwap：旧的淡出去、新的托上来，不再硬切（玩家第七轮点名的）。
@@ -750,12 +762,16 @@ function showMenu() {
     },
     // 没打过的那几张基础卡镶一圈光，指路用；两张都打过了这里就是空的。
     glow: glowingBasics(),
-    firstPlayLock: lockedForFirstPlay(),
-    // 《每日挑战》那张卡：打完过一局、而且首玩锁已经撤了才摆（10-08 方案 3-D-1 ＋ 10-09 补充方案
-    // 6-6，一个判定，见 engine/firstPlay.ts 的 dailyCardShown）。
-    showDaily: dailyCardShown(),
-    // 按了《我会玩》就地重画：锁和光都由上面这两个函数算，它们已经改口了。
-    onKnowHow: showMenu,
+    // 主菜单一步一步出现（10-31 方案推12 Z-J02）：第几步摆哪几张由 engine/menuStage.ts 的 STAGE_OF 定，没到的卡根本不造。
+    // 屋主替整屋挑玩法时按第 5 步画（站长 10-30 答复 ③：挑玩法不受阶段限制），也不演新卡浮出。
+    stage: pickingForRoom ? 5 : menuStage(),
+    shown: pickingForRoom ? 5 : stageShown(),
+    signedIn: isSignedIn(),
+    // 按了《我会玩》：直接到第 3 步（menuStage 把它当作小球、方块两局都打过），就地重画——新出来的那四张浮上来。
+    onKnowHow: () => {
+      syncMenuStage();
+      showMenu();
+    },
     // 主菜单上的多人游玩：直接进房间那一页。
     onMultiplayer: () => {
       mpOrigin = 'menu';
@@ -764,6 +780,8 @@ function showMenu() {
     // 炸弹那张卡：整页（ui/bombMode.ts，10-08 方案 3-G），和计时那几页一样包一层 softSwap。
     onBombMode: () => softSwap(showBombMode),
   }, currentLang);
+  // 新卡演过了：下次画不再演（在结算页就关掉、下次开机才进主菜单的，照样演这一次）。屋主替整屋挑的那一份不算。
+  if (!pickingForRoom) markStageShown(menuStage());
   menuMarks = menuMarksNow();
   setNavTab(null);
   paintRoomHostBanner();
@@ -786,9 +804,11 @@ function showMenu() {
  * 还画着拦截和那圈光——点进去就是「有新手拦截但点开后没有新手教学」。所以记号一变、这一页又正摆着主菜单
  * （而且不是屋主在替整屋挑玩法），就地重画一遍。重画会再报一次 trackScreen('menu')，和《我会玩》那里一样。
  */
+// slides_played_ 这个前缀也盖住主菜单第几步那几把键（slides_played_stage、_tier3、_tier4，10-31 方案推12）：另一个页面升了步，
+// 这一页的主菜单跟着重画。
 const MENU_MARK_KEY = /^(slides_played_|slides_tutorial_seen|slides_know_how$)/;
-/** 画主菜单那一刻的首玩锁和那圈光（visibilitychange 那条兜底比的就是这一份）。 */
-const menuMarksNow = () => JSON.stringify([lockedForFirstPlay(), glowingBasics()]);
+/** 画主菜单那一刻的第几步和那圈光（visibilitychange 那条兜底比的就是这一份）。 */
+const menuMarksNow = () => JSON.stringify([menuStage(), glowingBasics()]);
 let menuMarks = '';
 window.addEventListener('storage', (e) => {
   // key 为 null 是另一页 localStorage.clear()：记号也跟着没了。
@@ -899,7 +919,9 @@ function showSlotIntro() {
     root,
     currentLang,
     { onBack: backToProfile, onGo: () => showRandomTarget('intro') },
-    !isGenius(),
+    // 第 4 步之前不摆那颗《开始》（站长 10-30 答复 ④）：主菜单上老虎机那张卡第 4 步才出现，这儿是第二条进老虎机的路，
+    // 跟着一起等。介绍照看。（原先这一位是「没开通天才」，天才层 10-31 方案推12 取消了。）
+    menuStage() < 4,
   );
   wireHomeTitle();
   repaintIcons();
@@ -921,10 +943,10 @@ function showDailyMode() {
     onBack: showMenu,
     now: dailyNow,
     onLaunch: launchSeedGame,
-    // 输进来的码照天才锁走（每日挑战不问，见 DailyModeHandlers.canPlay）——不然一串码就成了
+    // 输进来的码照登录锁走（每日挑战不问，见 DailyModeHandlers.canPlay）——不然一串码就成了
     // 一把万能钥匙。
     canPlay: (g) => !seedLocked(g),
-    onLocked: () => openGeniusWindow(currentLang, showDailyMode),
+    onLocked: () => openAuthWindow(currentLang, showDailyMode),
     // 网页端有排行榜：敲代号开的那一局上不去，先在输码那一格底下说一句（10-08 方案 3-B）。
     boardNote: true,
   });
@@ -935,17 +957,19 @@ function showDailyMode() {
 }
 
 /**
- * 这一局在网页端锁着没有（和主菜单上那几张锁着的卡是同一个判断）：老虎机、无限反转、步步为营
- * 三档，加上 GENIUS_LAYOUTS 那四副棋盘的基础玩法，没开通就玩不了。计时、炸弹（三档都算）免费。
+ * 这一局在网页端锁着没有（和主菜单、炸弹页上那几把锁是同一个判断，engine/geniusContent.ts）。
  *
- * 棋盘那一半**只在基础玩法那一档问**：进阶炸弹开在菱形方块和六边形小球上，而这两副 10-09 起也
- * 进了 GENIUS_LAYOUTS——不分档的话，输一串进阶炸弹的代号会被锁拦下，可同一局从炸弹那一页点进去
- * 是免费的。同一局两个答案，就是「意料之外的界面」。
+ * 天才层 2026-10 取消了（10-31 方案推12 Z-J02，站长 10-30 答复 ②）：输代号二十种局都能开，只有更多布局上的基础局、
+ * 进阶炸弹没登录时要先登录。老虎机、无限反转、步步为营不再锁（主菜单上第 4 步才出现，可代号的入口在每日挑战页——
+ * 第 3 步以前根本到不了这儿）。每日挑战那一局永远不问这把锁（DailyModeHandlers.canPlay 只管输进来的码）。
+ *
+ * 棋盘那一半**只在基础玩法那一档问**：进阶炸弹开在菱形方块和六边形小球上，这两副也在更多布局那张表里——按棋盘问的话
+ * 进阶炸弹会被问两遍；它自己那把锁（advancedBombLock）和布局那把是同一个口径（没登录），分开写只是为了说得清。
  */
 function seedLocked(g: SeedGame): boolean {
-  if (isGenius()) return false;
   const mode = g.variant.mode;
-  return mode === 'slot' || mode === 'flip' || mode === 'puzzle' || (mode === 'base' && GENIUS_LAYOUTS.includes(g.board));
+  if (mode === 'bombAdv') return advancedBombLock() !== null;
+  return mode === 'base' && layoutLock(g.board) !== null;
 }
 
 /**
@@ -973,11 +997,28 @@ function launchSeedGame(g: SeedGame, stage: { emblem: string; from: number }) {
             ? tipFor('flip', () => flipTip(currentLang, tipShape(g.board)))
             : v.mode === 'puzzle'
               ? tipFor('puzzle', () => puzzleTip(currentLang))
-              : tipFor('bomb', () => bombTip(currentLang, tipShape(g.board)));
+              : v.mode === 'bombAdv' && !firstTimeIn('bomb')
+                ? // 进阶炸弹开在更多布局上（10-31 方案推12 Z-J02 E 第 5 条，F-1 e）：炸弹打过、布局没打过的人，给布局那一句（棋
+                  // 盘底下只有一个位置，二选一）；炸弹也没打过就先给炸弹那一句。
+                  tipFor('layout', () => layoutTip(currentLang))
+                : tipFor('bomb', () => bombTip(currentLang, tipShape(g.board)));
   // proAllowed: false 写在 teach 后面（10-15 补充 S10）：每日挑战、输代号的局一律照普通规则发牌，开着 Pro 也不用——
   // 同一串代号在谁手里都得是同一副牌。
   // dailyStage（10-31 方案推06 Z-C05 ①）：《再来一局》的倒数页照那一页第一次数的样子摆——同一张图、数一样多下。
-  showGame(game, { ...g.opts, ...teach, noCountdown: true, dailyStage: stage, proAllowed: false }, showDailyMode);
+  // 每日挑战页开的局（今日那一局、输代号的局）走到结算页算第 3 步那一档的证据（10-31 方案推12 Z-J02；代号局一律记 3，
+  // 不记 4——入口是每日挑战页，站长 10-30 答复 ②）。
+  pendingTier = 3;
+  // 局中灯泡：今日那一局按「每日挑战」一个数（不管那天是什么玩法）；输代号的局按它自己的玩法数（10-31 方案推12 Z-J03）。
+  const bulbKey = g.opts.seed?.daily
+    ? 'daily'
+    : v.mode === 'base'
+      ? BASIC_KEYS.includes(g.board as (typeof BASIC_KEYS)[number])
+        ? g.board
+        : 'layout'
+      : v.mode === 'bombAdv' || v.mode === 'bombTimed'
+        ? 'bomb'
+        : v.mode;
+  showGame(game, { ...g.opts, ...teach, noCountdown: true, dailyStage: stage, bulbKey, proAllowed: false }, showDailyMode);
 }
 
 /**
@@ -1009,18 +1050,25 @@ function showBombMode() {
   ];
   renderBombModePage(root, currentLang, rows, {
     onBack: showMenu,
+    // 进阶炸弹那一排没登录锁着（10-31 方案推12 Z-J02 E，F-1 f），点了开登录窗、登回来回这一页（锁撤了）。
+    advancedLocked: advancedBombLock() !== null,
+    onLocked: () => openAuthWindow(currentLang, showBombMode),
     onStart: (tier, id) => {
       // 小屋只开基础玩法：屋主替整屋挑玩法时按到一格，告诉他一句（和从前那扇窗一样拦在按下去这一步）。
       if (pickingForRoom) return void notAMultiplayerBoard();
       const pool = tier === 'advanced' ? bombLayoutGames : games;
       const game = pool.find((g) => g.card.id === id);
       if (!game) return;
+      // 炸弹页三档（含进阶炸弹那一排）开的局都算第 3 步那一档（menuStage.ts）。
+      pendingTier = 3;
       showGame(
         game,
         {
           bomb: true,
           timeLimitSec: tier === 'timed' ? MODE_SECONDS : undefined,
           ...tipFor('bomb', () => bombTip(currentLang, tipShape(id))),
+          // 炸弹三档合一个灯泡计数。
+          bulbKey: 'bomb',
         },
         showBombMode,
       );
@@ -1053,10 +1101,11 @@ function showTimedMode() {
       // 现在先进一整页，拦截就得挪到**按下形状之后**这一步。
       if (pickingForRoom) return void notAMultiplayerBoard();
       const game = family === 'square' ? squareGame : circleGame;
+      pendingTier = 3;
       // 第三个参数是《返回》去哪：回挑形状那一屏再选一个，和《无限反转》一样（玩
       // 家 2026-09 拍的板）。整页取代了那扇窗，reopen 那条路一并撤掉——它本来就是
       // 给窗设计的。
-      showGame(game, { timeLimitSec: MODE_SECONDS, ...tipFor('timed', () => timedTip(currentLang)) }, showTimedMode);
+      showGame(game, { timeLimitSec: MODE_SECONDS, ...tipFor('timed', () => timedTip(currentLang)), bulbKey: 'timed' }, showTimedMode);
     },
   });
   wireHomeTitle();
@@ -1075,20 +1124,24 @@ function showFlipMode() {
       onBack: showMenu,
       onStart: (family) => {
         const game = family === 'square' ? squareGame : circleGame;
+        // 老虎机、无限反转、步步为营那三页开的局算第 4 步那一档（menuStage.ts）。
+        pendingTier = 4;
         showGame(
           game,
           {
             flip: true,
             timeLimitSec: FLIP_SECONDS,
             ...tipFor('flip', () => flipTip(currentLang, family === 'circle' ? 'circle' : 'square')),
+            bulbKey: 'flip',
           },
           showFlipMode,
         );
       },
-      onGenius: () => openGeniusWindow(currentLang, showFlipMode),
+      onGenius: () => openAuthWindow(currentLang, showFlipMode),
       room: pickingForRoom ? { onStart: (family) => void startRoundFor(family, undefined, true) } : undefined,
     },
-    !isGenius(),
+    // 不再锁（天才层 10-31 方案推12 取消；这一页在主菜单上第 4 步才出现）。
+    false,
   );
   wireHomeTitle();
   repaintIcons();
@@ -1114,15 +1167,17 @@ function showPuzzleMode() {
       onBack: showMenu,
       onStart: (family) => {
         const game = family === 'square' ? squareGame : circleGame;
+        pendingTier = 4;
         showGame(
           game,
-          { steps: true, ...tipFor('puzzle', () => puzzleTip(currentLang)) },
+          { steps: true, ...tipFor('puzzle', () => puzzleTip(currentLang)), bulbKey: 'puzzle' },
           showPuzzleMode,
         );
       },
-      onGenius: () => openGeniusWindow(currentLang, showPuzzleMode),
+      onGenius: () => openAuthWindow(currentLang, showPuzzleMode),
     },
-    !isGenius(),
+    // 不再锁（同无限反转那一页）。
+    false,
   );
   wireHomeTitle();
   repaintIcons();
@@ -1184,7 +1239,8 @@ function showWorldRankPage() {
   renderWorldRankPage(root, {
     lang: currentLang,
     onBack: backToProfile,
-    onWantGenius: () => openGeniusWindow(currentLang, showWorldRankPage),
+    // 世界排名没登录看不了（10-14 F-1 c）：点了开登录窗。
+    onWantGenius: () => openAuthWindow(currentLang, showWorldRankPage),
     onReLogin: () => openAuthWindow(currentLang, showWorldRankPage),
   });
   setNavTab(null);
@@ -1211,8 +1267,8 @@ function showMultiplayer() {
       // 从哪儿进来的就回哪儿：主菜单，或者个人主页刚才看的位置。
       onBack: () => (mpOrigin === 'profile' ? backToProfile() : showMenu()),
       onMatchStart: startMultiplayerRun,
-      // Opening a room is the subscriber's; buying it lands back here.
-      onNeedGenius: () => openGeniusWindow(currentLang, showMultiplayer),
+      // 开小屋要登录（10-14 F-1 h，10-31 方案推12：原先要订阅）：开登录窗，登回来回到这一页。
+      onNeedGenius: () => openAuthWindow(currentLang, showMultiplayer),
       // 服务器答「不认这台设备」：直接开登录窗。和上面那条不是一回事——这个
       // 人多半已经付过钱，缺的只是重登一次；走 openGeniusWindow 会因为本机缓
       // 存还以为自己是天才而拐进《账户》窗，那里没有登录入口。世界排行榜那
@@ -1285,7 +1341,13 @@ function startMultiplayerRun(match: MatchStart) {
     // 离站提示跟着这一局走（10-11 方案 B-10）：打着的时候问（离开会断小屋），结算页上不问。
     onLive: (live) => {
       gameInProgress = live;
-      if (!live) lastGameEndAt = Date.now();
+      if (!live) {
+        lastGameEndAt = Date.now();
+        // 小屋里打完一局算第 3 步那一档的证据（10-31 方案推12 Z-J02 E4）。新人从个人主页输号码进屋打完一局也记下，
+        // 只是要等他打完小球、方块两局教学才一起补（按顺序）。
+        creditTier(3);
+        syncMenuStage();
+      }
     },
     target,
     flip,
@@ -1381,6 +1443,12 @@ async function leaveRoomWithCard() {
  * rather than in the room page, so the card is the last thing that needed it.
  */
 function showRoomFinal(state: RoomState, meId?: string) {
+  // 「交完卷正等着别人，小屋就散了」那条路（onRoomEnded）：这台设备在这间屋里打过至少一局，也算第 3 步那一档的证据
+  // （10-31 方案推12 Z-J02）。进屋不打、直接走的不算。
+  if (lastPlayedRound(state.code) >= 1) {
+    creditTier(3);
+    syncMenuStage();
+  }
   teardown();
   setPickingForRoom(null);
   const done = () => {
@@ -1422,7 +1490,7 @@ function showRecordsPage() {
     currentLang,
     // 底下那颗《退出》（第 18 推）：回主菜单，和底排那颗亮着的图标、手机返回键同一个去处。
     showMenu,
-    () => openGeniusWindow(currentLang, showRecordsPage),
+    () => openAuthWindow(currentLang, showRecordsPage),
     () => openAuthWindow(currentLang, showRecordsPage),
   );
   setNavTab('records');
@@ -1470,6 +1538,7 @@ function showRandomTarget(origin?: 'menu' | 'intro') {
       onBack: () => (slotOrigin === 'intro' ? showSlotIntro() : showMenu()),
       onStart: (family: Family, target: TargetPattern, seed?: string) => {
         const game = randomTargetGame(family);
+        pendingTier = 4;
         showGame(
           game,
           {
@@ -1478,18 +1547,20 @@ function showRandomTarget(origin?: 'menu' | 'intro') {
             // 换（gameController 的 plantSeed）。
             seed: seed ? { code: seed, source: 'random' } : undefined,
             ...tipFor('slot', () => slotTip(currentLang, target)),
+            bulbKey: 'slot',
           },
           showRandomTarget,
         );
       },
-      onGenius: () => openGeniusWindow(currentLang, showRandomTarget),
+      onGenius: () => openAuthWindow(currentLang, showRandomTarget),
       // 屋主在为整屋挑玩法：这一屏多一个《相同 / 不同》开关，挑完不开单人
       // 局，而是把这一族和开关一起交给小屋，全屋一起倒数。
       room: pickingForRoom
         ? { onStart: (family: Family, slot: 'same' | 'own') => void startRoundFor(family, slot) }
         : undefined,
     },
-    !isGenius(),
+    // 不再锁（同无限反转那一页）。
+    false,
   );
   wireHomeTitle();
   repaintIcons();
@@ -1526,6 +1597,9 @@ function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void) {
   // 这一局的「看过」记号（tipFor / basicCoach 刚放进去的）。opts 是调这儿之前刚算好的，所以这一份正是这一局的。
   const marks = pendingMarks;
   pendingMarks = [];
+  // 这一局是从哪一档入口开的（入口那一页刚设好的，见 pendingTier）。
+  const tier = pendingTier;
+  pendingTier = null;
   // shouldLeadOut：结算页那对指路的光只在他头一回看见结算页时亮一次（玩家
   // 定的）。每一局都挂上，真正判「是不是头一回」的是结算页露面那一刻。
   const fullOpts: ShapeGameOpts = {
@@ -1545,6 +1619,10 @@ function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void) {
         lastGameEndAt = Date.now();
         // 这一局走到结算页了：教学 / 一句话提示算看过（站长 10-22 Q1）。只写一次。
         for (const m of marks.splice(0)) m();
+        // 主菜单第几步跟着升（10-31 方案推12 Z-J02）：上面那一串刚写下教学局的记号（E2、E3），这一局是哪一档入口开的
+        // 也记一笔（E4、E5），再按顺序算一遍。《再来一局》每一局都再记一次，幂等。
+        if (tier) creditTier(tier);
+        syncMenuStage();
       }
     },
     // 单人局可以用《Pro》的固定翻色（10-15 补充 S10）。写在 ...opts 前面：每日挑战、输代号那一条
@@ -1640,6 +1718,19 @@ function boot() {
   migrateMisfiledRuns();
   // 老虎机的旧局从基础那一本里搬出去（10-11 方案 B-7，engine/slotSplit.ts），同样排在接云之前。
   splitSlotRuns(games.map((g) => g.card.bestKey));
+  // 主菜单第几步（10-31 方案推12 Z-J02，engine/menuStage.ts）：老玩家开机就补到原来那一步，菜单和昨天一样多。排在清档、
+  // 挪档之后（扫的是挪好的那几本），接云之前（接回来的那份另有挂钩，见下）。
+  //   ① 一次性迁移：本机还没有 slides_played_stage 的，按旧键（含 slides_tutorial_seen*）和本机存档「有过的最高一步」升。
+  //   ② 每次开机：还没到第 5 步就扫一遍本机存档——上线以前的局按最高一步，以后的局只记证据、再按顺序（站长 10-30 答复 ①）。
+  //   ③ 云上那份接回来时（含旧规则、不落回本机的那些局）同样分法；升了步、主菜单正摆着，就地重画（会演一次新卡浮出）。
+  const localRunData = () => loadAllRuns(recordSources.map((src) => src.card.bestKey + src.suffix)).map((r) => r.data);
+  migrateMenuStageOnce(localRunData());
+  if (menuStage() < 5) absorbRuns(localRunData());
+  onCloudArchive((runs) => {
+    const before = menuStage();
+    absorbRuns(runs);
+    if (menuStage() > before && onMenuPage() && !pickingForRoom) showMenu();
+  });
   // 登录着的话，顺手把云上那份战绩接回来——别等玩家点进记录页才发现是空的。
   void restoreCloudRuns(runKeyFor);
   // 上一次没交上去的那几局（交卷待发队列，10-31 方案推08 Z-H01）：开机补交一遍。

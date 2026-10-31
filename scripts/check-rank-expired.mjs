@@ -14,6 +14,7 @@
  * 401，然后看《记录与排名》说了什么、给没给出路。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2] || 'http://localhost:8815/';
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
@@ -25,6 +26,7 @@ const check = (n, ok, extra = '') => {
 };
 
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+await unlockAll(ctx);
 await ctx.addInitScript(() => {
   for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
     localStorage.setItem(k, '1');

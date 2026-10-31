@@ -18,6 +18,7 @@
  *      服务器判 flipTime（> 105）整局拒收。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 import { vetRun } from '../api/_maxscore.js';
 
 const BASE = (process.argv[2] || 'http://localhost:8933/').replace(/\/+$/, '');
@@ -36,7 +37,7 @@ const seed = () => {
     localStorage.setItem('slides_played_' + k, '1');
   }
   // 无限反转是天才特供：本机记一份权益（只开本机的锁，这道门不交卷）。
-  localStorage.setItem('slides_genius', JSON.stringify({ active: true, channel: 'code', until: Date.now() + 365 * 864e5 }));
+  localStorage.setItem('slides_genius', JSON.stringify({ active: true, channel: 'code', code: 'GATEUNLOCK', until: Date.now() + 365 * 864e5 }));
 };
 const secs = (t) => {
   const m = /(\d+):(\d+)/.exec(t || '');
@@ -46,6 +47,7 @@ const secs = (t) => {
 // ── ① 计时局：拨钟，倒数不跳 ─────────────────────────────────────────────────
 {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await unlockAll(ctx);
   await ctx.addInitScript(seed);
   const p = await ctx.newPage();
   p.on('pageerror', (e) => errs.push(String(e)));
@@ -79,6 +81,7 @@ const secs = (t) => {
 // ── ② 无限反转：往回拨 60 秒之后结束，用时 ≥ 0、过得了 vetRun ─────────────────────────
 {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await unlockAll(ctx);
   await ctx.addInitScript(seed);
   const p = await ctx.newPage();
   p.on('pageerror', (e) => errs.push(String(e)));
@@ -119,6 +122,7 @@ const secs = (t) => {
 // ── ③ 无限反转：tick 停了 150 秒再来一下，用时封顶在 100（推07 Z-H04 G18）────────────────────
 {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await unlockAll(ctx);
   await ctx.addInitScript(seed);
   const p = await ctx.newPage();
   p.on('pageerror', (e) => errs.push(String(e)));

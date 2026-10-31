@@ -1,5 +1,6 @@
 import { STRINGS, type Lang, type RuleShape } from '../i18n';
-import { CTL_BACK, CTL_CVD, CTL_FINISH, CTL_LEAVE, CTL_PAUSE, END_AGAIN, END_SHARE } from './ctlIcons';
+import { CTL_BACK, CTL_BULB, CTL_CVD, CTL_FINISH, CTL_LEAVE, CTL_PAUSE, END_AGAIN, END_SHARE } from './ctlIcons';
+import { claimBulb } from '../engine/hintBulb';
 import { currentRoom, iAmHost } from '../engine/room';
 import { countFrom, cvdOfferHtml, playCountdown, startStageHtml } from './startStage';
 import { cvdOfferDue, markCvdOfferDone } from '../engine/firstPlay';
@@ -69,6 +70,8 @@ export interface ShellMeta {
    * 照这两样摆，和那一页第一次数的时候一模一样，不转老虎机轮子（10-31 整合版 Z-C05 ①，站长 10-30）。
    */
   dailyStage?: { emblem: string; from: number };
+  /** 局中灯泡按哪个玩法数（ShapeGameOpts.bulbKey，engine/hintBulb.ts）。没有就没有灯泡。 */
+  bulbKey?: string;
   /**
    * 单人、非种子的老虎机局：《再来一局》重新抽一个目标（站长 10-31：「重新随机一个新目标」）。棋盘给这一个回调，
    * 外壳在重开的倒数页上抽好新目标后交给它（棋盘那头的 target 和控制器读的 hooks.slotTarget 是同一处）。
@@ -200,8 +203,12 @@ export interface ShellRefs {
     startBack: HTMLButtonElement;
     share: HTMLButtonElement;
     shareClose: HTMLButtonElement;
+    /** 局中那颗灯泡（10-31 方案推12 Z-J03）：只有给了 bulbKey 的单人局才有，前两局才露面。控制器接「先暂停、开规则窗、关了继续」。 */
+    hint?: HTMLButtonElement;
     extra: Record<string, HTMLButtonElement>;
   };
+  /** 打开这一局那一份规则窗（暂停面板《怎么玩》那一份）；关窗时叫 onClose。 */
+  openRules?: (onClose?: () => void) => void;
 }
 
 /**
@@ -425,7 +432,13 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
                iAmHost() ? s.mpDisbandRoom : s.mpLeave
              }">${CTL_LEAVE}</button>
              <button class="icon-btn icon-btn--half" id="finishBtn" aria-label="${s.finishBtn}">${CTL_FINISH}</button>`
-          : `<button class="icon-btn" id="stopBtn" aria-label="${s.pauseBtn}">${CTL_PAUSE}</button>`}
+          : `<button class="icon-btn" id="stopBtn" aria-label="${s.pauseBtn}">${CTL_PAUSE}</button>${
+              // 局中灯泡（10-31 方案推12 Z-J03）：只在给了 bulbKey 的单人局造它，先藏着；开打那一刻判这一局是不是这个
+              // 玩法的前两局，是就露面、叠在《暂停》那块牌的右半边（见下面 placeHint）。
+              meta.bulbKey
+                ? `<button class="icon-btn hint-btn" id="hintBtn" aria-label="${s.hintBtn}" hidden>${CTL_BULB}</button>`
+                : ''
+            }`}
       </div>
     </div>
 
@@ -790,7 +803,11 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
   // 摆的是「这一局比基础规矩多出来的每一层」，所以定时炸弹会摆两条（炸弹一
   // 条、计时一条）——它确实是两层。玩家 2026-09 点的名：老虎机 / 计时 / 特殊布
   // 局从前一条也没有，那三句只在头一回进去时在棋盘底下摆一局，看过就没了。
-  container.querySelector<HTMLButtonElement>('#howBtn')?.addEventListener('click', () => {
+  /**
+   * 这一局那一份规则窗（暂停面板的《怎么玩》和局中灯泡共用，10-31 方案推12 Z-J03 第 1 条）。`onClose` 是灯泡那条路要的：
+   * 关窗之后接着打。
+   */
+  const openRules = (onClose?: () => void): void => {
     const tips: ExtraTipView[] = [];
     if (meta.bomb) tips.push({ key: 'bomb' });
     if (meta.flip) tips.push({ key: 'flip' });
@@ -819,8 +836,51 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       // 第 3 条那一局也要换一句：纯星星的图案在那儿不得分（见 i18n 的
       // TUTORIAL_RULE3_FLIP）。
       flip: meta.flip,
+      onClose,
     });
-  });
+  };
+  container.querySelector<HTMLButtonElement>('#howBtn')?.addEventListener('click', () => openRules());
+
+  /*
+   * ---- 局中灯泡（10-31 方案推12 Z-J03，样子按 10-14 Q16 的 C：并进暂停那块牌）--------------------------------
+   *
+   * 有灯泡的那两局，暂停那块琥珀牌分成两半：竖屏左约 58% 是暂停、右约 42% 是灯泡；横屏（暂停那颗是右边一列）改成上下分。
+   * **#stopBtn 的尺寸一个像素都不动**：灯泡是同一父元素里的兄弟、绝对定位叠在它的右（下）半边上，#stopBtn 只是加一个类
+   * 把图形挪到左（上）半边——它的中心点不在灯泡那 42% 里，点中心照旧是暂停（好几道门量它的盒子、点它的中心）。
+   * 叠的位置按 #stopBtn 此刻的盒子量（offsetLeft / offsetTop 相对 .controls），竖屏、横屏、电脑那几套尺寸都不用各写一遍。
+   */
+  const hintEl = container.querySelector<HTMLButtonElement>('#hintBtn');
+  const stopEl = container.querySelector<HTMLButtonElement>('#stopBtn');
+  const placeHint = (): void => {
+    if (!hintEl || !stopEl) return;
+    if (!shellAlive()) {
+      for (const ev of ['resize', 'orientationchange']) window.removeEventListener(ev, placeHint);
+      return;
+    }
+    if (hintEl.hidden) return;
+    const w = stopEl.offsetWidth;
+    const h = stopEl.offsetHeight;
+    // 高过宽就是横屏那一条竖着的：上下分；否则左右分。
+    const tall = h > w;
+    stopEl.classList.toggle('stop-btn--split-h', !tall);
+    stopEl.classList.toggle('stop-btn--split-v', tall);
+    hintEl.classList.toggle('hint-btn--v', tall);
+    const part = tall ? Math.round(h * 0.42) : Math.round(w * 0.42);
+    hintEl.style.left = (tall ? stopEl.offsetLeft : stopEl.offsetLeft + w - part) + 'px';
+    hintEl.style.top = (tall ? stopEl.offsetTop + h - part : stopEl.offsetTop) + 'px';
+    hintEl.style.width = (tall ? w : part) + 'px';
+    hintEl.style.height = (tall ? part : h) + 'px';
+  };
+  const showHint = (on: boolean): void => {
+    if (!hintEl || !stopEl) return;
+    hintEl.hidden = !on;
+    if (!on) stopEl.classList.remove('stop-btn--split-h', 'stop-btn--split-v');
+    // 等开局页收起来、版面排好了再量（#startBtn 按下去之后开局页才收）。
+    else requestAnimationFrame(placeHint);
+  };
+  if (hintEl) {
+    for (const ev of ['resize', 'orientationchange']) window.addEventListener(ev, placeHint);
+  }
 
   // The press flip on 完成/暂停 is driven from pointer events rather than
   // :active — a finger that presses and then slides a little (which is most
@@ -846,6 +906,15 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
   const countWin = container.querySelector<HTMLElement>('#startCount');
   const startBtnEl = container.querySelector<HTMLButtonElement>('#startBtn');
   const pauseOv = container.querySelector<HTMLElement>('#pauseOverlay');
+  // 开打那一刻（倒数数完、noCountdown 的局直接、《再来一局》数完都按这颗）判这一局有没有灯泡，并记一局（engine/hintBulb.ts）。
+  // 开局页已经收起来的那一下不算（同一局被按第二下：控制器那头也只认第一下）。这个监听比控制器那个先接上，所以先跑。
+  if (hintEl && meta.bulbKey && startBtnEl) {
+    const key = meta.bulbKey;
+    startBtnEl.addEventListener('click', () => {
+      if (!container.querySelector('#startOverlay')?.classList.contains('show')) return;
+      showHint(claimBulb(key));
+    });
+  }
   // 老虎机那一局：倒数不马上开始，也先不露面——等第二个轮子停稳了再数
   //（玩家的原话：「最开始没有 5-4-3-2-1 的那个板块出现，等老虎机转出来第二
   // 个内容之后开始倒计时」）。下面的 runCount 交给 spinSlot 的 onSettled。
@@ -1066,8 +1135,10 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
       startBack: req('startBackBtn'),
       share: req('shareBtn'),
       shareClose: req('shareCloseBtn'),
+      hint: hintEl ?? undefined,
       extra,
     },
     recount: countWin && startBtnEl ? recount : undefined,
+    openRules,
   };
 }

@@ -363,10 +363,14 @@ check('A/B/F 页面零报错', A.errs.length === 0, A.errs.join(' | '));
   const s1 = await barState(page);
   const top1 = await firstTop();
   check('D 点「拒绝」：不请求 GA、条消失、记成 denied', hits.length === 0 && !s1.here && s1.record?.v === 'denied', `${hits.length} 次 ${JSON.stringify(s1.record)}`);
-  check('D 让出来的那一截复原（--consent-room 清掉，第一张卡回到原处）', s1.room === '' && Math.abs(top0 - parseFloat(s0.room) - top1) <= 2,
-    `${Math.round(top0)} → ${Math.round(top1)}（让过 ${s0.room}）`);
   await reload(page);
   check('D 刷新：不再问', !(await barState(page)).here);
+  // 「原处」= 根本没有同意条时第一张卡在哪儿：刷新之后已经记成拒绝、条不再出来，量那一下。原先按「让开前的位置 − 让过的
+  // 那一截」推：轴那一版、宽版是整块平移，推得出来；推12（10-31 Z-J02）的第 1、2 步那一组在招牌和底排之间竖向居中，
+  // 让 room 像素只挪一部分（法语 320×568：让 162、挪 100），按平移推就红——卡其实回到了原处。
+  const topBare = await firstTop();
+  check('D 让出来的那一截复原（--consent-room 清掉，第一张卡回到原处：和刷新后没有条时一样）', s1.room === '' && Math.abs(top1 - topBare) <= 2 && top1 < top0,
+    `${Math.round(top0)} → ${Math.round(top1)}（让过 ${s0.room}；没有条时 ${Math.round(topBare)}）`);
   await reload(page, 182);
   check('D 过了 182 天：还不问', !(await barState(page)).here);
   await reload(page, 184);

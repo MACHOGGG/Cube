@@ -1,5 +1,5 @@
 /**
- * 界面明暗：米白（默认）和深紫（Slides 天才才挑得动）。
+ * 界面明暗：米白（默认）和深紫（登录了才挑得动——10-31 方案推12 起；原先是 Slides 天才才挑得动）。
  *
  *   node scripts/dev-server.mjs 8976 dist
  *   node scripts/check-theme.mjs http://localhost:8976/
@@ -21,6 +21,7 @@
  *     关窗」；顺带量它确实用着色盲那颗开关的同一个零件。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 const BASE = process.argv[2] || 'http://localhost:8976/';
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 let fail = 0;
@@ -57,12 +58,13 @@ async function page({ genius = false, theme = null } = {}) {
       if (g) {
         localStorage.setItem(
           'slides_genius',
-          JSON.stringify({ active: true, period: 'year', until: Date.now() + 30 * 864e5, channel: 'code' }),
+          JSON.stringify({ active: true, period: 'year', until: Date.now() + 30 * 864e5, channel: 'code', code: 'GATEUNLOCK' }),
         );
       }
     },
     [genius, theme],
   );
+  await unlockAll(p);
   await p.goto(BASE, { waitUntil: 'load' });
   await p.waitForSelector('.home-page', { timeout: 20000 });
   await p.waitForTimeout(400);
@@ -161,16 +163,16 @@ const sw = (p) =>
   check('按一下也不会偷偷变深', l.attr === 'light' && l.stored !== 'dark', `data-theme=${l.attr} 存的=${l.stored}`);
   check('开关也没跟着拨过去', after.checked === 'false', `aria-checked=${after.checked}`);
   /**
-   * 按下去不是「没反应」：和这一段里别的锁着的几行一样，带他去开通那一页。
+   * 按下去不是「没反应」：和这一段里别的锁着的几行一样，带他去登录（10-31 方案推12：深色界面登录即可，天才层取消）。
    *
-   * 认的是那扇窗里的**价目行**（`.plan-row`，订阅窗独有），不是「页面上有没有一
-   * 层 overlay」——后者随便哪个弹窗都算数，等于没量。
+   * 认的是登录窗里那一格邮箱表单（`#authMailForm`，ui/subscribe.ts），不是「页面上有没有一层 overlay」——后者随便哪个
+   * 弹窗都算数，等于没量。
    */
   const opened = await p.evaluate(() => ({
-    rows: document.querySelectorAll('.overlay .plan-row').length,
+    auth: !!document.querySelector('#authMailForm'),
     any: document.querySelectorAll('.overlay').length,
   }));
-  check('按下去开的是《成为 Slides 天才》那扇窗', opened.rows >= 1, `价目行 ${opened.rows} 条 / 弹层 ${opened.any} 个`);
+  check('按下去开的是登录窗', opened.auth, `登录表单 ${opened.auth} / 弹层 ${opened.any} 个`);
   await p.close();
 }
 
@@ -278,7 +280,7 @@ const sw = (p) =>
           if (g) {
             localStorage.setItem(
               'slides_genius',
-              JSON.stringify({ active: true, period: 'year', until: Date.now() + 30 * 864e5, channel: 'code' }),
+              JSON.stringify({ active: true, period: 'year', until: Date.now() + 30 * 864e5, channel: 'code', code: 'GATEUNLOCK' }),
             );
           }
         }
@@ -286,6 +288,7 @@ const sw = (p) =>
       genius,
     );
     await p.addInitScript(sample);
+    await unlockAll(p);
     // 第一次打开：这一次本来就还没有那一格，允许闪。它的作用是把那一格写出来。
     await p.goto(BASE, { waitUntil: 'load' });
     await p.waitForSelector('.home-page', { timeout: 20000 });

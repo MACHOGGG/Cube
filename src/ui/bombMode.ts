@@ -23,7 +23,7 @@
 import { STRINGS, type Lang } from '../i18n';
 import type { BombTier } from '../engine/bomb';
 import type { ShapeCardMeta } from '../shapes/types';
-import { bombPanelStar } from './homeIcons';
+import { bombPanelStar, ICON_LOCK } from './homeIcons';
 import { BOMB_MODE, iconFor } from './modeIcons';
 import { shapeName } from './shapeLabels';
 import { CTL_BACK } from './ctlIcons';
@@ -38,6 +38,13 @@ export interface BombModeHandlers {
   onBack: () => void;
   /** 按下了一格：这一档、这副棋盘，开这一局。 */
   onStart: (tier: BombTier, board: string) => void;
+  /**
+   * 进阶炸弹那一排锁着没有（10-31 方案推12 Z-J02 E，10-14 F-1 f：进阶炸弹跟着炸弹走，但没登录点不开；判定在
+   * engine/geniusContent.ts 的 advancedBombLock）。锁着的两格图压暗、正中一把锁，读屏名后面跟「登录后可用」，点了
+   * 走 onLocked（开登录窗）。
+   */
+  advancedLocked?: boolean;
+  onLocked?: () => void;
 }
 
 /** 读屏那一句里这一档叫什么（三个标题本来就有四语，不另加字）。 */
@@ -62,10 +69,14 @@ export function renderBombModePage(root: HTMLElement, lang: Lang, rows: BombTier
                   (r) => `
               <div class="bomb-row bomb-row--${r.tier}">
                 ${r.cards
-                  .map(
-                    (c) => `<button class="bomb-chip" data-tier="${r.tier}" data-board="${c.id}"
-                        aria-label="${s[TIER_TITLE[r.tier]]} · ${shapeName(lang, c.id, c.name)}">${iconFor({ mode: BOMB_MODE[r.tier], board: c.id })}</button>`,
-                  )
+                  .map((c) => {
+                    const locked = r.tier === 'advanced' && !!handlers.advancedLocked;
+                    const label = `${s[TIER_TITLE[r.tier]]} · ${shapeName(lang, c.id, c.name)}${locked ? ` · ${s.signInOnly}` : ''}`;
+                    return `<button class="bomb-chip${locked ? ' bomb-chip--locked' : ''}" data-tier="${r.tier}" data-board="${c.id}"
+                        aria-label="${label}">${iconFor({ mode: BOMB_MODE[r.tier], board: c.id })}${
+                          locked ? `<span class="bomb-chip-lock" aria-hidden="true">${ICON_LOCK}</span>` : ''
+                        }</button>`;
+                  })
                   .join('')}
               </div>`,
                 )
@@ -78,7 +89,11 @@ export function renderBombModePage(root: HTMLElement, lang: Lang, rows: BombTier
     </div>
   `;
   for (const chip of Array.from(root.querySelectorAll<HTMLButtonElement>('.bomb-chip'))) {
-    chip.addEventListener('click', () => handlers.onStart(chip.dataset.tier as BombTier, chip.dataset.board!));
+    chip.addEventListener('click', () =>
+      chip.classList.contains('bomb-chip--locked')
+        ? handlers.onLocked?.()
+        : handlers.onStart(chip.dataset.tier as BombTier, chip.dataset.board!),
+    );
   }
   root.querySelector<HTMLButtonElement>('#bombBack')!.addEventListener('click', handlers.onBack);
 }

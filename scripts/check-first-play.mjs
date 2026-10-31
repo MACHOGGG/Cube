@@ -10,9 +10,8 @@
  *
  * 盯着玩家 2026-09 点名的四件事：
  *
- *   · 软锁——一局都没打过时，主菜单上只有《基础方块》和《基础小球》按得开；
- *     按到别的卡，那两张抖一下、光更亮一档，靠下的还会冒一个上滑箭头。打完
- *     第一局锁就永远撤掉。
+ *   · 一步一步出现（10-31 方案推12 起替掉原先的软锁）——新人主菜单上只有小球；小球那局教学走到结算页，
+ *     方块出现在它前面、亮着；方块那局走到结算页，每日挑战、多人、计时、炸弹出现。
  *   · 教学条——他玩的第一个基础玩法从第 1 条讲起，五段进度（2026-10 第二轮从四段改
  *     的，一步一条），第 1 条说的是
  *     「色块得分后会变成星星」。
@@ -54,96 +53,64 @@ await page.addInitScript(() => localStorage.setItem('slides_lang', 'zhHans'));
 await page.goto(BASE, { waitUntil: 'load' });
 await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
 
-// ── 软锁 ──────────────────────────────────────────────────────────────
-/*
- * 去重：主菜单那条带子把内容摆了两份（无缝循环靠的就是这个），两张发光的
- * 卡于是各有一个分身。不去重的话这儿数出四张——不是多了两张能玩的。
- */
-const glow = await page.$$eval('.home-icon-btn--glow', (bs) =>
-  [...new Set(bs.map((b) => b.getAttribute('aria-label')))]);
-check('新人进来：只有方块和小球两张亮着', glow.length === 2 && glow.includes('经典方块') && glow.includes('经典小球'), JSON.stringify(glow));
-
-await page.$eval('.home-icon-btn[aria-label^="老虎机"]', (e) => e.click());
-await page.waitForTimeout(260);
-const after = await page.evaluate(() => ({
-  onMenu: !!document.querySelector('.home-page'),
-  nudging: document.querySelectorAll('.home-icon-btn--nudge').length,
-  hint: !!document.querySelector('.home-up-hint--in'),
-}));
-check('按到锁着的玩法：人还在主菜单，没进去', after.onMenu, JSON.stringify(after));
-check('两张基础卡抖起来了', after.nudging === 2, String(after.nudging));
-/*
- * 指路的那个箭头。
- *
- * 窄版 2026-09 第十轮换成了一条横着跑的带子，能玩的那两张不再在「上面」
- * 而是在左边或右边，所以量的不再是「是不是上箭头」，是「有没有指路」。
- * 下一条接着量方向对不对——只看「有」的话，指错边也能蒙混过关。
- */
-check('按不开的那一下，冒出了指路的箭头', after.hint === true, JSON.stringify(after));
-const arrow = await page.evaluate(() => {
-  const h = document.querySelector('.home-up-hint--in');
-  if (!h) return null;
-  // 带子是无缝循环的，能玩的那两张上下都可能：取离屏心最近的那一个比。
-  const mid = window.innerHeight / 2;
-  let nearest = null, best = Infinity;
-  for (const el of document.querySelectorAll('[data-first-playable="1"]')) {
-    const r = el.getBoundingClientRect();
-    const d = Math.abs(r.top + r.height / 2 - mid);
-    if (d < best) { best = d; nearest = r; }
-  }
-  const locked = document.querySelector('.home-icon-btn[aria-label^="老虎机"]').getBoundingClientRect();
-  return { cls: h.className, playableAboveLocked: nearest.top < locked.top };
-});
-check(
-  '而且指的是能玩的那一头',
-  !!arrow && arrow.cls.includes(arrow.playableAboveLocked ? '--up' : '--down'),
-  JSON.stringify(arrow),
-);
-
-// ── 炸弹那一块（第 14 推）──────────────────────────────────────────────
+// ── 一步一步出现（10-31 方案推12 Z-J02，替掉原先那道「软锁」）──────────────────────────
 //
-// 宽版（电脑、横屏）上它不是 .home-icon-btn，是一整块 .home-bomb-card；首玩锁那道拦截
-// 从前只认前者，于是电脑上一局都没打过的人照样点得开炸弹的档位窗。窄版上它是
-// .home-icon-btn.home-bomb-mini，本来就拦得住——两种都量：哪一种在这块屏幕上就点哪一种。
-// 10-08 方案 3-G 起档位不再是一扇窗，是一整页（.bomb-page）；「没开」两样都认。
+// 原先新人面前十三张全摆、除两张基础卡都挂锁，按到锁着的那几张会抖一下、冒一个指路的箭头。站长 10-30 改成没解锁的
+// 玩法**根本不出现**：第 1 步只有小球（＋《我会玩》），小球那局教学走到结算页 → 方块出现在小球前面，方块那局教学走到
+// 结算页 → 每日挑战、多人、计时、炸弹出现。这一节就沿着这条路走一遍（细的在 check-menu-stages）。
+const cardsNow = () => page.evaluate(() => [...document.querySelectorAll('#homeGrid [data-card]')].map((c) => c.dataset.card));
+/** 暂停 →《结束游戏》→ 结算页 →《首页》→ 主菜单。 */
+const finishToMenu = async () => {
+  await page.waitForFunction(() => !document.querySelector('#startOverlay.show') && document.querySelectorAll('.tile, .ball, .tri').length > 0, null, { timeout: 30000 });
+  await page.waitForTimeout(400);
+  await page.$eval('#stopBtn', (e) => e.click());
+  await page.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
+  await page.$eval('#pauseFinishBtn', (e) => e.click());
+  await page.waitForSelector('#endOverlay.show', { timeout: 15000 });
+  await page.$eval('#endBackBtn', (e) => e.click());
+  await page.waitForSelector('.home-page', { timeout: 15000 });
+  await page.waitForTimeout(500);
+};
 {
+  const m = await page.evaluate(() => ({
+    knowHow: !!document.querySelector('.know-how-btn'),
+    locked: document.querySelectorAll('.home-icon-btn--locked').length,
+    upHint: !!document.querySelector('.home-up-hint'),
+    glow: [...new Set([...document.querySelectorAll('.home-icon-btn--glow')].map((b) => b.getAttribute('aria-label')))],
+  }));
+  check('新人进来：只有小球一张＋《我会玩》', (await cardsNow()).join() === 'circle' && m.knowHow, `${(await cardsNow()).join()} · ${JSON.stringify(m)}`);
+  check('没有挂锁的卡、没有指路的箭头（没到的卡根本不摆）', m.locked === 0 && !m.upHint, JSON.stringify(m));
+  check('小球亮着', m.glow.join() === '经典小球', JSON.stringify(m.glow));
+}
+await page.$eval('#homeGrid [data-card="circle"]', (e) => e.click());
+check('小球是头一局教学（从第 1 条讲起）', await page.waitForSelector('.coach-bar:not([hidden])', { timeout: 25000 }).then(() => true).catch(() => false));
+await finishToMenu();
+{
+  const m = await page.evaluate(() => {
+    const sq = document.querySelector('#homeGrid [data-card="square"]');
+    const ci = document.querySelector('#homeGrid [data-card="circle"]');
+    return { left: !!sq && !!ci && sq.getBoundingClientRect().left < ci.getBoundingClientRect().left, glow: !!sq?.classList.contains('home-icon-btn--glow') };
+  });
+  check('小球走到结算页 → 两张：方块在左、亮光', (await cardsNow()).join() === 'square,circle' && m.left && m.glow, `${(await cardsNow()).join()} · ${JSON.stringify(m)}`);
+}
+await page.$eval('#homeGrid [data-card="square"]', (e) => e.click());
+await page.waitForFunction(() => !document.querySelector('#startOverlay.show'), null, { timeout: 30000 });
+check('方块是第二局教学（has-coach，条子等星星够了才开口）', !!(await page.$('.app--game.has-coach')));
+await finishToMenu();
+{
+  const cards = await cardsNow();
+  check('方块走到结算页 → 6 张（每日挑战、多人、计时、炸弹出现）', cards.join() === 'daily,square,circle,multiplayer,timed,bomb', cards.join());
+  if (WIDE) {
+    const rows = await page.evaluate(() => new Set([...document.querySelectorAll('#homeGrid [data-card]')].map((c) => Math.round(c.getBoundingClientRect().top))).size);
+    check('宽屏：两排', rows === 2, String(rows));
+  }
   const kind = await page.evaluate(() =>
     document.querySelector('.home-bomb-card') ? 'card' : document.querySelector('.home-bomb-mini') ? 'mini' : null);
-  check(`（尺子）这块屏幕上的炸弹是${WIDE ? '宽版那一整块（.home-bomb-card）' : '窄版那一颗'}`,
-    WIDE ? kind === 'card' : kind === 'mini', String(kind));
-  // 先把上面按老虎机那一下留下的抖动摘掉——不摘的话「抖起来了」量到的是上一下的，
-  // 锁没拦住也照样是 2（反证时真这么绿过一次）。
-  await page.evaluate(() => {
-    for (const b of document.querySelectorAll('.home-icon-btn--nudge')) b.classList.remove('home-icon-btn--nudge');
-  });
+  check(`（尺子）这块屏幕上的炸弹是${WIDE ? '宽版那一整块（.home-bomb-card）' : '窄版那一颗'}`, WIDE ? kind === 'card' : kind === 'mini', String(kind));
   await page.$eval('.home-bomb-card, .home-bomb-mini', (e) => e.click());
-  await page.waitForTimeout(400);
-  const bomb = await page.evaluate(() => ({
-    onMenu: !!document.querySelector('.home-page'),
-    picker: !!document.querySelector('.center-pick, .bomb-page'),
-    nudging: document.querySelectorAll('.home-icon-btn--nudge').length,
-  }));
-  check('按炸弹：炸弹那一页没开，人还在主菜单（锁拦住了）', bomb.onMenu && !bomb.picker, JSON.stringify(bomb));
-  check('按炸弹：两张基础卡也抖起来了', bomb.nudging >= 2, String(bomb.nudging));
+  const bombPage = await page.waitForSelector('.bomb-page', { timeout: 5000 }).then(() => true).catch(() => false);
+  check('炸弹那张按得开（炸弹那一页）', bombPage);
 }
-
-// 玩过一局之后锁就没了
-await page.evaluate(() => localStorage.setItem('slides_played_circle', '1'));
-await page.reload({ waitUntil: 'load' });
-await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
-// 拿计时挑战量：免费的，只在首玩期锁着。原先拿的是菱形方块，10-09 起它挂的是天才的锁（补充方案
-// 第一部分第 10 条），打过一局也开不了——量到的会是另一把锁。
-await page.$eval('.home-icon-btn[aria-label^="计时挑战"]', (e) => e.click());
-await page.waitForTimeout(800);
-check('打过一局之后：锁撤了，点得进去', !(await page.$('.home-page')), '还在主菜单就是没撤');
-check('也不再抖了', (await page.$$('.home-icon-btn--nudge')).length === 0);
-// 尺子：锁撤了之后，同一下按炸弹真的开得出炸弹那一页——上面那条「没开」才是锁拦的，不是
-// 这一下本来就点不着。
-await page.goto(BASE, { waitUntil: 'load' });
-await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
-await page.$eval('.home-bomb-card, .home-bomb-mini', (e) => e.click());
-const bombPage = await page.waitForSelector('.bomb-page', { timeout: 5000 }).then(() => true).catch(() => false);
-check('（尺子）锁撤了之后，按炸弹开得出炸弹那一页', bombPage);
 
 // ── 头一局的教学条 ────────────────────────────────────────────────────
 await page.evaluate(() => { localStorage.clear(); localStorage.setItem('slides_lang', 'zhHans'); });
@@ -259,6 +226,8 @@ await page.evaluate(() => {
   localStorage.clear();
   localStorage.setItem('slides_lang', 'zhHans');
   for (const k of ['square', 'circle']) localStorage.setItem('slides_played_' + k, '1');
+  // 《大三角》是更多布局，主菜单第 5 步才出现（10-31 方案推12），而且要登着（下面兑码）。
+  for (const [k, v] of Object.entries({ slides_played_migrated_v1: '1', slides_played_stage: '5', slides_played_stage_shown: '5', slides_played_tier3: '1', slides_played_tier4: '1' })) localStorage.setItem(k, v);
 });
 await page.goto(BASE, { waitUntil: 'load' });
 await page.waitForSelector('.home-icon-btn', { timeout: 20000 });

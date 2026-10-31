@@ -15,6 +15,7 @@
  *   ② 尺子：放行之后再开一次，这台新服务器上确实没人——这时候说的才是「还没有人」。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2];
 if (!BASE) {
@@ -33,6 +34,7 @@ const check = (n, ok, extra = '') => {
 };
 
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+await unlockAll(ctx);
 await ctx.addInitScript(() => {
   for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
     localStorage.setItem(k, '1');

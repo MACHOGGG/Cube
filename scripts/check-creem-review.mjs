@@ -170,11 +170,9 @@ const openProfile = async (page) => {
 {
   const { ctx, page } = await fresh();
   await openProfile(page);
-  await page.evaluate(() => {
-    const b = [...document.querySelectorAll('button, a')].find((e) =>
-      /Slides\s*(天才|Genius|Génie)/i.test(e.textContent || ''));
-    b?.click();
-  });
+  // 个人主页那颗徽章（#becomeGeniusBtn）。原先按字认（「成为 Slides 天才」），10-31 方案推12 起它写的是「登录 / 注册」
+  // （天才层取消），按 id 认。
+  await page.evaluate(() => document.querySelector('#becomeGeniusBtn')?.click());
   // 第 17 推：这扇窗的类名从 .genius-modal 换成了 .invite-modal（帐号窗另有一个 .acct-modal）。
   await page.waitForSelector('.invite-modal', { timeout: 10000 });
 

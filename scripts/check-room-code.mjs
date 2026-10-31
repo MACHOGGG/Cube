@@ -26,6 +26,7 @@
  * 只量「有类名」的话四圈一起亮也照样绿，而那正是要区分的两种样子。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2];
 if (!BASE) { console.log('用法：node scripts/check-room-code.mjs http://localhost:8991/'); process.exit(2); }
@@ -41,6 +42,7 @@ async function newPlayer(reduce = false) {
     viewport: { width: 390, height: 844 },
     reducedMotion: reduce ? 'reduce' : 'no-preference',
   });
+  await unlockAll(ctx);
   await ctx.addInitScript(() => {
     for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle']) localStorage.setItem(k, '1');
     localStorage.setItem('slides_lang', 'zhHans');

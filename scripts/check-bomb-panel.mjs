@@ -34,6 +34,7 @@
  *    脑一档，横屏矮屏一档。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 import { readFileSync } from 'node:fs';
 
 const base = process.argv[2];
@@ -95,6 +96,9 @@ async function openPanel(width = 390, height = 844, lang = 'zhHans', opts = {}) 
     // 玩过一局才摆得出炸弹那一档（和 check-mode-axis 同一个前提）。
     localStorage.setItem('slides_played_square', '1');
     localStorage.setItem('slides_played_finished', '1');
+    // 进阶炸弹那一排要登录（推12，10-31 Z-J02：天才层取消，锁只剩「没登录」一种）：铺一份「兑过一张码」的登录缓存
+    // （scripts/lib/unlockAll.mjs 的 SIGNED_IN_CACHE 那个样子），不然第 3 行两枚点下去开的是登录窗。
+    localStorage.setItem('slides_genius', JSON.stringify({ active: true, channel: 'code', code: 'GATEUNLOCK', until: 4102444800000 }));
   }, lang);
   await page.reload();
   await page.waitForSelector('.home-icon-btn, .home-bomb-card, .home-bomb-mini', { timeout: 25000 });
@@ -341,6 +345,7 @@ const LAYOUT = () => {
 };
 for (const [w, h, label] of [[390, 844, '手机 390×844'], [360, 640, '手机 360×640'], [1280, 800, '电脑 1280×800'], [844, 390, '横屏 844×390']]) {
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, isMobile: w < 800 || h < 500, hasTouch: w < 800 || h < 500 });
+  await unlockAll(ctx);
   await ctx.addInitScript(() => {
     localStorage.setItem('slides_lang', 'zhHans');
     localStorage.setItem('slides_know_how', '1');

@@ -15,7 +15,7 @@
  *   ④ `xhs/src/main.ts` 的 `onPlay` 分派 —— 点下去进哪一屏；
  *   ⑤ 同文件的 `FirstKey` ＋ `DAILY_MODE_KEYS` —— 头一回的那句提示、成绩页翻哪几本（`BOOKS`
  *     从 2026-10-08 起由「全部棋盘 × DAILY_MODE_KEYS」拼出来，不再手写）；
- *   ⑥ `soon` ＋ `dim` —— 那块「进阶入口」牌子、头几局的压暗路标；
+ *   ⑥ `soon` —— 那块「进阶入口」牌子（头几局的压暗路标 `dim` 10-31 方案推12 删了，第 3 步把进阶全摆出来）；
  *   ⑦ `xhs/check-vsweb.mjs` 的 `XHS_CARD` —— 那道门按下标点卡。
  *
  * 七张里漏一张，症状各不相同，而且**全都不当场报错**（只有 ⑤ 的 `FirstKey` 例外）：
@@ -223,7 +223,7 @@ say(dbBody.length > 0, '尺子：切出了 dailyBest 那一段');
 say(/\bBOOKS\b/.test(dbBody) && !/suffixFor\(/.test(dbBody), 'dailyBest 翻的就是 BOOKS，没有自己再拼一遍键');
 
 // ── ⑥ soon ＋ dim ──────────────────────────────────────────────────────────
-head('⑥ soon ＋ dim：「进阶入口」牌子和头几局的压暗路标');
+head('⑥ soon：「进阶入口」牌子；第 3 步进阶全摆出来（dim 删了）');
 
 const BASIC = ['square', 'circle'];
 const advLine = menuSrc.match(/export const XHS_ADVANCED_MODES[^;]*;/);
@@ -258,23 +258,17 @@ if (advLine) {
   say(expect.includes('puzzle'), '《步步为营》算在进阶里（会被压暗、会挂牌子）');
 }
 
-// main.ts 那两行要真的收它，不许再出现手写的数组。
+// main.ts 那一行要真的收它，不许再出现手写的数组。dim（头几局的压暗路标）10-31 方案推12 删了：主菜单一步一步出现之后，
+// 没到的卡根本不摆，第 3 步把进阶那几档一次全摆出来（xhs/src/menu.ts 的 stageOf：基础两张以外都是第 3 步）。
 const soonLine = mainSrc.match(/\n\s*soon: ([^\n]*),/);
 const dimLine = mainSrc.match(/\n\s*dim: ([^\n]*),/);
-say(!!soonLine && !!dimLine, '尺子：main.ts 里有 soon: … 和 dim: … 两行');
+say(!!soonLine, '尺子：main.ts 里有 soon: … 那一行');
 say(soonLine ? /XHS_ADVANCED_MODES/.test(soonLine[1]) : false, 'soon 收的是 XHS_ADVANCED_MODES', soonLine?.[1]);
-say(dimLine ? /XHS_ADVANCED_MODES/.test(dimLine[1]) : false, 'dim 收的是 XHS_ADVANCED_MODES', dimLine?.[1]);
-say(
-  soonLine ? !/\['/.test(soonLine[1]) : false,
-  'soon 那一行没有手写的数组字面量',
-);
-say(
-  dimLine ? !/\['/.test(dimLine[1]) : false,
-  'dim 那一行没有手写的数组字面量（空的 [] 不算，那是「路标撤掉」）',
-  dimLine?.[1],
-);
-// dim 仍要看 basicsDone()：两副基础都打过之后压暗必须撤掉（玩家定的）。
-say(dimLine ? /basicsDone\(\)/.test(dimLine[1]) : false, 'dim 仍然问 basicsDone()：头几局过后路标要撤');
+say(soonLine ? !/\['/.test(soonLine[1]) : false, 'soon 那一行没有手写的数组字面量');
+say(!dimLine && !/\bdim\??:/.test(menuSrc), 'dim（压暗）删干净了：main.ts 不传、menu.ts 不收', dimLine?.[1] ?? '');
+// 第 3 步把 XHS_ADVANCED_MODES 全摆出来：menu.ts 里「第几步出现」那一句只把方块、小球分出去，别的一律第 3 步。
+const stageLine = menuSrc.match(/const stageOf = [^\n]*/);
+say(!!stageLine && /mode === 'circle' \? 1 : mode === 'square' \? 2 : 3/.test(stageLine[0]), '第 3 步把进阶那几档全摆出来（stageOf：小球 1、方块 2、其余 3）', stageLine?.[0]);
 
 // ── ⑦ check-vsweb 的 XHS_CARD ──────────────────────────────────────────────
 head('⑦ check-vsweb 的 XHS_CARD：那道门按下标点卡');
@@ -429,7 +423,10 @@ head('⑨ E20 冻结唯一的例外：最上面那一行《每日挑战》');
   const cardsAt = body.indexOf('for (let i = 0; i < CARDS.length; i += perRow)');
   say(dailyAt > 0 && cardsAt > 0, '（尺子）两段都找得到：每日挑战那一行、CARDS 那几排', `${dailyAt} / ${cardsAt}`);
   say(dailyAt > 0 && dailyAt < cardsAt, '每日挑战那一行在 CARDS 那几排**之前**摆进 grid（最上面）');
-  const before = cardsAt > 0 ? body.slice(0, cardsAt) : '';
+  // 第 1、2 步那一支（10-31 方案推12：一排居中的小卡＋《我会玩》）在上面先 return 掉，不在第 3 步这一屏里——从第 3 步
+  // 那一屏开头（每日挑战那一块）数起。
+  const stage3At = body.indexOf('const today = dayIndexOf(Date.now());');
+  const before = cardsAt > 0 ? body.slice(Math.max(0, stage3At), cardsAt) : '';
   const rowsBefore = (before.match(/grid\.appendChild\(/g) || []).length;
   say(rowsBefore === 1, 'CARDS 之前摆进 grid 的只有这一行（唯一的例外）', `${rowsBefore} 行`);
   const oneCard = before.match(/row\.appendChild\(/g) || [];

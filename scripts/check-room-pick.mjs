@@ -20,6 +20,7 @@
  * TESTMONTH 一台服务器只能兑一次——重跑请换端口重开服务器。整趟约一分钟。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2] || 'http://localhost:8981/';
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
@@ -31,6 +32,7 @@ const check = (n, ok, extra = '') => {
 
 async function newPlayer(label) {
   const ctx = await browser.newContext({ viewport: { width: 420, height: 900 } });
+  await unlockAll(ctx);
   await ctx.addInitScript(() => {
     for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
       localStorage.setItem(k, '1');

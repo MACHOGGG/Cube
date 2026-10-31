@@ -27,6 +27,7 @@
  *      刷新之后不会被领回那间屋子。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2];
 if (!BASE) {
@@ -42,6 +43,7 @@ const check = (n, ok, extra = '') => {
 
 async function newPlayer() {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await unlockAll(ctx);
   await ctx.addInitScript(() => {
     // 预设「看过教学」：这台门量的是散场那一下，不是头一局的教学条（CLAUDE.md「跑门时的坑」）。
     for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])

@@ -12,6 +12,7 @@
  *   · 从游戏里退回主菜单，位置应该还在刚才那儿。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2] || 'http://localhost:8815/';
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
@@ -23,6 +24,7 @@ const check = (n, ok, extra = '') => {
 };
 
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+await unlockAll(ctx);
 await ctx.addInitScript(() => {
   // 最后那一把是「打完过一局」：10-08 方案 3-D-1 起《每日挑战》只给打完过一局的人摆。
   for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle', 'slides_played_finished'])
@@ -149,14 +151,15 @@ await page.waitForTimeout(600);
 const after = await page.evaluate(() => window.scrollY);
 check('从一局里退出来，主菜单还停在刚才那儿', Math.abs(after - before) <= 4, `${before} → ${after}`);
 
-// ---- 5. 锁着的玩法：锁在正当中，招牌收在右下角，两者碰不到 -----------------
+// ---- 5. 锁着的玩法：锁在正当中，没有天才招牌，点了出登录窗 -----------------
 //
-// 没开通的玩家在主菜单上看见七张锁着的卡（老虎机、无限反转、步步为营，和更多布局那四副）。锁要正
-// 正地压在图形中心，三把一样大；天才招牌收在卡片右下角，不许压到锁上，也不
-// 许探出卡片去压到邻居。卡片的大小随屏幕变——手机竖着两列、横过来是电脑那
-// 套版式但一张只剩 96px、电脑上二百多——三种都量一遍。
+// 10-31 方案推12 起天才层取消：第 5 步没登录的人在主菜单上看见四张锁着的卡（更多布局那四副）——老虎机、无限反转、
+// 步步为营不再锁。锁要正正地压在图形中心、四把一样大；原先右下角那块天才招牌（.center-pick-genius）撤了。点一张锁着
+// 的卡开的是登录窗（#authMailForm，ui/subscribe.ts）。卡片的大小随屏幕变——手机竖着两列、横过来是电脑那套版式但一张
+// 只剩 96px、电脑上二百多——三种都量一遍。
 async function lockedCards(width, height) {
   const c = await browser.newContext({ viewport: { width, height } });
+  await unlockAll(c);
   await c.addInitScript(() => {
     // 最后那一把是「打完过一局」：10-08 方案 3-D-1 起《每日挑战》只给打完过一局的人摆。
     for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle', 'slides_played_finished'])
@@ -188,8 +191,6 @@ async function lockedCards(width, height) {
       // 早就不是图的正中了，锁该对齐的是图。
       const card = box(b.querySelector('.home-icon-art') ?? b);
       const lock = box(b.querySelector('.center-pick-lock'));
-      const badge = box(b.querySelector('.center-pick-genius'));
-      const touch = (a, o) => a.l < o.r && o.l < a.r && a.t < o.b && o.t < a.b;
       const lockEl = b.querySelector('.center-pick-lock');
       return {
         name: (b.getAttribute('aria-label') || '').split(' ·')[0],
@@ -204,14 +205,18 @@ async function lockedCards(width, height) {
           Math.round(lock.l + lock.w / 2 - card.l - card.w / 2),
           Math.round(lock.t + lock.h / 2 - card.t - card.h / 2),
         ],
-        badge: `${Math.round(badge.w)}×${Math.round(badge.h)}`,
-        overlap: touch(lock, badge),
-        inside: badge.l >= card.l - 0.5 && badge.t >= card.t - 0.5 && badge.r <= card.r + 0.5 && badge.b <= card.b + 0.5,
+        genius: !!b.querySelector('.center-pick-genius'),
       };
     }),
   );
+  // 点一张锁着的卡：开的是登录窗。画过的这一步没有新卡要演（shown = stage）。
+  const extra = await p.evaluate(() => ({
+    arrive: document.querySelectorAll('.home-icon-btn--arrive').length,
+  }));
+  await p.$eval(sel, (e) => e.click());
+  extra.auth = await p.waitForSelector('#authMailForm', { timeout: 8000 }).then(() => true).catch(() => false);
   await c.close();
-  return cards;
+  return Object.assign(cards, { extra });
 }
 /**
  * 主菜单上摆了些什么、什么次序。
@@ -227,6 +232,7 @@ async function lockedCards(width, height) {
  */
 async function menuOrder(width, height) {
   const c = await browser.newContext({ viewport: { width, height } });
+  await unlockAll(c);
   await c.addInitScript(() => {
     // 最后那一把是「打完过一局」：10-08 方案 3-D-1 起《每日挑战》只给打完过一局的人摆。
     for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle', 'slides_played_finished'])
@@ -259,6 +265,7 @@ async function menuOrder(width, height) {
 /** 主菜单上每张图标有多宽——用来核对「十四张一样大」。 */
 async function cardWidths(width, height) {
   const c = await browser.newContext({ viewport: { width, height } });
+  await unlockAll(c);
   await c.addInitScript(() => {
     // 最后那一把是「打完过一局」：10-08 方案 3-D-1 起《每日挑战》只给打完过一局的人摆。
     for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle', 'slides_played_finished'])
@@ -276,19 +283,14 @@ async function cardWidths(width, height) {
 
 for (const [w, h, label] of [[390, 844, '手机竖屏'], [844, 390, '手机横屏'], [1280, 800, '电脑']]) {
   const cards = await lockedCards(w, h);
-  const brief = cards.map((c) => `${c.name} 卡${c.card} 锁${c.lock}@${c.off.join(',')} 招牌${c.badge}`).join(' / ');
+  const brief = cards.map((c) => `${c.name} 卡${c.card} 锁${c.lock}@${c.off.join(',')}`).join(' / ');
   /*
-   * 锁着的七张：老虎机、无限反转、步步为营，和更多布局那四副（菱形方块、六边形小球、菱形小球、
-   * 六边形三角）。
-   *
-   * **大三角（六边蜂窝 54）2026-09 换上了锁**（《侵蚀阶梯》v1.2 PR-6 把它挪进
-   * GENIUS_LAYOUTS），顶掉的是删掉的 V 型三角；**菱形方块、六边形小球 10-09 也上了锁**（补充方案
-   * 第一部分第 10 条：「和其他『更多布局』一样需要天才」），五张变七张。按名字比，不只比张数：
-   * 张数对、锁错了人，屏幕上看着一样。
+   * 锁着的四张：更多布局那四副（菱形方块、六边形小球、菱形小球、六边形三角），没登录才锁（10-31 方案推12：老虎机、
+   * 无限反转、步步为营原先也锁着，天才层取消之后不锁了）。按名字比，不只比张数：张数对、锁错了人，屏幕上看着一样。
    */
-  const LOCKED = ['老虎机模式', '无限反转', '步步为营', '菱形方块', '六边形小球', '菱形小球', '六边形三角'];
+  const LOCKED = ['菱形方块', '六边形小球', '菱形小球', '六边形三角'];
   const names = cards.map((c) => c.name);
-  check(`${label}：七张锁着的卡都在，就是这七张`,
+  check(`${label}：四张锁着的卡都在，就是这四张`,
     cards.length === LOCKED.length && LOCKED.every((n) => names.includes(n)), brief);
   // 玩家点名的顺序，宽屏三排、窄屏几排——同一条链，断在不同的地方。
   const wide = w >= 720 || (w > h && w >= 560);
@@ -348,9 +350,10 @@ for (const [w, h, label] of [[390, 844, '手机竖屏'], [844, 390, '手机横�
       got.items.join(' · '));
   }
   check(`${label}：锁都在图形正当中`, cards.every((c) => Math.abs(c.off[0]) <= 1 && Math.abs(c.off[1]) <= 1));
-  check(`${label}：七把锁一样大（34×34）`, cards.every((c) => c.lock === '34×34'));
-  check(`${label}：招牌没压到锁`, cards.every((c) => !c.overlap));
-  check(`${label}：招牌收在卡片里`, cards.every((c) => c.inside));
+  check(`${label}：四把锁一样大（34×34）`, cards.every((c) => c.lock === '34×34'));
+  check(`${label}：没有天才招牌（.center-pick-genius）`, cards.every((c) => !c.genius));
+  check(`${label}：点锁着的卡，出登录窗`, cards.extra.auth === true);
+  check(`${label}：画过的这一步（shown = stage）没有任何 --arrive`, cards.extra.arrive === 0, String(cards.extra.arrive));
 }
 
 // ---- 连点两下不放大 -------------------------------------------------------
@@ -365,6 +368,7 @@ for (const [w, h, label] of [[390, 844, '手机竖屏'], [844, 390, '手机横�
 // 那一条不能被这一条盖掉，也一起查。
 await ctx.close();
 const tctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+await unlockAll(tctx);
 await tctx.addInitScript(() => {
   // 最后那一把是「打完过一局」：10-08 方案 3-D-1 起《每日挑战》只给打完过一局的人摆。
   for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle', 'slides_played_finished'])
@@ -432,9 +436,10 @@ await tctx.close();
     // 这三张是天才特供，没权限按下去开的是订阅窗，不是那一页。
     localStorage.setItem(
       'slides_genius',
-      JSON.stringify({ active: true, period: 'year', until: Date.now() + 30 * 864e5, channel: 'code' }),
+      JSON.stringify({ active: true, period: 'year', until: Date.now() + 30 * 864e5, channel: 'code', code: 'GATEUNLOCK' }),
     );
   });
+  await unlockAll(sctx);
   const watch = () => {
     window.__tl = [];
     const tick = () => {

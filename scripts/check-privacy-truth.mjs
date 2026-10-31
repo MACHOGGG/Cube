@@ -551,10 +551,12 @@ const KEY_CLASSES = [
   // 的说法是一张清单，加一个键就要在清单里多一项——所以它自己那一项也写进 say。
   // slides_cvd_offer：开局倒数页上那颗色盲开关出过没有（10-18 补充 M-2，engine/firstPlay.ts 的 cvdOfferDue）。同理。
   { cls: '进度', prefixes: ['slides_tutorial_seen', 'slides_played_', 'slides_bulb_'], keys: ['slides_know_how', 'slides_first_run', 'slides_landscape_played', 'slides_total_seen', 'slides_signin_hint_day', 'slides_cvd_offer'],
-    say: { zhHans: ['进度（每个教学', '结算页上那句登录提示今天说过没有', '开局倒数页上那颗色盲友好配色开关出过没有'],
-      zhHant: ['進度（每個教學', '結算頁上那句登入提示今天說過沒有', '開局倒數頁上那顆色盲友好配色開關出過沒有'],
-      en: ['progress (which tutorials', 'whether today’s sign-in tip on the result screen has been shown', 'whether the colourblind-palette switch on the countdown screen has been shown'],
-      fr: ['progression (les tutoriels', 'si le conseil de connexion de l’écran de fin a déjà été affiché aujourd’hui', 'si l’interrupteur de la palette adaptée aux daltoniens a déjà été affiché sur l’écran du compte à rebours'] } },
+    // 10-31 方案推12：slides_bulb_*（局中灯泡开打过几局）→「每个玩法开打过几局」；slides_played_stage / _stage_shown /
+    // _tier3 / _tier4（主菜单第几步）→「主菜单已经摆出了哪几样玩法」；哨兵 slides_played_migrated_v1 →「旧进度已经换算过」。
+    say: { zhHans: ['进度（每个教学', '结算页上那句登录提示今天说过没有', '开局倒数页上那颗色盲友好配色开关出过没有', '每个玩法开打过几局', '主菜单已经摆出了哪几样玩法'],
+      zhHant: ['進度（每個教學', '結算頁上那句登入提示今天說過沒有', '開局倒數頁上那顆色盲友好配色開關出過沒有', '每個玩法開打過幾局', '主選單已經擺出了哪幾樣玩法'],
+      en: ['progress (which tutorials', 'whether today’s sign-in tip on the result screen has been shown', 'whether the colourblind-palette switch on the countdown screen has been shown', 'how many runs you have started in each mode', 'which modes the main menu has already revealed'],
+      fr: ['progression (les tutoriels', 'si le conseil de connexion de l’écran de fin a déjà été affiché aujourd’hui', 'si l’interrupteur de la palette adaptée aux daltoniens a déjà été affiché sur l’écran du compte à rebours', 'combien de parties vous avez commencées dans chaque mode', 'les modes que le menu principal a déjà fait apparaître'] } },
   // slides_slot_split_v1：老虎机旧局从基础那一本搬出去的记号（10-11 方案 B-7，engine/slotSplit.ts）——政策里「几枚
   // 『旧记录已经整理过』的记号」那一句本来就是清单式的复数，不用加字。
   // slides_push_queue：交卷待发队列（10-31 方案推08 Z-H01）——还没交上去的每局记录，政策里「战绩（最高分和每局记录……」

@@ -45,6 +45,7 @@
  * 请窗那条规则的前缀 .invite-modal 去掉再跑——「还隔着 20px」那一条红。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2] || 'http://localhost:8965/';
 const MODES = ['浅色', '深色', '色盲'];
@@ -64,6 +65,7 @@ const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromi
 let genius = null;
 async function openCtx(w, h, { signedIn = true } = {}) {
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, reducedMotion: 'reduce' });
+  await unlockAll(ctx);
   await ctx.addInitScript(([g, signed]) => {
     localStorage.setItem('slides_lang', 'zhHans');
     localStorage.setItem('slides_intro_seen', '1');

@@ -35,6 +35,7 @@
  *      2 = 14 分，新一级 11 段扣掉 3 + 3 剩 5 段。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const base = (process.argv[2] || '').replace(/\/$/, '');
 if (!base) {
@@ -86,6 +87,7 @@ async function open(rows, spent) {
   page.on('pageerror', (e) => errs.push(String(e.message)));
   // reduced-motion：每一拍都立刻跑完。
   await page.emulateMedia({ reducedMotion: 'reduce' });
+  await unlockAll(page);
   await page.addInitScript(({ rows, spent }) => {
     localStorage.setItem('slides_lang', 'zhHans');
     localStorage.setItem('slides_know_how', '1');

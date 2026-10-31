@@ -28,6 +28,7 @@
  * 量的是玩家看得见的那个数：选中线（轴心往上 --axis-shift）上那一张卡的中心在屏幕上的 y。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2];
 if (!BASE) {
@@ -73,6 +74,8 @@ const same = (a, b) => !!a && !!b && a.name === b.name && Math.abs(a.cy - b.cy) 
 
 async function menu() {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3 });
+  // 主菜单第 5 步、没登录（10-31 方案推12：四副更多布局才有锁，锁着的卡开的是登录窗）。
+  await unlockAll(ctx);
   await ctx.addInitScript(SEED);
   const p = await ctx.newPage();
   const errs = [];
@@ -84,10 +87,10 @@ async function menu() {
   await p.waitForTimeout(1500);
   return { ctx, p, errs };
 }
-/** 点一张锁着的卡：没登录的人开的是邀请窗（main.ts 的 onLockedLayout）。 */
+/** 点一张锁着的卡：没登录的人开的是登录窗（main.ts 的 onLockedLayout；10-31 方案推12 之前是邀请窗）。 */
 const openInvite = async (p) => {
   await p.evaluate(() => document.querySelector('.mode-axis .home-icon-btn--locked').click());
-  await p.waitForSelector('#geniusClose', { timeout: 10000 });
+  await p.waitForSelector('#authClose', { timeout: 10000 });
   await p.waitForTimeout(250);
 };
 /**
@@ -127,14 +130,14 @@ const settle = (p) => p.waitForTimeout(700); // 比 keepScrollAt 追着放的那
   await ctx.close();
 }
 
-// ── ② 邀请窗开开关关五次 ────────────────────────────────────────────────
+// ── ② 登录窗（锁着的布局卡开的那一扇；推12 之前是邀请窗）开开关关五次 ────────────────────────────────────────────────
 {
   const { ctx, p, errs } = await menu();
   const base = await centre(p);
   const after = [];
   for (let i = 0; i < 5; i++) {
     await openInvite(p);
-    await p.click('#geniusClose');
+    await p.click('#authClose');
     await settle(p);
     after.push(await centre(p));
   }
@@ -151,8 +154,8 @@ const settle = (p) => p.waitForTimeout(700); // 比 keepScrollAt 追着放的那
   const pushed = [];
   const after = [];
   for (let i = 0; i < 5; i++) {
+    // 推12（10-31 Z-J02）起锁着的布局卡直接开登录窗（原先先开邀请窗、再点右边那颗《登录》）。
     await openInvite(p);
-    await p.click('#geniusRestore'); // 邀请窗右边那颗：开登录窗
     await p.waitForSelector('#authClose', { timeout: 10000 });
     await p.waitForTimeout(250);
     pushed.push(await keyboardPush(p));
@@ -175,8 +178,8 @@ const settle = (p) => p.waitForTimeout(700); // 比 keepScrollAt 追着放的那
 for (const [closer, label] of [['#statusDone', '✅'], ['#statusClose', '✕']]) {
   const { ctx, p, errs } = await menu();
   const base = await centre(p);
+  // 推12（10-31 Z-J02）起锁着的布局卡直接开登录窗（原先先开邀请窗、再点右边那颗《登录》）。
   await openInvite(p);
-  await p.click('#geniusRestore');
   await p.waitForSelector('#authAlt', { timeout: 10000 });
   await p.click('#authAlt'); // 「不用邮箱」那一档：两串自己定的字
   await p.waitForSelector('#authPairForm:not([hidden]) input', { timeout: 10000 });

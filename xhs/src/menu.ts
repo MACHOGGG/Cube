@@ -56,19 +56,16 @@ export interface XhsMenuHandlers {
    */
   soon?: readonly XhsMode[];
   /**
-   * 这几张卡调暗一档。
+   * 主菜单到了第几步（10-31 方案推12 Z-J02 D-8，xhs/src/main.ts 的 xhsStage）：1 只有小球、2 方块＋小球（这两步是一排居中
+   * 的小卡＋《我会玩》，样式和网页同一组类名，在 src/style.css），3 是今天那一套（每日挑战一排＋三排两张）。
    *
-   * 和 soon 分开：牌子（「进阶入口」）是常驻的预告，暗淡只是头几局的路标。
-   * 玩家把小球和方块都打过一遍之后，路他自己认得了，就不该再压着别的玩法
-   * ——那时候暗淡只剩「这几个不太重要」这一层意思，不是我们想说的。
+   * 原先这儿还有一位 dim（头几局把进阶那几张压暗一档当路标），没到的卡根本不摆之后删了。
    */
-  dim?: readonly XhsMode[];
+  stage: 1 | 2 | 3;
+  /** 主菜单真的画出来过的是第几步：这一步新出来的卡演一次「浮出」（.home-icon-btn--arrive）。 */
+  shown: 1 | 2 | 3;
   /**
-   * 按了《我会玩》：引导的路标（发光 + 压暗）全撤，主菜单重画一遍。
-   *
-   * 这一版的「新手检测拦截」不是锁——每张卡一直都点得开，压暗只是路标（见上面
-   * dim 那段）。玩家要的按钮是同一颗，撤掉的东西按各端自己有的算：网页版撤锁和
-   * 光，这一版撤压暗和光。
+   * 按了《我会玩》：直接到第 3 步（调用方升步），主菜单重画一遍。只在第 1、2 步摆。
    */
   onKnowHow?: () => void;
 }
@@ -112,19 +109,9 @@ export const XHS_ADVANCED_MODES: readonly XhsMode[] = CARDS.map((c) => c.mode).f
 let stopDailyWatch: (() => void) | null = null;
 
 /** 一张卡：上面一格方的图，底下一行小字。和网页版的 iconButton 同一个形状。 */
-function card(
-  icon: string,
-  label: string,
-  onTap: () => void,
-  glow = false,
-  soon = false,
-  dim = false,
-): HTMLButtonElement {
+function card(icon: string, label: string, onTap: () => void, glow = false, soon = false): HTMLButtonElement {
   const btn = document.createElement('button');
-  btn.className =
-    'home-icon-btn' +
-    (glow ? ' home-icon-btn--glow' : '') +
-    (dim ? ' home-icon-btn--dim' : '');
+  btn.className = 'home-icon-btn' + (glow ? ' home-icon-btn--glow' : '');
   btn.setAttribute('aria-label', soon ? `${label}（完整版里还有更进阶的玩法）` : label);
   const art = document.createElement('span');
   art.className = 'home-icon-art';
@@ -219,25 +206,58 @@ export function renderXhsMenu(root: HTMLElement, lang: Lang, h: XhsMenuHandlers)
   `;
 
   const grid = page.querySelector<HTMLElement>('#xhsGrid')!;
+  stopDailyWatch?.();
+  stopDailyWatch = null;
+  /** 这一次新出来的卡（第几步出现 > 画出来过的那一步），画完按屏幕上的次序编号、演一次浮出（同网页 menu.ts）。 */
+  const stageOf = (mode: XhsMode | 'daily'): 1 | 2 | 3 => (mode === 'circle' ? 1 : mode === 'square' ? 2 : 3);
+  const fresh: HTMLElement[] = [];
+  const named = (btn: HTMLButtonElement, mode: XhsMode | 'daily'): HTMLButtonElement => {
+    if (stageOf(mode) > h.shown) fresh.push(btn);
+    return btn;
+  };
+  const markArrivals = (): void => {
+    fresh.forEach((b, i) => {
+      b.classList.add('home-icon-btn--arrive');
+      b.style.setProperty('--arrive-i', String(i));
+    });
+  };
+  const playCard = (c: (typeof CARDS)[number]): HTMLButtonElement =>
+    named(card(c.icon, menuTag(lang, c.tag), () => h.onPlay(c.mode), !!h.glow?.includes(c.mode), !!h.soon?.includes(c.mode)), c.mode);
+
+  /*
+   * 第 1、2 步（10-31 方案推12 Z-J02 D-8）：一排居中的小卡＋正下方那颗《我会玩》，和网页同一组类名（.home-page--intro、
+   * .home-row--intro，样式在 src/style.css）。第 2 步方块在左、小球在右（CARDS 的次序）。
+   */
+  if (h.stage <= 2) {
+    page.classList.add('home-page--intro');
+    const row = document.createElement('div');
+    row.className = 'home-row home-row--intro';
+    for (const c of CARDS) if (stageOf(c.mode) <= h.stage) row.appendChild(playCard(c));
+    grid.appendChild(row);
+    grid.appendChild(knowHowButton(lang, () => h.onKnowHow?.()));
+    markArrivals();
+    root.appendChild(page);
+    root.appendChild(bottomNav(h));
+    return;
+  }
   /*
    * 《每日挑战》（第 19 推）：最上面单独一行、居中，只有这一张——E20「主菜单排布冻结」的第一个例
-   * 外（方案原话；第二个是 2026-10-15 的「图标和网页移动端一样大、页面往下滑、新人状态《我会玩》挪到
-   * 基础那一排后面」）。下面那几排一张都不动：还是窄屏两张一排、宽屏一排六张、同样的次序。
+   * 外（方案原话；第二个是 2026-10-15 的「图标和网页移动端一样大、页面往下滑」）。下面那几排一张都不动：
+   * 还是窄屏两张一排、宽屏一排六张、同样的次序。
    *
    * 图按本机时间的北京日期换（小红书那一版不联网，用本机的钟——方案原话），到零点自动换图、
    * 切回前台时重算（dailyArt.ts 的 watchDay）。读屏念「每日挑战，10 月 3 日」，底下那行小字是
-   * 「每日挑战」。它不压暗、不挂「进阶入口」牌子：今天那一局谁都能打。
+   * 「每日挑战」。它不挂「进阶入口」牌子：今天那一局谁都能打。
    */
   {
     const today = dayIndexOf(Date.now());
     const row = document.createElement('div');
     row.className = 'home-row xhs-daily-row';
-    const btn = card(dailyArtHtml(today), s.dailyTitle, () => h.onDaily());
+    const btn = named(card(dailyArtHtml(today), s.dailyTitle, () => h.onDaily()), 'daily');
     btn.classList.add('home-icon-btn--daily');
     btn.setAttribute('aria-label', dailyAria(lang, today));
     row.appendChild(btn);
     grid.appendChild(row);
-    stopDailyWatch?.();
     stopDailyWatch = watchDay(Date.now, (d) => {
       if (!btn.isConnected) {
         stopDailyWatch?.();
@@ -252,30 +272,15 @@ export function renderXhsMenu(root: HTMLElement, lang: Lang, h: XhsMenuHandlers)
   // 六张：宽屏一排摆完，窄屏三排各两张。从前宽屏那个数写的是 5——补上第六张之后它会排成
   // 5 + 1，最后一张孤零零吊在下面一行。
   //
-  // 《我会玩》：只在引导还在压暗别的玩法时摆出来。窄屏摆在「经典方块 / 经典小球」那一排后面（站长 2026-10-15 定，
-  // E20 的第二个例外）：原先摆在整页最下面，卡改成网页那么大、页面能滑之后，它就落到首屏以外了。宽屏一排六张，没有
-  // 「基础那一排之后」，照旧摆在最下面。
-  const showKnowHow = !!(h.dim && h.dim.length > 0);
+  // 《我会玩》第 3 步不摆（10-31 方案推12：只在第 1、2 步摆，见上面那一支）。
   const perRow = wide ? 6 : 2;
   for (let i = 0; i < CARDS.length; i += perRow) {
     const row = document.createElement('div');
     row.className = 'home-row';
-    for (const c of CARDS.slice(i, i + perRow)) {
-      row.appendChild(
-        card(
-          c.icon,
-          menuTag(lang, c.tag),
-          () => h.onPlay(c.mode),
-          !!h.glow?.includes(c.mode),
-          !!h.soon?.includes(c.mode),
-          !!h.dim?.includes(c.mode),
-        ),
-      );
-    }
+    for (const c of CARDS.slice(i, i + perRow)) row.appendChild(playCard(c));
     grid.appendChild(row);
-    if (showKnowHow && !wide && i === 0) grid.appendChild(knowHowButton(lang, () => h.onKnowHow?.()));
   }
-  if (showKnowHow && wide) page.appendChild(knowHowButton(lang, () => h.onKnowHow?.()));
+  markArrivals();
 
   root.appendChild(page);
   root.appendChild(bottomNav(h));

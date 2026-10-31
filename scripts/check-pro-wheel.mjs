@@ -28,6 +28,7 @@
  * 每一段都断言零脚本报错。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 import { buildSync } from 'esbuild';
 import { readFileSync } from 'node:fs';
 import { afterRestart } from './lib/afterRestart.mjs';
@@ -53,16 +54,20 @@ async function open({ w = 390, h = 844, pro = true, fresh = false, genius = true
   const mobile = w < 1000;
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, isMobile: mobile, hasTouch: mobile, reducedMotion: motion });
   const errs = [];
+  // fresh 那一台不铺「全解锁」：那一份里有 slides_played_square，铺了头一局那块教学条就不露了。
+  if (!fresh) await unlockAll(ctx);
   await ctx.addInitScript(
     ({ played, pro, fresh, genius, theme, rand }) => {
       if (sessionStorage.getItem('pw_init')) return;
       sessionStorage.setItem('pw_init', '1');
-      const base = fresh ? { slides_lang: 'zhHans', slides_intro_seen: '1' } : played;
+      // fresh：推12（10-31 Z-J02）起新设备主菜单只有小球；按过《我会玩》就到第 3 步、方块摆出来，而方块那一局照样是带教学条
+      // 的头一局（《我会玩》跳过引导，不跳过教学）。
+      const base = fresh ? { slides_lang: 'zhHans', slides_intro_seen: '1', slides_know_how: '1' } : played;
       for (const [k, v] of Object.entries(base)) localStorage.setItem(k, v);
       if (pro) localStorage.setItem('slides_pro', '1');
       if (theme) localStorage.setItem('slides_theme', theme);
       // 进阶那几副要天才：只在本机缓存里写一份（开小屋要真的兑码，见 ④）。
-      if (genius) localStorage.setItem('slides_genius', JSON.stringify({ active: true, channel: 'code', until: Date.now() + 365 * 864e5 }));
+      if (genius) localStorage.setItem('slides_genius', JSON.stringify({ active: true, channel: 'code', code: 'GATEUNLOCK', until: Date.now() + 365 * 864e5 }));
       window.__vib = [];
       try {
         navigator.vibrate = (p) => (window.__vib.push(p), true);

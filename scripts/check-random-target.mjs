@@ -27,6 +27,7 @@
  * 次停下来的那一个；转到一半按《<》能退、不会被数完的倒数拽回局里。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2] || 'http://localhost:8817/';
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
@@ -134,7 +135,10 @@ async function openIntro(page) {
   await page.waitForTimeout(300);
 }
 
-// ---- 没开通：看得见，但开不了局 ------------------------------------------
+// ---- 第 4 步之前：看得见，但开不了局 ------------------------------------------
+//
+// 10-31 方案推12（站长答复 ④）起这一档的意思换了：原先是「没开通天才」，天才层取消之后是「主菜单还没到第 4 步」——主菜单上
+// 老虎机那张卡第 4 步才出现，个人主页这一页是第二条进老虎机的路，跟着一起等。夹具是第 3 步（tier3、tier4 都没有）。
 //
 // 介绍页：一族一台机器，上下排着、都在转，底下一颗红色 STOP；按下去从上到下一
 // 台一台停稳，键变成绿色的《开始》，再按又转起来。没开通的人没有右下角那颗
@@ -151,6 +155,7 @@ async function openIntro(page) {
 // 张，见 src/ui/slotReels.ts 顶上那段。）
 {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await unlockAll(ctx, { extra: { slides_played_stage: '3', slides_played_stage_shown: '3', slides_played_tier3: '0', slides_played_tier4: '0' } });
   await ctx.addInitScript(seed, false);
   await ctx.addInitScript(installProbe);
   const page = await ctx.newPage();
@@ -174,22 +179,22 @@ async function openIntro(page) {
   }));
   const N = m.machines;
   const PER = N ? m.reels / N : 0;
-  check('没开通：至少两台机器，每台的轮子数一样', N >= 2 && Number.isInteger(PER) && PER >= 1,
+  check('第 4 步之前：至少两台机器，每台的轮子数一样', N >= 2 && Number.isInteger(PER) && PER >= 1,
     `${N} 台 · ${m.reels} 个轮子 · 每台 ${PER}`);
-  check('没开通：进来就都在转', m.spinning && m.set === 0, `停稳 ${m.set} 个`);
-  check('没开通：每台一样宽、左右居中',
+  check('第 4 步之前：进来就都在转', m.spinning && m.set === 0, `停稳 ${m.set} 个`);
+  check('第 4 步之前：每台一样宽、左右居中',
     m.boxes.length === N && m.boxes.every((b) => b.w === m.boxes[0].w && Math.abs(b.x - m.mid) <= 1),
     JSON.stringify(m.boxes));
   // 上下等距：两台只有一个间隔，没什么可比的，这一条要三台起才有意义——说出来，
   // 不假装查过。
   const gaps = m.boxes.slice(1).map((b, i) => b.t - m.boxes[i].b);
   check(
-    gaps.length >= 2 ? '没开通：上下等距' : '没开通：只有一个间隔，等距这一条跳过（不假装查过）',
+    gaps.length >= 2 ? '第 4 步之前：上下等距' : '第 4 步之前：只有一个间隔，等距这一条跳过（不假装查过）',
     gaps.length < 2 || gaps.every((g) => Math.abs(g - gaps[0]) <= 1),
     gaps.join(' / ') || '（没有间隔）',
   );
-  check('没开通：底下一颗红色 STOP', m.btn === 'STOP' && m.red, `${m.btn} · ${m.red ? '红' : '不红'}`);
-  check('没开通：没有右下角那颗《开始 〉》', !m.go);
+  check('第 4 步之前：底下一颗红色 STOP', m.btn === 'STOP' && m.red, `${m.btn} · ${m.red ? '红' : '不红'}`);
+  check('第 4 步之前：没有右下角那颗《开始 〉》', !m.go);
   check('这一屏上没有那几张图（那是下一屏的事）', m.icons === 0, `${m.icons} 张`);
   check('这一屏不留底排导航', m.nav === 'none', m.nav);
 
@@ -235,7 +240,7 @@ async function openIntro(page) {
   check('按《开始》又转起来，键变回红色 STOP', again.set === 0 && again.red && again.spinning, `停稳 ${again.set} 个`);
   // 《退出》回个人主页，不是主菜单。
   await page.click('#slotBack');
-  check('没开通：《退出》回到个人主页', await page.waitForSelector('.profile-page', { timeout: 8000 }).then(() => true).catch(() => false));
+  check('第 4 步之前：《退出》回到个人主页', await page.waitForSelector('.profile-page', { timeout: 8000 }).then(() => true).catch(() => false));
   await ctx.close();
 }
 
@@ -250,6 +255,7 @@ const FAMILIES = [
 ];
 for (const fam of FAMILIES) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await unlockAll(ctx);
   await ctx.addInitScript(seed, true);
   await ctx.addInitScript(installProbe);
   const page = await ctx.newPage();
@@ -272,7 +278,7 @@ for (const fam of FAMILIES) {
 
   // 乙、走一遍老虎机：介绍页右下角的《开始 〉》→ 挑图形 → 转。
   await openIntro(page);
-  check(`${fam.name}：开通了：介绍页右下角有《开始 〉》`, Boolean(await page.$('#slotGo')));
+  check(`${fam.name}：第 4 步起：介绍页右下角有《开始 〉》`, Boolean(await page.$('#slotGo')));
   await page.click('#slotGo');
   await page.waitForSelector('.slot-pick-opt', { timeout: 8000 });
   await page.click(`.slot-pick-opt[data-family="${fam.key}"]`);

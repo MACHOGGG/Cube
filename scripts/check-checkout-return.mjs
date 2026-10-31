@@ -24,6 +24,7 @@
  * 钥，这个网址一打开就有答案，而且一个字的密钥都不会漏出去。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2];
 if (!BASE) {
@@ -99,6 +100,7 @@ const PAID = {
 /** 一台干净的浏览器，/api/subscription 的答案由 answer() 说了算。 */
 async function open(answer) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await unlockAll(ctx);
   await ctx.addInitScript(() => {
     for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle']) {
       localStorage.setItem(k, '1');

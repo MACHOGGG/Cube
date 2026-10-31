@@ -17,6 +17,7 @@
  *     好过「敬请期待」），一改就得知道。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2] || 'http://localhost:8817/';
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
@@ -101,6 +102,7 @@ async function timeFlip(page, step) {
 // ---- 天才：拉得动，而且拉了真的变 ----------------------------------------
 {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await unlockAll(ctx);
   await ctx.addInitScript(seed, true);
   const page = await ctx.newPage();
   await openPicker(page);
@@ -165,6 +167,7 @@ async function timeFlip(page, step) {
 // ---- 没开通：进得来、看得见、拉不动 --------------------------------------
 {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await unlockAll(ctx);
   await ctx.addInitScript(seed, false);
   const page = await ctx.newPage();
   await openPicker(page);

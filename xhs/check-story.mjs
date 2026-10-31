@@ -65,6 +65,10 @@ async function open(old = false, seen = false) {
       localStorage.setItem('slides.xhs.story.circle', '1');
       // 倒数页上那颗色盲开关（10-18 补充 M-2）先记成「见过了」：它只在第一次倒数页上出现，不是这道门要量的。
       localStorage.setItem('slides.xhs.cvdOffer', '1');
+      // 主菜单第 3 步（10-31 方案推12：小球 → 方块 → 其余全部，一步一步出现）、画过这一步；局中灯泡记满。这一节按下标点
+      // 的是六张玩法卡，得都在（同 scripts/lib/unlockAll.mjs 的 XHS_UNLOCK_ALL）。第 1、2 步在 5.5 那一节量。
+      for (const [k, v] of Object.entries({ 'slides.xhs.stage': '3', 'slides.xhs.stageShown': '3', 'slides.xhs.stageMigrated': '1' })) localStorage.setItem(k, v);
+      for (const b of ['square', 'circle', 'timed', 'bomb', 'slot', 'flip', 'puzzle', 'layout', 'daily']) localStorage.setItem('slides.xhs.bulb.' + b, '2');
     } catch {
       /* 存不进去也不影响这一台：它只是想跳过头一回那一屏 */
     }
@@ -266,6 +270,35 @@ for (const [i, name, pick] of [[2, '炸弹', true], [3, '老虎机', true], [4, 
     return { hidden: !b || b.hidden, text: (b?.textContent || '').trim(), hasCoach: !!document.querySelector('.app--game.has-coach') };
   });
   say(bar.hidden && bar.text === '' && !bar.hasCoach, '数完之后没有教学条、没有 has-coach（教学只活在一局里）', JSON.stringify(bar));
+  // 主菜单一步一步出现（10-31 方案推12 Z-J02 D-8）：头一局小球走到结算 → 主菜单两张（方块在前、亮着）＋《我会玩》；
+  // 方块那局走到结算 → 七张（每日挑战＋六张），「进阶入口」牌子在、没有压暗。
+  const toMenu = async () => {
+    await p.$eval('#stopBtn', (e) => e.click());
+    await p.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
+    await p.$eval('#pauseFinishBtn', (e) => e.click());
+    await p.waitForSelector('#endOverlay.show', { timeout: 15000 });
+    await p.$eval('#endBackBtn', (e) => e.click());
+    await p.waitForSelector('.home-page', { timeout: 15000 });
+    await p.waitForTimeout(500);
+  };
+  const menuNow = () => p.evaluate(() => ({
+    cards: [...document.querySelectorAll('#xhsGrid .home-icon-btn')].map((e) => e.getAttribute('aria-label') ?? ''),
+    glow: [...document.querySelectorAll('#xhsGrid .home-icon-btn--glow')].map((e) => e.getAttribute('aria-label') ?? ''),
+    knowHow: !!document.querySelector('.know-how-btn'),
+    soon: document.querySelectorAll('#xhsGrid .xhs-soon-tag').length,
+    dim: document.querySelectorAll('.home-icon-btn--dim').length,
+  }));
+  await toMenu();
+  const m2 = await menuNow();
+  say(m2.cards.length === 2 && /方块/.test(m2.cards[0]) && m2.glow.length === 1 && /方块/.test(m2.glow[0]) && m2.knowHow,
+    '头一局小球走到结算 → 主菜单两张（方块在前、亮着）＋《我会玩》', JSON.stringify(m2));
+  await p.$$eval('#xhsGrid .home-icon-btn', (e) => e[0].click());
+  await p.waitForFunction(() => !document.querySelector('#startOverlay.show') && document.querySelectorAll('.tile, .ball, .tri').length > 0, null, { timeout: 30000 });
+  await p.waitForTimeout(400);
+  await toMenu();
+  const m3 = await menuNow();
+  say(m3.cards.length === 7 && m3.soon === 4 && m3.dim === 0 && !m3.knowHow,
+    '方块走到结算 → 七张，「进阶入口」牌子在、没有压暗、《我会玩》撤了', JSON.stringify(m3));
   say(errs.length === 0, '这一路零报错', errs.slice(0, 2).join(' | '));
   await ctx.close();
 }

@@ -29,6 +29,7 @@
  * 二十行都开得了——锁本身另有门守着，这儿量的是发牌。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 import * as SC from '../api/_seedcode.js';
 
 const BASE = process.argv[2] || 'http://localhost:8973/';
@@ -63,9 +64,10 @@ async function freshContext(opts = {}) {
     localStorage.setItem('slides_cvd_offer', '1');
     localStorage.setItem(
       'slides_genius',
-      JSON.stringify({ active: true, channel: 'code', until: Date.now() + 365 * 24 * 60 * 60 * 1000 }),
+      JSON.stringify({ active: true, channel: 'code', code: 'GATEUNLOCK', until: Date.now() + 365 * 24 * 60 * 60 * 1000 }),
     );
   });
+  await unlockAll(ctx);
   return ctx;
 }
 

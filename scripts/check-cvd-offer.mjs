@@ -116,7 +116,7 @@ async function home(p) {
   await p.waitForSelector('.home-icon-btn', { timeout: 20000 });
   await p.waitForTimeout(300);
 }
-/** 主菜单上点一张玩法卡（第一张是方块；跳过最上面那张《每日挑战》）。 */
+/** 主菜单上点一张玩法卡（跳过最上面那张《每日挑战》；第 5 步时第一张是方块，新设备第 1 步只有小球那一张）。 */
 async function openCard(p, idx = 0) {
   await p.$$eval('.home-icon-btn:not(.home-icon-btn--daily)', (els, i) => els[i].click(), idx);
   await p.waitForSelector('#startOverlay.show #startCount', { timeout: 15000 });
@@ -149,7 +149,7 @@ const GENIUS = JSON.stringify({ active: true, channel: 'code', until: Date.now()
 
 // ── 1. 摆得下 ──────────────────────────────────────────────────────────────────────
 //
-// 清空存储进网页、打开方块（首局教学局）。竖屏四种（电脑那一档也是竖着排的）量「上半屏一个像素都没挪」：
+// 清空存储进网页、打开第一张卡——推12（10-31 Z-J02）起新设备的主菜单只有小球一张，首局教学局就是它。竖屏四种（电脑那一档也是竖着排的）量「上半屏一个像素都没挪」：
 // 同一台设备先记一次「已经见过」量一遍，再删掉那把键量一遍——开关是搭页面那一刻读的。
 const SIZES = [[390, 844], [360, 640], [320, 568], [1440, 900], [640, 360], [568, 320]];
 const LANGS = ['zhHans', 'zhHant', 'en', 'fr'];
@@ -167,8 +167,8 @@ if (want(1)) for (const [w, h] of SIZES) {
     const m = await p.evaluate(LOOK);
     await ctx.close();
     if (lang === 'zhHans') {
-      check(`${tag}：（尺子）没见过的那一页有开关、见过的那一页没有，开的是方块`,
-        !base.offer && !!m.offer && m.shape === 'square', `开的是 ${m.shape}`);
+      check(`${tag}：（尺子）没见过的那一页有开关、见过的那一页没有，开的是小球（新设备第 1 步只有它）`,
+        !base.offer && !!m.offer && m.shape === 'circle', `开的是 ${m.shape}`);
     }
     if (!m.offer) { check(`${tag}：倒数页上有那颗开关`, false); continue; }
     check(`${tag}：开关是关着的（aria-checked="false"）`, m.checked === 'false', String(m.checked));

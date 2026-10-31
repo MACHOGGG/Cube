@@ -14,6 +14,7 @@
  * 存储空间）→ 带着同一个账号回来 → 记录和累计得分都得回来。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 import { readFileSync } from 'node:fs';
 import { fillRun } from './lib/fakeRun.mjs';
 
@@ -23,6 +24,7 @@ let fail = 0;
 const check = (n, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${n}${extra ? '  ' + extra : ''}`); if (!ok) fail++; };
 
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+await unlockAll(ctx);
 await ctx.addInitScript(() => {
   for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle'])
     localStorage.setItem(k, '1');
@@ -198,6 +200,46 @@ const rolled = await page.$eval('#totalValue', (e) => ({
 }));
 check('数字变了，这一次滚了一遍（2599，四个滚筒）',
   rolled.odometer && rolled.score === '2599' && rolled.boxes === 4, JSON.stringify(rolled));
+
+// ---- 云端接回的旧局也算老玩家的证据（10-31 方案推12 Z-J02 A「老玩家」第 3 条）------------------------
+//
+// 云上那份接回来时，旧规则的局不落回本机（main.ts 的 runKeyFor 对它回 null，上面「老规则那局没混进来」量的就是这个），
+// 可它恰恰是老玩家打过哪些玩法最好的证据：换手机登录、等云端接回之后，主菜单该和他昨天看到的一样多。服务器不收旧规则
+// 的局（push 回 stored:false），所以这一节把 mine 那一趟的回包拦下来，塞一局「本推上线以前、旧规则的老虎机局」。
+{
+  const SINCE = Date.UTC(2026, 9, 31, 16, 0, 0);
+  const old = { at: SINCE - 3 * 864e5, shapeId: 'square', modeKey: 'base', slot: true, rules: 'ero0', totalScore: 321, score: 321 };
+  const c2 = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await c2.addInitScript(() => {
+    if (sessionStorage.getItem('rs_primed') === '1') return;
+    sessionStorage.setItem('rs_primed', '1');
+    localStorage.clear();
+    localStorage.setItem('slides_lang', 'zhHans');
+    localStorage.setItem('slides_genius', JSON.stringify({ active: true, channel: 'code', email: 'old@example.com', token: 'TOK-OLD', code: 'OLDONE' }));
+  });
+  await c2.route('**/api/scores', async (route) => {
+    let body = null;
+    try {
+      body = route.request().postDataJSON();
+    } catch {
+      /* 不是 JSON */
+    }
+    if (body?.action !== 'mine') return route.continue();
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, nickname: null, archive: [{ runId: `${old.at}-square-base`, mode: 'square', score: 321, at: old.at, data: old }] }) });
+  });
+  const p2 = await c2.newPage();
+  await p2.goto(BASE, { waitUntil: 'load' });
+  await p2.waitForSelector('.home-page', { timeout: 20000 });
+  const risen = await p2.waitForFunction(() => localStorage.getItem('slides_played_stage') === '5', null, { timeout: 15000 }).then(() => true).catch(() => false);
+  const m = await p2.evaluate(() => ({
+    stage: localStorage.getItem('slides_played_stage'),
+    runs: Object.keys(localStorage).filter((k) => k.endsWith('::runs')).reduce((n, k) => n + JSON.parse(localStorage.getItem(k) || '[]').length, 0),
+    cards: document.querySelectorAll('#homeGrid [data-card]').length,
+  }));
+  check('云端接回一局上线以前、旧规则的老虎机局：本机不多一局（旧规则照旧不落回来）', m.runs === 0, JSON.stringify(m));
+  check('……但主菜单升到第 5 步（老玩家按有过的最高一步）、当场重画成 13 张', risen && m.stage === '5' && m.cards === 13, JSON.stringify(m));
+  await c2.close();
+}
 
 await browser.close();
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');

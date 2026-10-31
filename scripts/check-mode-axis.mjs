@@ -17,7 +17,8 @@
  *     下聚焦、再点一下开」，全站最常用的那一下就变成两下。反过来，滑动的尾巴被
  *     当成点击就会把人扔进一个他没想玩的玩法。
  *   · **滑不出两端。** 不循环是玩家定的，所以最后一张之后不能再滑出新东西。
- *   · **首玩期轴上只有两张。** 也是玩家定的；按了《我会玩》当场长成 CARDS 张。
+ *   · **第几步摆几张**（10-31 方案推12：主菜单一步一步出现）。第 5 步 CARDS 张（这道门默认铺 unlockAll）；第 3 步 6 张
+ *     4 排，第 6 节量那一条轴。第 1、2 步根本不上轴。
  *   · **法务那五条链接和底排导航都不被压住。** 轴占满整屏，卡片从底排底下滑过
  *     ——所以量的不是「轴够不着底排」，是底排那两颗照样点得着、照样画在上面。
  *   · **轴从屏幕最顶铺到最底。** 玩家第四轮点名的（「鱼眼转盘的范围一直从头到尾
@@ -26,6 +27,7 @@
  *     速度」「现在的 0.75 倍作为正常滑动的灵敏度」）。
  */
 import { chromium } from 'playwright';
+import { UNLOCK_ALL } from './lib/unlockAll.mjs';
 const BASE = process.argv[2] || 'http://localhost:8958/';
 /**
  * 轴上一共几站。
@@ -65,8 +67,11 @@ const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, is
 const errs = [];
 ctx.on('page', (p) => p.on('pageerror', (e) => errs.push(e.message)));
 
-/** 一台打过一局的手机（锁撤了，CARDS 张卡都在轴上）。 */
-async function menuPage(extra = {}) {
+/**
+ * 一台什么都解锁了的手机（主菜单第 5 步，CARDS 张卡都在轴上；scripts/lib/unlockAll.mjs 那一份）。`base` 换成别的一份
+ * 就是别的一步（第 6 节给第 3 步）。
+ */
+async function menuPage(extra = {}, base = UNLOCK_ALL) {
   const page = await ctx.newPage();
   await page.addInitScript((ex) => {
     if (sessionStorage.getItem('gate_primed') === '1') return;
@@ -75,10 +80,7 @@ async function menuPage(extra = {}) {
     localStorage.setItem('slides_lang', 'zhHans');
     localStorage.setItem('slides_intro_seen', '1');
     for (const [k, v] of Object.entries(ex)) localStorage.setItem(k, v);
-    // 「打过一局」的手机也就打完过一局：10-08 方案 3-D-1 起《每日挑战》只给打完过一局的人摆。
-    // 什么都不给（第 6 节，首玩期）就是一局都还没打完——那一节量的正是轴上没有它。
-    if (ex.slides_played_square || ex.slides_played_circle) localStorage.setItem('slides_played_finished', '1');
-  }, extra);
+  }, { ...base, ...extra });
   await page.goto(BASE, { waitUntil: 'load' });
   await page.waitForSelector('.mode-axis .home-icon-btn', { timeout: 20000 });
   await page.waitForTimeout(500);
@@ -1848,147 +1850,52 @@ let page = await menuPage({ slides_played_square: '1' });
 }
 await page.close();
 
-// ── 6. 首玩期：玩法全在轴上，除了两张基础的都锁着 ────────────────
+// ── 6. 第 3 步：4 排（10-31 方案推12 Z-J02）──────────────────────────────────────
 //
-// 10-08 方案 3-D-1 起首玩期（一局都还没打完）**没有《每日挑战》**——玩家拍板「完成任意一局（含教
-// 程局）后出现」，打完头一局它才冒出来（check-daily ⑤ 量那一条）。所以这一节的张数、站数是 MODES、
-// MODES / 2，没有头上那一站。
-//
-// 口径 2026-09 第五轮换过一次。上一版是「轴上只摆那两张」，玩家改成：「转盘也可
-// 以看到所有内容只是有锁而已，在基础的方块、小球玩法下面写着『我会玩』，下面是
-// 其他的玩法。玩家如果点击了『我会玩』就解锁了」。
-//
-// 所以这一节量四件事：都在、锁对了、锁着的按不动、《我会玩》排在两张基础卡后面。
+// 原先这一节量的是首玩期那一套：十二张全摆、除两张基础卡都挂锁，中间夹一条《我会玩》分界线，点锁着的卡两张基础卡抖一下。
+// 站长 10-30 改成没到的卡根本不摆（engine/menuStage.ts），那一套连同分界线一起删了。现在量第 3 步那一条轴：6 张 4 排
+// （每日挑战｜方块·小球｜多人·计时｜炸弹落单居中），橡皮筋的端点停在第 3 排（最后一排），慢慢拖到第一排 / 最后一排松手停得准，
+// 没有分界线。轴对卡少不用特别处理（rows = max(1, rowCards.length)、橡皮筋按排号夹）——这一节就是那句话的门。
 {
-  const p2 = await menuPage();
-  const s = await shot(p2);
-  const FP_CARDS = MODES;
-  const FP_ROWS = MODES / 2;
-  check(`首玩期 ${FP_CARDS} 张全在轴上（没有每日挑战）`, s.cards.length === FP_CARDS, `${s.cards.length} 张`);
-  const shape = await p2.evaluate(() => {
-    const host = document.querySelector('.mode-axis');
-    const cards = [...host.children].filter((e) => e.classList.contains('home-icon-btn'));
-    const div = host.querySelector('.axis-divider');
-    const cy = (e) => { const b = e.getBoundingClientRect(); return b.top + b.height / 2; };
-    return {
-      list: cards.map((e) => ({
-        name: (e.getAttribute('aria-label') || '').split(' ·')[0].trim(),
-        locked: e.classList.contains('home-icon-btn--locked'),
-        cy: cy(e),
-      })),
-      // 分界线在第几张和第几张之间（按这一帧画出来的位置算，不按 DOM 顺序）
-      divAbove: div ? cards.filter((c) => cy(c) < cy(div)).length : -1,
-      divCy: div ? cy(div) : null,
-      hasDiv: !!div,
-    };
+  const STAGE3 = { slides_played_migrated_v1: '1', slides_played_stage: '3', slides_played_stage_shown: '3', slides_played_circle: '1', slides_played_square: '1', slides_played_finished: '1', slides_cvd_offer: '1' };
+  const p6 = await menuPage({}, STAGE3);
+  const s = await shot(p6);
+  check('第 3 步：轴上 6 张、4 排', s.cards.length === 6 && s.rows.length === 4, `${s.cards.length} 张 · ${s.rows.length} 排`);
+  check('第 3 步：最后一排是落单的炸弹', s.rows[3]?.names.join() === '基础炸弹', s.rows.map((r) => r.names.join('/')).join(' | '));
+  const solo = await p6.evaluate(() => {
+    const b = document.querySelector('.mode-axis > [data-card="bomb"]');
+    const r = b.getBoundingClientRect();
+    return { cx: r.left + r.width / 2, vw: document.documentElement.clientWidth, solo: b.classList.contains('axis-col--solo') };
   });
-  const order = shape.list;
-  // 第 19 推那一版首玩期最上面还有一站《每日挑战》；10-08 方案 3-D-1 起首玩期没有它，所以又是
-  // 「前两张」：基础方块、基础小球，都没锁。
-  check('前两张是基础方块和基础小球，都没锁（没有每日挑战）',
-    order.slice(0, 2).every((o) => !o.locked) && /方块/.test(order[0].name) && /圆球|小球/.test(order[1].name) &&
-      !order.some((o) => /每日挑战/.test(o.name)),
-    order.slice(0, 2).map((o) => o.name).join(' '));
-  /**
-   * 《我会玩》是**两站之间那条分界线**，不是轴上的一站。
-   *
-   * 玩家 2026-09 第九轮：「《我会玩》上方有巨大的空格，按理说就是一个小小的文字
-   * （文字两边是分割线分出上面基础方块、小球玩法和其他锁住的）和按钮不占额外的
-   * 位置」。上一版把它塞成轴上的一项，站距是均匀的 150–210px，而它只有 44px 高
-   * ——上下各空出一大截。
-   *
-   * 所以这儿量的不再是「它排第几项」（那是旧设计的尺子），而是两件现在才成立的
-   * 事：**轴还是 CARDS 张 / ROWS 站**（它没占位），**画出来正好落在能玩的和锁着的之间**。
-   * 前者是玩家那句话的直接翻译，后者保证它还在分该分的那条缝。
-   *
-   * 两列之后「没占掉一站」要两条一起量（E18）：张数对、**排数也对**。只量张数的话，
-   * 把它当成一张卡塞回 entries 里，12 张会变成 13 张——那条红得到；可要是有人让它顶掉
-   * 半排（比如占住某一排的右半格），张数一个不少，只有排数会变。
-   */
-  check(`轴上还是 ${FP_CARDS} 张（《我会玩》没占掉一站）`, order.length === FP_CARDS, `${order.length} 张`);
-  check(`轴上还是 ${FP_ROWS} 站`, (await shot(p2)).rows.length === FP_ROWS, `${(await shot(p2)).rows.length} 站`);
-  check('有那条分界线', shape.hasDiv);
-  /**
-   * 两列之后这一条顺带守住了另一件事：**分界线落在排与排之间，不切开一排**。
-   *
-   * 线上头正好 2 张 ＝ 第 0 排那两张，也正是上面刚验过「没锁」的那两张。要是哪天能玩的
-   * 卡变成三张（分界线于是落在某一排中间），这儿会读出 3 或 4——两个数都不是 2，当场红。
-   * modeAxis 的 paintDivider 把线摆在 `rowOf(after)` 和下一排之间，靠的就是「after 是它
-   * 那一排的最后一张」这个前提，而这一条就是那个前提的门。
-   */
-  check(
-    '分界线落在能玩的那两张（第 0 排两张基础卡）和锁着的那些之间（没切开一排）',
-    shape.divAbove === 2,
-    `线上头有 ${shape.divAbove} 张（该是 方块 圆球 两张）`,
-  );
-  check(`其余 ${FP_CARDS - 2} 张都锁着`, order.filter((o) => o.locked).length === FP_CARDS - 2,
-    `锁着 ${order.filter((o) => o.locked).length} 张`);
-  /**
-   * 锁着的那张**按不动**。
-   *
-   * 这一条是这一轮真出过的事故：拦截那段（armFirstPlayLock）从前是靠
-   * `.home-icon-btn--glow` 认「哪几张能玩」——头一回打开的人一圈光都没有，于是
-   * 它一次都没装上，新玩家点哪张都能直接开局。所以这儿不光量「还在菜单上」，
-   * 还量「两张基础卡抖了一下」，两条一起才说明拦截真的在。
-   */
-  const blocked = await p2.evaluate(async () => {
-    const host = document.querySelector('.mode-axis');
-    const locked = [...host.children].find((e) => e.classList.contains('home-icon-btn--locked'));
-    locked.click();
-    await new Promise((r) => setTimeout(r, 400));
-    return {
-      stay: !!document.querySelector('.mode-axis'),
-      nudge: document.querySelectorAll('.home-icon-btn--nudge').length,
-    };
+  check('落单的炸弹摆在正中', solo.solo && Math.abs(solo.cx - solo.vw / 2) <= 2, JSON.stringify(solo));
+  check('没有分界线（.axis-divider）', !(await p6.$('.axis-divider')));
+  const box = await p6.evaluate(() => {
+    const r = document.querySelector('.mode-axis').getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
   });
-  check('点锁着的那张：开不了局', blocked.stay);
-  // 抖的是「能玩的那几张」。第 19 推起首玩期也亮着每日挑战，那时是三张；10-08 方案 3-D-1 起
-  // 《每日挑战》要打完一局才摆出来，首玩期没有它，只剩两张基础卡。
-  check('点锁着的那张：能玩的两张基础卡抖一下（拦截真的装上了）', blocked.nudge === 2, `${blocked.nudge} 张`);
-  check('首玩期那颗《我会玩》还在', await p2.evaluate(() => !!document.querySelector('.know-how-btn')));
-  /**
-   * 《我会玩》现在是**轴上的一项**，不是浮在底排上方的那颗了（第五轮改的：它排
-   * 在两张基础卡和其余玩法之间）。所以量的东西也跟着换：
-   *   · 它跟着轴走——绝对定位在轴里，横向居中；
-   *   · **热区只有文字那么宽**。整幅宽的话，那一行左右两截看上去空空如也，手指
-   *     落一下就把整套引导撤了（玩家点名不要的「意料之外的疏漏操作」）。同一高
-   *     度的最左最右各打一下，打到的不能是它。
-   */
-  const skip = await p2.evaluate(() => {
-    const e = document.querySelector('.know-how-btn');
-    const host = document.querySelector('.mode-axis');
-    const r = e.getBoundingClientRect();
-    const at = (x) => {
-      const t = document.elementFromPoint(x, r.top + r.height / 2);
-      return !!t && (t === e || e.contains(t));
-    };
-    const box = e.closest('.axis-divider') || e;
-    return {
-      inAxis: box.parentElement === host,
-      pos: getComputedStyle(box).position,
-      w: r.width, vw: window.innerWidth,
-      cx: r.left + r.width / 2,
-      left: at(10), right: at(window.innerWidth - 10),
-    };
-  });
-  check('《我会玩》住在轴上（跟着卡片一起滑）', skip.inAxis && skip.pos === 'absolute', `父级=${skip.inAxis ? '轴' : '别处'} / ${skip.pos}`);
-  check('《我会玩》横向居中', Math.abs(skip.cx - skip.vw / 2) < 2, `中心 ${skip.cx.toFixed(0)} / 屏心 ${skip.vw / 2}`);
-  check('《我会玩》的热区没有横贯整屏', !skip.left && !skip.right && skip.w < skip.vw * 0.5, `宽 ${skip.w.toFixed(0)} / 屏宽 ${skip.vw}`);
-  // 按下《我会玩》→ 锁全撤、那一项自己也没了
-  await p2.evaluate(() => document.querySelector('.know-how-btn').click());
-  await p2.waitForTimeout(800);
-  const s2 = await shot(p2);
-  // 按《我会玩》不等于打完过一局：《每日挑战》照旧不摆（10-08 方案 3-D-1），还是 FP_CARDS 项。
-  check(`按了《我会玩》轴上还是 ${FP_CARDS} 项（每日挑战要打完一局才摆）`, s2.cards.length === FP_CARDS, `${s2.cards.length} 张`);
-  const after = await p2.evaluate(() => ({
-    locked: document.querySelectorAll('.mode-axis > .home-icon-btn--locked').length,
-    skip: !!document.querySelector('.axis-know-how'),
-  }));
-  // 剩下那 7 张锁是 Slides 天才那一套（老虎机 · 无限反转 · 步步为营 · 更多布局那四副——菱形方块、
-  // 六边形小球 10-09 也上了锁，补充方案第一部分第 10 条），和首玩期这道锁是两回事，不该被一起撤掉。
-  check('按了《我会玩》之后只剩天才那 7 把锁', after.locked === 7, `${after.locked} 把`);
-  check('《我会玩》自己也从轴上撤了', after.skip === false);
-  await p2.close();
+  // 往下猛拖：橡皮筋的端点是第 3 排（不是按卡数夹出来的第 5 张），松手停在最后一排。
+  await p6.mouse.move(box.x, box.y);
+  await p6.mouse.down();
+  for (let k = 1; k <= 20; k++) await p6.mouse.move(box.x, box.y - k * 160);
+  await p6.mouse.up();
+  await p6.waitForTimeout(900);
+  let r = (await shot(p6)).rows.reduce((a, b) => (b.scale > a.scale ? b : a));
+  check('往下滑到头：停在第 3 排（炸弹那一排），不多拉出空白', r.i === 3, `停在第 ${r.i} 排 ${r.names.join('/')}`);
+  // 慢慢拖回第一排、再慢慢拖到最后一排：一步一小截，松手停得准。
+  for (const [dir, want, name] of [[1, 0, '第一排'], [-1, 3, '最后一排']]) {
+    await p6.mouse.move(box.x, box.y);
+    await p6.mouse.down();
+    for (let k = 1; k <= 60; k++) {
+      await p6.mouse.move(box.x, box.y + dir * k * 14);
+      await p6.waitForTimeout(16);
+    }
+    await p6.waitForTimeout(150);
+    await p6.mouse.up();
+    await p6.waitForTimeout(1000);
+    r = (await shot(p6)).rows.reduce((a, b) => (b.scale > a.scale ? b : a));
+    check(`慢慢拖到${name}松手：停得准`, r.i === want, `停在第 ${r.i} 排 ${r.names.join('/')}`);
+  }
+  await p6.close();
 }
 
 // ── 7. 轴从底排底下过去，但底排照样点得着 ──────────────────────────
@@ -2109,6 +2016,9 @@ await page.close();
     localStorage.setItem('slides_intro_seen', '1');
     localStorage.setItem('slides_played_square', '1');
     localStorage.setItem('slides_played_finished', '1');
+    // 推12（10-31 Z-J02）起主菜单一步一步出现：只记打过方块是第 2 步（只有两张小卡、没有轴）。这一节量轴，铺到第 5 步。
+    for (const [k, v] of [['slides_played_circle', '1'], ['slides_played_tier3', '1'], ['slides_played_tier4', '1'],
+      ['slides_played_stage', '5'], ['slides_played_stage_shown', '5'], ['slides_played_migrated_v1', '1']]) localStorage.setItem(k, v);
   });
   await p4.goto(BASE, { waitUntil: 'load' });
   await p4.waitForSelector('.mode-axis .home-icon-btn', { timeout: 20000 });
@@ -2190,6 +2100,9 @@ for (const [vw, vh, label] of [[390, 844, '390×844'], [360, 640, '360×640'], [
     localStorage.setItem('slides_played_square', '1');
     localStorage.setItem('slides_played_circle', '1');
     localStorage.setItem('slides_played_finished', '1');
+    // 推12（10-31 Z-J02）起主菜单一步一步出现：只记打过方块、小球是第 3 步（6 张卡）。这一节量 13 张卡排成几排，铺到第 5 步。
+    for (const [k, v] of [['slides_played_tier3', '1'], ['slides_played_tier4', '1'],
+      ['slides_played_stage', '5'], ['slides_played_stage_shown', '5'], ['slides_played_migrated_v1', '1']]) localStorage.setItem(k, v);
     /*
      * 这一节量的是「聚焦那一排**两张**」（会不会过中线、会不会压点点、热区归谁）。第 19 推起打
      * 开菜单默认停在《每日挑战》那一站——它独占一排，两列那几笔账在它身上根本不存在，照默认
@@ -2618,6 +2531,9 @@ for (const [vw, vh, label] of [[390, 844, '390×844'], [360, 640, '360×640'], [
     localStorage.setItem('slides_played_square', '1');
     localStorage.setItem('slides_played_circle', '1');
     localStorage.setItem('slides_played_finished', '1');
+    // 推12（10-31 Z-J02）起主菜单一步一步出现：只记打过方块、小球是第 3 步（6 张卡）。这一节量每日挑战那一站和 7 颗点点，铺到第 5 步。
+    for (const [k, v] of [['slides_played_tier3', '1'], ['slides_played_tier4', '1'],
+      ['slides_played_stage', '5'], ['slides_played_stage_shown', '5'], ['slides_played_migrated_v1', '1']]) localStorage.setItem(k, v);
   });
   await pg.goto(BASE, { waitUntil: 'load' });
   await pg.waitForSelector('.mode-axis .home-icon-btn--daily', { timeout: 15000 });
@@ -2719,6 +2635,9 @@ for (const [vw, vh, label] of [[390, 844, '390×844'], [360, 640, '360×640'], [
       localStorage.setItem('slides_intro_seen', '1');
       localStorage.setItem('slides_played_square', '1');
       localStorage.setItem('slides_played_finished', '1');
+      // 推12（10-31 Z-J02）：只记打过方块是第 2 步（没有轴）。这一节量轴挂的监听，铺到第 5 步。
+      for (const [k, v] of [['slides_played_circle', '1'], ['slides_played_tier3', '1'], ['slides_played_tier4', '1'],
+        ['slides_played_stage', '5'], ['slides_played_stage_shown', '5'], ['slides_played_migrated_v1', '1']]) localStorage.setItem(k, v);
     }
     const resize = new Set();
     const addE = EventTarget.prototype.addEventListener;

@@ -17,6 +17,7 @@
  *   · 没开通的人看《解锁更多配色》：颜色不压暗。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2] || 'http://localhost:8815/';
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
@@ -27,6 +28,7 @@ const check = (n, ok, extra = '') => {
 };
 
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+await unlockAll(ctx);
 await ctx.addInitScript(() => {
   for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
     localStorage.setItem(k, '1');
@@ -61,8 +63,11 @@ check('《更多得分目标》《更多布局》点得开了', rows.targets ===
   `${rows.targets} / ${rows.layouts}`);
 check('《世界排名和好友排名》改叫《世界排名》，不再敬请期待',
   rows.rank === '世界排名' && !rows.oldRank && !rows.soon.includes('世界排名'), `${rows.rank}`);
-check('没开通：做好了的五行行首都挂着锁',
-  rows.randomLock && rows.targetsLock && rows.layoutsLock && rows.rankLock && rows.modesLock);
+// 10-31 方案推12（天才层取消）：没登录时挂锁的只剩要登录的那几行——更多布局、世界排名（还有深色、配色、速度，不在这儿量）；
+// 老虎机模式、更多得分目标、更多玩法不用登录，不挂锁。
+check('没登录：要登录的两行（更多布局、世界排名）行首挂着锁', rows.layoutsLock && rows.rankLock);
+check('没登录：老虎机模式、更多得分目标、更多玩法不挂锁（不用登录）', !rows.randomLock && !rows.targetsLock && !rows.modesLock,
+  JSON.stringify({ random: rows.randomLock, targets: rows.targetsLock, modes: rows.modesLock }));
 /**
  * 《更多玩法》右边**只有那个「〉」**，不再列里面那几个玩法的名字。
  *
@@ -240,6 +245,7 @@ await page.click('#palClose');
 // ---- 4. 教学挑选页：两个图形、五条规则、一颗《返回》，一屏装下 --------------
 async function pickerAt(width, height) {
   const c = await browser.newContext({ viewport: { width, height } });
+  await unlockAll(c);
   await c.addInitScript(() => {
     for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
       localStorage.setItem(k, '1');
@@ -306,6 +312,7 @@ for (const [w, h, label] of [[390, 844, '手机'], [375, 667, '小手机']]) {
 // 己的两条退路。
 {
   const c = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await unlockAll(c);
   await c.addInitScript(() => { localStorage.setItem('slides_lang', 'zhHans'); localStorage.setItem('slides_tutorial_seen', '1'); localStorage.setItem('slides_tutorial_seen_circle', '1'); localStorage.setItem('slides_tutorial_seen_triangle', '1'); });
   const p = await c.newPage();
   await p.goto(BASE, { waitUntil: 'load' });
@@ -330,6 +337,7 @@ for (const [w, h, label] of [[390, 844, '手机'], [375, 667, '小手机']]) {
 // ---- 4b. 开通了的人：主菜单那张卡进挑图形页，真开得了局，钟从 1:40 往下数 ------
 {
   const c = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await unlockAll(c);
   await c.addInitScript(() => {
     localStorage.setItem('slides_lang', 'zhHans');
     for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle']) localStorage.setItem(k, '1');

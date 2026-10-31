@@ -23,6 +23,7 @@
  * ─────────────────────────────────────────────────────────────────────────
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2] || 'http://localhost:8995/';
 let fail = 0;
@@ -46,8 +47,9 @@ async function openBoard(label) {
     localStorage.setItem('slides_first_run', '1');
     for (const k of ['slides_played_square', 'slides_played_circle', 'slides_tutorial_seen',
                      'slides_tutorial_seen_circle', 'slides_knowhow']) localStorage.setItem(k, '1');
-    localStorage.setItem('slides_genius', JSON.stringify({ active: true, channel: 'code', until: Date.now() + 9e10 }));
+    localStorage.setItem('slides_genius', JSON.stringify({ active: true, channel: 'code', code: 'GATEUNLOCK', until: Date.now() + 9e10 }));
   });
+  await unlockAll(page);
   await page.goto(BASE, { waitUntil: 'load' });
   await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
   const found = await page.evaluate((n) => {

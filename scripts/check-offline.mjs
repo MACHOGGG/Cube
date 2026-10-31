@@ -23,6 +23,7 @@
  * 这一台服务器自己用（兑一次 TESTMONTH：开屋要天才身份，不然按《开小屋》弹的是订阅窗，走不到网络那一步）。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 import { build } from 'esbuild';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -48,6 +49,7 @@ const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, is
 const page = await ctx.newPage();
 const errs = [];
 page.on('pageerror', (e) => errs.push(e.message));
+await unlockAll(page);
 await page.addInitScript(() => {
   for (const [k, v] of Object.entries({
     slides_lang: 'zhHans', slides_intro_seen: '1', slides_played_square: '1',

@@ -36,6 +36,7 @@
  *     着它不要紧，但别把它当成「z-index 有人看着」的证据。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2] || 'http://localhost:8815/';
 
@@ -75,11 +76,12 @@ for (const vp of VPS) {
   for (const name of BOARDS) {
     const lead = `${vp.name} ${name}`;
     const ctx = await browser.newContext({ viewport: { width: vp.w, height: vp.h }, hasTouch: true });
+    await unlockAll(ctx);
     await ctx.addInitScript(() => {
       localStorage.setItem('slides_lang', 'zhHans');
       localStorage.setItem(
         'slides_genius',
-        JSON.stringify({ active: true, channel: 'code', until: Date.now() + 365 * 24 * 3600 * 1000 }),
+        JSON.stringify({ active: true, channel: 'code', code: 'GATEUNLOCK', until: Date.now() + 365 * 24 * 3600 * 1000 }),
       );
       // 每个玩法都算开过：教学条和首玩封锁都不掺进来。
       for (const k of ['square', 'circle', 'triangle', 'timed', 'bomb', 'flip', 'slot', 'layout', 'puzzle'])

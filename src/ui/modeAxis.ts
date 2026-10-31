@@ -36,8 +36,8 @@
  *     那一段），每滑过一项出一声、震一下（DETENT_MS）。
  *   · **焦点锁定不做开关**：首版直接做死（§1.2）。
  *   · **reduced-motion 下只在定格那一刻出声**，快速滑过不播。
- *   · **首玩期轴上只摆基础方块和基础小球**，打完第一局（或按过《我会玩》）其余
- *     的才长出来——这一条由 menu.ts 决定要把哪几张卡交给它，这个文件不管。
+ *   · **第几步摆哪几张由 menu.ts 定**（10-31 方案推12：主菜单一步一步出现，engine/menuStage.ts），这个文件不管；
+ *     第 1、2 步根本不上轴。原先首玩期那条《我会玩》分界线（divider）和浮在底排上的那颗（floatKnowHow）一起删了。
  *
  *   · **拖动中慢半拍**：第十三轮——「手指移动一个目标值，画面每帧追它，拖动中
  *     始终慢半拍、恒定、可预期」（参照 Lenis 默认 lerp 0.1）。所以这个文件里有
@@ -352,14 +352,6 @@ export interface ModeAxisOpts {
    */
   onFocus?: (index: number) => void;
   /**
-   * 骑在两站中间的那条分界线（首玩期的《我会玩》，见 menu.ts）。
-   *
-   * 它**不占站位**：轴还是 n 站，这条线摆在第 `after` 站和第 `after+1` 站正中
-   * 间，跟着它们一起滑。当成一站塞进 cards 的话，它会白占一整个站距
-   * （150–210px），而它自己只有四十来像素高——上下就空出一大截。
-   */
-  divider?: { el: HTMLElement; after: number };
-  /**
    * 第一站只摆一张、居中（第 19 推：《每日挑战》那张卡，方案原话「第一行只放这一张，居中，在
    * 基础方块、基础小球那一行上面」）。后面照旧一排两张。
    *
@@ -446,8 +438,6 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
     c.classList.add(solo ? 'axis-col--solo' : `axis-col--${row.indexOf(i)}`);
     host.appendChild(c);
   }
-  // 分界线也住进轴里：和卡片同一个定位参照，才好摆到「两站中间」。
-  if (opts.divider) host.appendChild(opts.divider.el);
 
   /**
    * 两侧的点点轴。
@@ -669,33 +659,6 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
     host.style.setProperty('--axis-bleed-l', bleedL + 'px');
     host.style.setProperty('--axis-bleed-r', bleedR + 'px');
     if (cards[0]) stationH = Math.max(60, cards[0].offsetHeight);
-    floatKnowHow();
-  }
-
-  /**
-   * 首玩期那颗《我会玩》：轴占满屏之后，得把它浮到轴上面来。
-   *
-   * 它在 DOM 里排在轴和法务链接之间（menu.ts）。轴一占满整屏，它就跟着法务那几
-   * 条一起被顶到屏幕外面去了——而它是「跳过引导」的唯一出口，藏起来等于没有
-   * （上一版为它在轴底下让出过一截，这一版没有「底下」可让了）。
-   *
-   * 所以改成固定定位，浮在底排**上方**那道缝里：位置是量底排上沿得出来的，不写
-   * 死——底排那一条的高度跟着安全区走（刘海屏底下那道横杠会把它顶上来）。
-   * `left: 50%` + `translateX(-50%)` 居中（见 style.css），不是 `left/right: 0`：
-   * 后者那颗按钮会横贯整屏，热区跟着变成一整条——手指落在屏幕底下随便哪儿都算
-   * 按了它，引导就这么悄悄撤了。这正是玩家说的那种「意料之外的疏漏操作」。
-   */
-  function floatKnowHow(): void {
-    const skip = document.querySelector<HTMLElement>('.know-how-btn');
-    // 它已经住在轴上那条分界线里了（见 opts.divider）：那一路自己会摆位置，这儿
-    // 再给它加一层固定定位，两边会打架（上一版就是这么同时存在的）。
-    if (!skip || skip.closest('.axis-divider')) return;
-    skip.classList.add('know-how-btn--float');
-    const nav = document.querySelector('.home-nav');
-    const nr = nav?.getBoundingClientRect();
-    // 底排没画出来（高度 0）就退回一个够高的默认值：宁可高一点，也不要压在底排上。
-    const above = nr && nr.height > 0 ? Math.round(window.innerHeight - nr.top + 6) : 112;
-    skip.style.bottom = above + 'px';
   }
 
   /**
@@ -709,60 +672,6 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
   const lastPaint = cards.map(() => ({ t: '', o: '', z: 0, pe: '', f: '' }));
   /** 一排一颗点（见 makeRail），所以这份缓存按**排**存，不按卡。 */
   const lastDot = Array.from({ length: rows }, () => '');
-  let lastDivider = '';
-
-  /**
-   * 把分界线摆到两站正中间。
-   *
-   * 位置取那两站**这一帧**的坐标平均：两张卡自己的位置是鱼眼算出来的（越靠边
-   * 越挤），所以中点也跟着挤——线永远贴在它俩之间，不会在滑动中跑到卡片上去。
-   * 两站有一站不在这一帧的 slots 里（滑得太远、被裁掉了）就把线藏起来。
-   */
-  function paintDivider(L: ReturnType<typeof fisheye>): void {
-    const d = opts.divider;
-    if (!d) return;
-    /**
-     * `d.after` 是**卡片序号**，而轴上一站是一排——所以线落在「这张卡那一排」和
-     * 「下一排」之间。
-     *
-     * 两列之后这件事有个前提：`after` 得是它那一排的**最后一张**，否则同一排里会有
-     * 一张在线上面、一张在线下面，而线只有一条。眼下成立（能玩的是方块和圆球，正好
-     * 是第 0 排那两张），menu.ts 那头也是按「最后一张能玩的」算出来的。排不满的那天
-     * 会看出来：门 check-mode-axis 那一节量的是「线上头正好两张，而且正是那两张能玩
-     * 的」，能玩的变成三张、线于是切开一排的话，那个数就不是 2 了，当场红。
-     */
-    const ra = rowOf(d.after);
-    const a = L.slots.find((s) => s.index === ra);
-    const b = L.slots.find((s) => s.index === ra + 1);
-    if (!a || !b) {
-      if (lastDivider !== 'off') {
-        lastDivider = 'off';
-        d.el.style.opacity = '0';
-        d.el.style.pointerEvents = 'none';
-      }
-      return;
-    }
-    /**
-     * 摆在**两张卡之间那道缝**的正中，不是两个站心的正中。
-     *
-     * 站心的中点看着对、画出来压字：一站不只是那张图，底下还挂着一行小字，整张
-     * 卡有 134px 高（stationH），而两站心相距 150–210px——中点离上面那张卡的下
-     * 沿只有十几个像素，「我会玩」正好印在「经典小球」那行字上（第一版就是这么
-     * 出来的）。取「上面那张的底」和「下面那张的顶」的中点，那才是眼睛看到的
-     * 那道缝。两张卡各自的高要按这一帧的 scale 算——鱼眼里它俩多半不一样大。
-     */
-    const bottomA = a.at + (stationH * a.scale) / 2;
-    const topB = b.at - (stationH * b.scale) / 2;
-    const mid = (bottomA + topB) / 2;
-    // 线的粗细不跟着鱼眼缩放——它是一条分界，不是一张卡；缩起来会细到看不见。
-    const t = `translate3d(0,-50%,0) translateY(${mid.toFixed(2)}px)`;
-    const key = t;
-    if (key === lastDivider) return;
-    lastDivider = key;
-    d.el.style.transform = t;
-    d.el.style.opacity = '1';
-    d.el.style.pointerEvents = 'auto';
-  }
 
   function paint(): void {
     if (destroyed || n === 0) return;
@@ -911,7 +820,6 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
         }
       }
     }
-    paintDivider(L);
     const near = L.nearest;
     if (near !== lastNearest) {
       lastNearest = near;

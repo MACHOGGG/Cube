@@ -27,6 +27,7 @@
  * （无限反转、步步为营、老虎机、菱形小球那几张要开通才按得动）。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2];
 if (!BASE) {
@@ -84,6 +85,7 @@ const firstDiff = (a, b) => {
 
 for (const [w, h, label, full] of [[390, 844, '手机 390×844', true], [1280, 800, '电脑 1280×800', false]]) {
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, isMobile: w < 800, hasTouch: w < 800 });
+  await unlockAll(ctx);
   await ctx.addInitScript(SEED);
   const errs = [];
   const open = async () => {

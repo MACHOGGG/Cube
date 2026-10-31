@@ -53,6 +53,7 @@
  * 得分」那两行一行写完（英法那两行叫法没动，折不折只印出来）。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 import { build } from 'esbuild';
 import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -290,6 +291,7 @@ async function inkRuns(png, x0, y0, x1, y1, thr, bgHex, scaleTo, gap = 6) {
 const cards = [await cardUrl(false), await cardUrl(true)];
 {
   const ctx = await browser.newContext({ viewport: { width: 402, height: 875 }, isMobile: true, hasTouch: true, deviceScaleFactor: 1 });
+  await unlockAll(ctx);
   await ctx.addInitScript(SEED, 'zhHans');
   const page = await ctx.newPage();
   const errs = [];
@@ -540,6 +542,7 @@ const L = {
 };
 for (const lang of Object.keys(L)) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await unlockAll(ctx);
   await ctx.addInitScript(SEED, lang);
   const page = await ctx.newPage();
   const errs = [];
@@ -607,6 +610,7 @@ const SIZES = [
 for (const [w, h, touch] of SIZES) {
   for (const lang of Object.keys(L)) {
     const ctx = await browser.newContext({ viewport: { width: w, height: h }, isMobile: touch, hasTouch: touch });
+    await unlockAll(ctx);
     await ctx.addInitScript(SEED, lang);
     const page = await ctx.newPage();
     await endARun(page);
@@ -739,6 +743,7 @@ for (const [w, h, touch] of SIZES) {
 // ---------------------------------------------------------------------------
 {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await unlockAll(ctx);
   await ctx.addInitScript(SEED, 'zhHans');
   const page = await ctx.newPage();
   await endARun(page);

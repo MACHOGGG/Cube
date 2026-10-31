@@ -14,6 +14,7 @@
  * 也不会少——只是标志没了。所以不看代码，看像素。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2] || 'http://localhost:8815/';
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
@@ -29,6 +30,7 @@ async function open({ genius = false } = {}) {
   if (genius) {
     // 七色圆球和进阶三角是天才特供，主菜单上锁着。这里只要本地那份凭据——
     // 开房间才需要服务器认，点开一个玩法不需要。
+    await unlockAll(ctx);
     await ctx.addInitScript(() => {
       localStorage.setItem('slides_genius', JSON.stringify({
         active: true, period: 'yearly', until: Date.now() + 30 * 864e5, channel: 'code',
@@ -36,6 +38,7 @@ async function open({ genius = false } = {}) {
       }));
     });
   }
+  await unlockAll(ctx);
   await ctx.addInitScript(() => {
     for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
       localStorage.setItem(k, '1');

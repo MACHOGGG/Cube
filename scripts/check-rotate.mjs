@@ -19,6 +19,7 @@
  * 一样。这一条不重排是绝对过不了的。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2] || 'http://localhost:8817/';
 const ONLY = process.argv[3];
@@ -110,6 +111,7 @@ for (const shape of shapes) {
   ]) {
     // 甲、一开始就是「到」这个方向，排出来是什么样——这是标准答案。
     const ctxA = await browser.newContext({ viewport: to });
+    await unlockAll(ctxA);
     await ctxA.addInitScript(seed);
     const pageA = await ctxA.newPage();
     const okA = await openGame(pageA, shape);
@@ -122,6 +124,7 @@ for (const shape of shapes) {
 
     // 乙、从「从」这个方向转过去，中间一下都不碰棋盘。
     const ctxB = await browser.newContext({ viewport: from });
+    await unlockAll(ctxB);
     await ctxB.addInitScript(seed);
     const pageB = await ctxB.newPage();
     const okB = await openGame(pageB, shape);
@@ -142,6 +145,7 @@ for (const shape of shapes) {
     // 上面那一轮过了不代表手机上过得了。把 innerWidth / innerHeight 冻住，就
     // 只剩「装地板那一格」这一条线；第一版的修法在这里是直接不动的。
     const ctxC = await browser.newContext({ viewport: from });
+    await unlockAll(ctxC);
     await ctxC.addInitScript(seed);
     const pageC = await ctxC.newPage();
     const okC = await openGame(pageC, shape);

@@ -2385,36 +2385,6 @@ button:hover { filter: brightness(1.05); }
 /* 按下那段抖动（.home-tap 的 home-tap-wobble）在带子上留着没关系：带子的
    transform 写在轨道上、不在卡上，不像鱼眼轴那样会被关键帧整个顶掉。 */
 
-/*
- * 首玩期《我会玩》那条分界线。
- *
- * 竖着摆的时候它是一行：两条横线夹一行小字。鱼眼轴那一版得每帧算位置
- * （站距是均匀的，而它只有四十来像素高，当成一站会上下各空出一大截，玩家
- * 第九轮报的就是这个）；带子这一版它就是队伍里的一员，只占自己那点高，
- * 「不占额外的位置」自动成立。
- */
-.mode-strip .axis-divider {
-  position: static;
-  /* `display: flex` 不能省：那两条线是 `flex: 1 1 auto` 的 span，父亲不是 flex 的话它们
-     是行内元素、宽度 0——画出来就是「一行字贴在最左边，一条线都没有」。
-     鱼眼轴那一版的 display: flex 写在 `.mode-axis > .axis-divider` 里，换成带子之后
-     那条选择器就不匹配了。 */
-  display: flex;
-  flex: 0 0 auto;
-  flex-direction: row;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 26px;
-  width: 100%;
-  transform: none;
-  opacity: 1;
-}
-.mode-strip .axis-divider-line {
-  height: 1px;
-  width: auto;
-  flex: 1 1 auto;
-}
-.mode-strip .axis-divider .know-how-btn { white-space: nowrap; }
 
 /*
  * 横向无缝滚动的带子（src/engine/marquee.ts）。
@@ -2472,50 +2442,6 @@ button:hover { filter: brightness(1.05); }
 }
 .marquee--manual .marquee-track { transform: none; }
 
-/*
- * 首玩期那条分界线：两条横线夹一行《我会玩》，骑在「基础」和「锁着的」中间。
- *
- * 玩家 2026-09 第九轮：「《我会玩》上方有巨大的空格，按理说就是一个小小的文字
- * （文字两边是分割线分出上面基础方块、小球玩法和其他锁住的）和按钮不占额外的位
- * 置」。上一版它是轴上的一站——站距是均匀的 150–210px，而它只有 44px 高，上下各
- * 空出一大截。现在它不占站位，由 modeAxis 每帧摆到两站正中间。
- *
- * 绝对定位那几行和轴上的卡片一样（整幅宽、top: 50%、不许 CSS 再给 transform 加
- * 过渡）。**整幅宽的是这条线，不是按钮**：按钮还在中间那一小块，热区没跟着变宽
- * ——手指落在线上不算按了它。
- */
-.mode-axis > .axis-divider {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: calc(50% - var(--axis-shift, 0px) + var(--consent-room, 0px));
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 26px;
-  box-sizing: border-box;
-  transition: none;
-  will-change: transform;
-  /* 卡片的 z-index 是 10–100（见 paint）：线要压在它们上面，不然滑过来的卡会盖
-     住它——它是「跳过引导」的唯一出口。 */
-  z-index: 110;
-}
-.axis-divider-line {
-  flex: 1 1 auto;
-  height: 1px;
-  background: var(--ink-faint, currentColor);
-  opacity: 0.35;
-}
-/* 线里那颗按钮：不再是 flex 列里的项，所以 .know-how-btn 那两行 align-self /
-   margin-top 在这儿不作数；padding 收一档，让整条看起来是「一行字」而不是「一颗
-   按钮」。 */
-.axis-divider .know-how-btn {
-  flex: 0 0 auto;
-  align-self: auto;
-  margin-top: 0;
-  padding: 10px 14px;
-}
-
 .mode-axis > .axis-know-how {
   position: absolute;
   left: 0;
@@ -2533,28 +2459,6 @@ button:hover { filter: brightness(1.05); }
   transform-origin: 50% 50%;
   will-change: transform;
   text-align: center;
-}
-/*
- * 鱼眼轴那一路：这颗按钮浮到底排上方那道缝里（ui/modeAxis.ts 的 floatKnowHow 加
- * 这个类、并把 bottom 量出来写进来）。
- *
- * 为什么要浮：轴现在占满整块屏幕（玩家 2026-09 第四轮「鱼眼转盘的范围一直从头到
- * 尾延伸」），排在轴后面的它于是落到第一屏外面去了——而它是「跳过引导」的唯一出
- * 口，藏起来等于没有。
- *
- * `left: 50%` + `translateX(-50%)`，**不是** `left: 0; right: 0`：后者那颗按钮会
- * 横贯整屏，热区跟着变成屏幕底下一整条——手指落在那一带随便哪儿都算按了它，引导
- * 就这么悄悄撤了（玩家点名不要的「意料之外的疏漏操作」）。居中也不能靠
- * `width: fit-content`（Chrome 61 不认，整条丢掉之后又回到横贯整屏）。
- *
- * z-index 1 是压在轴上面：轴整条是 z-index: 0 的层叠上下文，卡片在它里面最高也只
- * 到 100，所以 1 就够，而且照旧在招牌和底排（都是 60）下面。
- */
-.know-how-btn--float {
-  position: fixed;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 1;
 }
 
 /* 主菜单最底下那排法务链接（价格 / 条款 / 退款 / 隐私 / 联系）。
@@ -2598,6 +2502,54 @@ button:hover { filter: brightness(1.05); }
    选择器要压过 .home-icon-btn 自己那句 flex: none（它是用来挣脱全局
    button { flex: 1 } 的），所以带上 .home-grid——两个类，权重高一级。 */
 .home-grid .home-row > * { flex: 1 1 0; min-width: 0; }
+
+/* ---- 主菜单第 1、2 步（10-31 方案推12 Z-J02 B，设计图 A1–A4）------------------------------
+   只有一排一两张卡＋《我会玩》，整组在招牌下沿和底排上沿之间竖向居中，手机、电脑一个样（menu.ts 的 intro 那一支）。
+   卡边长照计时挑图形那一页（.slot-pick-opt：min(40vw, 176px, 22vh)，排缝 18px）——390×844 上 156、320×568 上 125、
+   1440×900 上 176、1000×700 上 154。
+   选择器带上 .home-page.home-page--intro（0,4,0）：窄屏那条 `.home-page:not(.home-page--wide) .home-icon-btn` 的
+   max-width（0,3,0）和宽屏那条 --home-card-cap（1440×900 上 174.9）都比这一套小一截，压不过就不是那个数了。
+   整页撑满一屏高：宽版的 .app 本来不撑，不撑的话「竖向居中」没有地方可居。 */
+.app.home-page--intro { min-height: 100vh; min-height: 100svh; }
+.home-page.home-page--intro .home-grid {
+  flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 18px;
+  /* 主菜单那张 GA 同意条（ui/homeSlot.ts）压到这一组时往下让：它量出要让多少写进 --consent-room，这一版接住它
+     （轴那一版接在卡片的 top 里，宽版接在 .home-grid 的 margin-top 上；check-consent D、E、G 量的就是让开、让完复原）。 */
+  margin-top: var(--consent-room, 0px);
+}
+.home-page.home-page--intro .home-row--intro { gap: 18px; width: auto; }
+.home-page.home-page--intro .home-row--intro > .home-icon-btn {
+  flex: none; width: 40vw; width: min(40vw, 176px, 22vh); max-width: none;
+}
+.home-page.home-page--intro .home-icon-tag { font-size: 0.86rem; white-space: normal; }
+
+/* ---- 新卡浮出（10-31 方案推12 Z-J02 C，设计图 A5）--------------------------------------------
+   这一步新出来的卡（menu.ts 的 markArrivals）：卡里面那两层从透明、0.92 倍浮到实、1 倍，420ms，每张晚 70ms，第一张
+   晚 180ms（让 softSwap 那 120ms 先走完）；浮完亮两下（借 glow-pulse），然后安静（站长 10-30 答复 ⑥）。
+   **动的是卡里面那两层，不是卡本身**：鱼眼轴每帧往卡本身写行内 transform，动画写在同一个属性上会把它盖掉。
+   calc() 里乘变量 Chrome 61 认（小红书那一端也走这一段）。 */
+.home-icon-btn--arrive > .home-icon-art,
+.home-icon-btn--arrive > .home-icon-tag,
+.home-bomb-card.home-icon-btn--arrive > .home-icon-art {
+  animation: home-arrive 420ms cubic-bezier(0.2, 0.8, 0.3, 1) both;
+  animation-delay: calc(180ms + var(--arrive-i, 0) * 70ms);
+}
+.home-icon-btn--arrive > .home-icon-art > svg {
+  animation: glow-pulse 0.55s ease-in-out 2;
+  animation-delay: calc(600ms + var(--arrive-i, 0) * 70ms);
+}
+@keyframes home-arrive {
+  from { opacity: 0; transform: translateY(10px) scale(0.92); }
+  to { opacity: 1; transform: none; }
+}
+/* 减弱动态：不浮、不闪，直接在位；这一次给新卡一圈**静止**的光，下次画就没有了。 */
+@media (prefers-reduced-motion: reduce) {
+  .home-icon-btn--arrive > .home-icon-art,
+  .home-icon-btn--arrive > .home-icon-tag,
+  .home-bomb-card.home-icon-btn--arrive > .home-icon-art { animation: none; }
+  .home-icon-btn--arrive > .home-icon-art > svg { animation: none; filter: drop-shadow(0 0 7px var(--glow)); }
+}
 
 /* Every tile is the same square box whatever it draws inside, so a circle, a
    triangle and a square all sit on one baseline grid. */
@@ -2884,59 +2836,9 @@ button:hover { filter: brightness(1.05); }
     filter: drop-shadow(0 0 7px var(--glow)) drop-shadow(0 0 13px var(--glow)) drop-shadow(0 0 22px var(--glow));
   }
 }
-/* ---- 头一回打开时的那道软锁（ui/menu.ts 的 armFirstPlayLock）----------
-   按到方块和小球以外的卡：那两张抖一下、光更亮一档，别的什么也不发生。不写
-   字——两张亮着的卡本身就是答案（玩家定的「少文字」）。
-   光用的是 --glow，深色主题下它本来就是白的（见文件开头那两处 @media），所以
-   「暗色背景配白色光芒」不用另写一套，只把它加重一档。 */
-.home-icon-btn--nudge { animation: home-nudge 0.42s ease-in-out; }
-.home-icon-btn--nudge .home-icon-art > svg {
-  animation: glow-pulse 0.55s ease-in-out 2;
-  filter: drop-shadow(0 0 12px var(--glow)) drop-shadow(0 0 22px var(--glow));
-}
-@keyframes home-nudge {
-  0%, 100% { transform: translateX(0); }
-  18% { transform: translateX(-5px); }
-  42% { transform: translateX(5px); }
-  68% { transform: translateX(-3px); }
-  86% { transform: translateX(2px); }
-}
-/* 往上滑的那个小圆角箭头：只在他按的那张卡在两张基础卡下面时出现，1.4 秒后
-   自己淡走。占位不挤版——绝对定位，压在基础那一排上方的空当里。 */
-/* 那个箭头是绝对定位的，得有个参照——给这一排一个 position 不动别的。 */
+/* 基础那一排给个定位参照。原先是给首玩期那道软锁的上滑小箭头用的（.home-up-hint，连同抖一下的 .home-icon-btn--nudge
+   和那两组 keyframes 一起在 10-31 方案推12 删了：没到的卡根本不摆，没有可拦的了）；这一行留着，不动层叠。 */
 .home-row { position: relative; }
-.home-up-hint {
-  position: absolute; left: 50%; top: -6px;
-  transform: translate(-50%, 6px);
-  color: var(--accent);
-  opacity: 0; pointer-events: none;
-  transition: opacity 0.22s ease, transform 0.22s ease;
-}
-.home-up-hint--in { opacity: 0.95; transform: translate(-50%, -2px); animation: home-up-float 1s ease-in-out 1; }
-/*
- * 带子那一路：箭头指左指右，摆在带子的正中。
- *
- * 横着跑的时候「能玩的在上面」不成立了（见 menu.ts 的 armFirstPlayLock）。
- * 它挂在 .mode-strip 上、不在任何一份里：一份的宽度就是绕回去的距离，不能动。
- */
-.mode-strip > .home-up-hint {
-  top: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 120;
-}
-/* 向下那一种：同一个箭头转半圈。带子是无缝循环的，能玩的那两张可能在上
-   也可能在下（鱼眼轴时代它们永远在上面）。 */
-.home-up-hint--down,
-.home-up-hint--down.home-up-hint--in { transform: translate(-50%, -50%) rotate(180deg); }
-@keyframes home-up-float {
-  0%, 100% { margin-top: 0; }
-  50% { margin-top: -5px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .home-icon-btn--nudge,
-  .home-icon-btn--nudge .home-icon-art > svg,
-  .home-up-hint--in { animation: none; }
-}
 
 /* ---- 小红书版：三张「完整版里是天才玩法」的卡 --------------------------
    玩家定的：除了发光那张，其余几张暗淡一点、写上「进阶入口」，当完整版的预
@@ -3039,6 +2941,13 @@ button:hover { filter: brightness(1.05); }
   overflow: visible;
 }
 .bomb-chip .bomb-plate { fill: var(--bomb-plate); transition: fill 140ms ease; }
+/* 进阶炸弹那一排没登录时锁着（10-31 方案推12 Z-J02 E，F-1 f）：图压暗、正中一把锁，和主菜单、挑图形那几页的锁一个样。 */
+.bomb-chip--locked > svg { opacity: 0.38; }
+.bomb-chip-lock {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 34px; height: 34px; color: var(--accent-ink); pointer-events: none;
+}
+.bomb-chip-lock svg { width: 100%; height: 100%; display: block; }
 /*
  * 鼠标经过、按下、键盘聚焦（方案原话）：底板变 --card-red，加一圈 3px 的白边，整格放大到
  * 1.04；减弱动态效果时不放大。
@@ -3234,8 +3143,8 @@ body:has(.center-pick--back) .home-nav { display: none; }
 }
 .center-pick-lock svg { width: 100%; height: 100%; display: block; }
 
-/* 主菜单上锁着的那几个玩法（老虎机、七色圆球、进阶三角）：图案压暗，锁压在正
-   当中，右下角一块天才招牌——说明这把锁是哪一家的。 */
+/* 主菜单上锁着的那几张（第 5 步、没登录时的四副更多布局）：图案压暗，锁压在正当中。原先右下角还有一块天才招牌
+   （.center-pick-genius），天才层 10-31 方案推12 取消，招牌和它那条规则一起撤了。 */
 .home-icon-btn--locked { position: relative; }
 .home-icon-btn--locked .home-icon-art > svg { opacity: 0.38; }
 /* 锁：三张卡都是 34px，都在图形的正中心（弹窗里那把往上提了一点，因为它
@@ -3244,24 +3153,6 @@ body:has(.center-pick--back) .home-nav { display: none; }
   left: 50%; right: auto; top: 50%; bottom: auto;
   width: 34px; height: 34px;
   transform: translate(-50%, -50%);
-}
-/* 招牌：收在卡片自己的右下角（弹窗里那块探出框外一点，主菜单上旁边就是另
-   一张卡，探出去会压到人家身上），大小按卡片的宽度走——三分之一。
-
-   要保证的是它永远碰不到中间那把锁。锁 34px 宽，压在正中，右缘在 50% + 17px；
-   招牌从右边缘起，宽 33%，左缘就在 67%——卡片宽过 124px 时两者之间就有空。
-   卡片还能更窄：手机横过来时一张只有 96px（见 --home-card-cap），33% 的招牌
-   左缘落在 64px，锁的右缘在 65px，就碰上了。所以再加一道 min()：宽度不超过
-   「一半减 21px」——右半边留给锁的 17px 加 4px 空档——96px 的卡片上招牌收成
-   27px，左缘 69px，仍在锁外面。上面那行 33% 是不认 min() 的浏览器的退路。
-
-   从前写死 88×80 的招牌，手机上两列的卡片只有一百六七十像素，右下角正好压
-   在锁上，才把锁往左推了一截；现在不必了。 */
-.home-icon-btn--locked .center-pick-genius {
-  right: 0; left: auto; bottom: 0; top: auto;
-  transform: none;
-  width: 33%;
-  width: min(33%, calc(50% - 21px));
 }
 .genius-logo--fluid { display: block; width: 100%; height: auto; }
 
@@ -5193,6 +5084,13 @@ html:has(body > .overlay) .home-card { visibility: hidden; pointer-events: none;
    个算：8 ＋ 10 ＋ 2。门：check-title-lines 量的是排出来的这 20px，不是读这条规则。 */
 .invite-modal { max-width: 360px; }
 .invite-modal .invite-title { margin: 0 0 20px; }
+/* 矮屏上抬头小一号（10-31 方案推12）。抬头从一句短口号（「仅需注册即可免费成为 Slides 天才」）换成了附录甲 §7 那一整句
+   「注册即可开小屋、换配色、用深色界面，战绩存到云端」，法语 24px 排出来六行、203px：360×640 上整扇窗 675px 高，
+   底下那两颗键落在屏幕外（check-redesign-fit 量出来的，底边 667 / 屏高 640）。货单一条没动——那一头是 E40，
+   动它要先问玩家；只在矮屏上把这一句收到 1.15rem，高屏（390×844 等）一个像素不变。 */
+@media (max-height: 700px) {
+  .invite-modal .invite-title { font-size: 1.15rem; }
+}
 .invite-body {
   display: flex; align-items: flex-start; gap: var(--gap-md);
   margin: 0 0 var(--gap-md); text-align: left;
@@ -5522,6 +5420,21 @@ html.is-playing body { background: var(--play-bg); }
   --ctl-mark: #FFFFFF;
 }
 .app--game .controls .icon-btn .ctl-glyph { width: 100%; height: 100%; display: block; }
+/* ---- 局中灯泡（10-31 方案推12 Z-J03；样子按 10-14 Q16 的 C：并进暂停那块牌）-------------------------------
+   前两局暂停那块琥珀牌分两半：竖屏左 58% 暂停、右 42% 灯泡；横屏（暂停那颗是右边一条竖的）上 58% 暂停、下 42% 灯泡。
+   #hintBtn 是 #stopBtn 的兄弟、绝对定位叠在它右（下）半边上——位置由 gameShell 的 placeHint 按 #stopBtn 此刻的盒子写成
+   行内样式，#stopBtn 自己的尺寸一个像素都不动，只是把那枚圆盘收进左（上）那 58% 里。中间一道 2px 半透明白缝。
+   灯泡钮自己透明：底下就是那块琥珀牌，看上去是一块牌分成两格。 */
+.app--game .controls { position: relative; }
+.app--game .controls #stopBtn.stop-btn--split-h .ctl-glyph { width: 58%; }
+.app--game .controls #stopBtn.stop-btn--split-v .ctl-glyph { height: 58%; }
+.app--game .controls #hintBtn {
+  position: absolute; z-index: 1; margin: 0; flex: none; min-width: 0; min-height: 0; aspect-ratio: auto;
+  padding: 4px; background: transparent; border: none; border-radius: 0;
+  border-left: 2px solid rgba(255, 255, 255, 0.55);
+}
+.app--game .controls #hintBtn.hint-btn--v { border-left: none; border-top: 2px solid rgba(255, 255, 255, 0.55); }
+.app--game .controls #hintBtn[hidden] { display: none; }
 /* The pressed flip: ground to the same family's terracotta, type from the
    chip's near-white to its near-black. Deliberately small — this is the
    feel of a key going down, not a state change. */

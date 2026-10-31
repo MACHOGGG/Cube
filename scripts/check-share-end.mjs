@@ -17,6 +17,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2] || 'http://localhost:8817/';
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
@@ -133,6 +134,7 @@ const SAMPLE = (one) => {
 };
 
 async function cardFor(page, run, one = false) {
+  await unlockAll(page);
   await page.addInitScript(
     ([key, r]) => {
       for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])

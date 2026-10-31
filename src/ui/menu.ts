@@ -1,10 +1,9 @@
 import type { ShapeCardMeta } from '../shapes/types';
 import { STRINGS, type Lang } from '../i18n';
-import { isLayoutLocked } from '../engine/geniusContent';
-import { isGenius } from '../engine/subscription';
+import { GENIUS_LAYOUTS } from '../engine/geniusContent';
+import { STAGE_OF, type MenuStage } from '../engine/menuStage';
 import { shapeName } from './shapeLabels';
 import { menuTag } from './menuTags';
-import { geniusLogoFluid } from './geniusLogo';
 import { knowHowButton } from './knowHowBtn';
 import { mountModeAxis } from './modeAxis';
 import { dailyAria, dailyArtHtml, watchDay } from './dailyArt';
@@ -32,15 +31,21 @@ export interface MenuHandlers {
   /**
    * 《每日挑战》那张卡（第 19 推）：进每日挑战那一页（ui/dailyMode.ts）。
    *
-   * 手机上是鱼眼轴的第一站；电脑宽版摆在基础那一排的最左边（10-09 补充方案 7-12）。首玩期间不
-   * 摆（见下面 showDaily）。
+   * 手机上是鱼眼轴的第一站；电脑宽版摆在基础那一排的最左边（10-09 补充方案 7-12）。第 3 步才出现（见下面 stage）。
    */
   onDaily: () => void;
   /**
-   * 摆不摆《每日挑战》那张卡：打完过一局、而且首玩锁已经撤了（10-08 方案 3-D-1 ＋ 10-09 补充方案
-   * 6-6，一个判定：engine/firstPlay.ts 的 dailyCardShown）。不给就摆——这张卡原先是无条件摆的。
+   * 主菜单到了第几步（10-31 方案推12 Z-J02，engine/menuStage.ts）：`STAGE_OF[卡] > stage` 的卡**根本不造**（不是挂锁），
+   * 排布顺序不改。第 1、2 步是一排居中的小卡（renderIntro），第 3 步起照今天那一套（手机鱼眼轴、电脑三排）。
    */
-  showDaily?: boolean;
+  stage: MenuStage;
+  /**
+   * 主菜单真的画出来过的是第几步（slides_played_stage_shown）：`STAGE_OF[卡] > shown` 的卡这一次演「浮出」。
+   * 等于 stage 就一张都不演。
+   */
+  shown: MenuStage;
+  /** 登着没有（signedInEmail）：四副更多布局没登录挂锁，点了开登录窗。天才层 2026-10 取消了。 */
+  signedIn: boolean;
   /**
    * 「现在」——今天是哪一天、那张卡画星期几、压哪个日期，全从它算（网页端是服务器的钟，见
    * engine/dailyClock.ts）。不给就用本机的钟。
@@ -49,8 +54,7 @@ export interface MenuHandlers {
   /** 一副《更多布局》的棋盘，直接开局。（从前还带一个 reopenKey：从主菜单弹出来的挑选窗里开的那一
    *  局，返回时替他把那扇窗再点开。那几扇窗都改成了整页，炸弹是最后一扇——10-08 方案 3-G。） */
   onSelectLayout: (id: string) => void;
-  /** A 「+」 board that 「Slides 天才」 unlocks, tapped by someone who has not
-   *  bought it — the picker shows what it is, and this opens the paywall. */
+  /** 一副更多布局，没登录的人按到了：开登录窗（10-31 方案推12；原先是订阅窗——天才层取消了）。 */
   onLockedLayout: () => void;
   /** 炸弹那张卡：开炸弹那一页（ui/bombMode.ts，10-08 方案 3-G）。 */
   onBombMode: () => void;
@@ -72,21 +76,11 @@ export interface MenuHandlers {
    */
   glow?: readonly BaseShape[];
   /**
-   * 头一回打开、一局都还没打过：除了《基础方块》和《基础小球》，别的一概按不
-   * 开（engine/firstPlay.ts 的 lockedForFirstPlay）。
+   * 按了《我会玩》（只在第 1、2 步摆）：引擎里那把钥匙已经记下了（knowHowBtn 自己记的），调用方把第几步升到 3、
+   * 再把主菜单重画一遍——光撤了、新的四张浮上来、那颗按钮自己也就不该在了。
    *
-   * 玩家 2026-09 定的：「第一次玩的玩家只能选择基础方块 or 基础小球，在游玩
-   * 过第一个玩法之后就可以解锁……这些封锁的设置都是只给第一次游玩的玩家才会
-   * 出现，在此之后再也不会出现」。
-   *
-   * 按到别的卡不是没反应：那两张会轻轻抖一下、光更亮一点；要是他按的那张在
-   * 屏幕靠下的位置，还会在两张卡那儿冒一个小圆角箭头，指他往上滑。锁不写字
-   * ——两张亮着的卡本身就是答案。
-   */
-  firstPlayLock?: boolean;
-  /**
-   * 按了《我会玩》：引擎里那把钥匙已经记下了（knowHowBtn 自己记的），这儿只要
-   * 把主菜单重画一遍——锁撤了、光撤了、那颗按钮自己也就不该在了。
+   * （这儿从前还有一位 firstPlayLock：首玩期十三张全摆、除两张基础卡都挂锁，中间夹一条《我会玩》分界线。10-31 方案
+   * 推12 起没到的卡根本不摆，那道软锁、分界线、抖动、上滑箭头一起删了。）
    */
   onKnowHow?: () => void;
 }
@@ -145,6 +139,10 @@ const NARROW_PER_ROW = 2;
  * 用 sessionStorage 不用 localStorage：**同一个标签页里记着，换一次新的就从头
  * 来**。隔了一天重新打开网站还停在第九张上，那是另一种「意料之外的界面」——一进
  * 门就该是熟悉的那张基础方块。
+ *
+ * **存的是卡的名字（data-card），不是第几张**（10-31 方案推12 Z-J02）：主菜单一步一步出现之后，同一张卡在第 3 步和第 5
+ * 步排在不同的序号上——存序号的话，升了一步回来就停到了别的卡上。读回来找不到（那张卡这一步还没有）就回第 0 张。新卡
+ * 出现时轴**不**自动滚过去（站长 10-30 答复 ⑤）：照旧停在上次那一项。
  */
 const AXIS_KEY = 'slides_axis_focus';
 /**
@@ -154,20 +152,19 @@ const AXIS_KEY = 'slides_axis_focus';
 let stopDailyWatch: (() => void) | null = null;
 let axisFocus = readAxisFocus();
 
-function readAxisFocus(): number {
+function readAxisFocus(): string {
   try {
-    const n = Number(sessionStorage.getItem(AXIS_KEY));
-    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+    return sessionStorage.getItem(AXIS_KEY) ?? '';
   } catch {
     // 无痕模式：读不到就从第一张开始，不影响别的。
-    return 0;
+    return '';
   }
 }
 
-function saveAxisFocus(i: number): void {
-  axisFocus = i;
+function saveAxisFocus(card: string): void {
+  axisFocus = card;
   try {
-    sessionStorage.setItem(AXIS_KEY, String(i));
+    sessionStorage.setItem(AXIS_KEY, card);
   } catch {
     /* 无痕模式：这一次会话里照样跟手，只是活不过刷新 */
   }
@@ -233,14 +230,15 @@ function tagEl(text: string): HTMLElement {
   return cap;
 }
 
-/** 锁着的卡上那两件东西：正中一把锁，右下角一块天才招牌。都压在图上。 */
+/**
+ * 锁着的卡上那把锁：正中一把，压在图上。
+ *
+ * 原先右下角还收着一块天才招牌（说明这把锁是哪一家的）；天才层 2026-10 取消之后锁只剩「没登录」一种，招牌撤了
+ * （10-31 方案推12 Z-J02 E）。
+ */
 function lockOverlay(btn: HTMLElement): void {
   const art = btn.querySelector('.home-icon-art') ?? btn;
-  art.insertAdjacentHTML(
-    'beforeend',
-    `<span class="center-pick-lock">${ICON_LOCK}</span>` +
-      `<span class="center-pick-genius">${geniusLogoFluid()}</span>`,
-  );
+  art.insertAdjacentHTML('beforeend', `<span class="center-pick-lock">${ICON_LOCK}</span>`);
 }
 
 /**
@@ -252,9 +250,16 @@ function lockOverlay(btn: HTMLElement): void {
 export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers: MenuHandlers, lang: Lang): () => void {
   const s = STRINGS[lang];
   const wide = window.matchMedia(WIDE_QUERY).matches;
+  /**
+   * 第 1、2 步（10-31 方案推12 Z-J02 B，设计图 A1–A4）：只有一排一两张卡＋《我会玩》，整组在招牌和底排之间竖向居中，
+   * 手机、电脑一个样。卡**不交给鱼眼轴**：轴上那条分界线要「下一排」，第 1 步只有一排。
+   */
+  const intro = handlers.stage <= 2;
+  /** 这张卡第几步出现（engine/menuStage.ts）。没到的卡根本不造。 */
+  const has = (key: string): boolean => (STAGE_OF[key] ?? 1) <= handlers.stage;
 
   container.innerHTML = `
-    <div class="app home-page${wide ? ' home-page--wide' : ''}${wide ? '' : ' home-page--axis'}">
+    <div class="app home-page${wide ? ' home-page--wide' : ''}${intro ? ' home-page--intro' : wide ? '' : ' home-page--axis'}">
       <header class="home-head">
         <div class="home-head-glass">
           <h1 class="home-title">Slides</h1>
@@ -373,37 +378,94 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
     tail.push(btn);
   };
 
+  /**
+   * 这一次要演「浮出」的卡（10-31 方案推12 Z-J02 C）：`STAGE_OF[卡] > shown` 的那几张。造卡时先记下名字、打个记号，画完
+   * 之后按它们**在屏幕上的次序**编号（markArrivals）——造的次序和摆的次序不一样（老虎机那三张造得早、摆在后面）。
+   */
+  const named = <T extends HTMLElement>(btn: T, key: string): T => {
+    btn.dataset.card = key;
+    if ((STAGE_OF[key] ?? 1) > handlers.shown) btn.dataset.arrive = '1';
+    return btn;
+  };
+  /** 卡上那行字（读屏那一句「新玩法已出现：……」也念它）。 */
+  const nameOf = (key: string): string => (key === 'daily' ? s.dailyTitle : tag(key));
+  /**
+   * 给新卡挂上「浮出」：卡里面那两层（图、字）从透明、0.92 倍浮到实、1 倍，每张晚 70ms，浮完亮两下（style.css 的
+   * .home-icon-btn--arrive）。动的是卡里面那两层，不是卡本身：鱼眼轴每帧往卡本身写行内 transform。
+   *
+   * 读屏：画完那一刻放一个看不见的 role=status，下一帧写一句「新玩法已出现：每日挑战、多人、计时、炸弹」——放进去的同一
+   * 帧就写字，有的读屏不念。
+   */
+  const markArrivals = (cards: readonly HTMLElement[]): void => {
+    const fresh = cards.filter((c) => c.dataset.arrive === '1');
+    fresh.forEach((c, i) => {
+      c.classList.add('home-icon-btn--arrive');
+      c.style.setProperty('--arrive-i', String(i));
+    });
+    if (!fresh.length) return;
+    const live = document.createElement('div');
+    live.className = 'sr-only';
+    live.setAttribute('role', 'status');
+    live.setAttribute('aria-live', 'polite');
+    container.querySelector('.home-page')?.appendChild(live);
+    const sep = lang === 'zhHans' || lang === 'zhHant' ? '、' : ', ';
+    const text = s.menuNewModes.replace('{list}', fresh.map((c) => nameOf(c.dataset.card ?? '')).filter(Boolean).join(sep));
+    requestAnimationFrame(() => {
+      if (live.isConnected) live.textContent = text;
+    });
+  };
+
+  /** 一张基础卡（方块 / 小球）。没打过的那张镶一圈光（glowingBasics）。 */
+  const baseCard = (shape: RowShape): HTMLButtonElement => {
+    const card = layout.base[shape];
+    const btn = iconButton(
+      BASE_ICON[shape],
+      shapeName(lang, card.id, card.name),
+      handlers.glow?.includes(shape) ? 'home-icon-btn--glow' : '',
+      tag(card.id),
+    );
+    btn.addEventListener('click', () => handlers.onSelectBase(card.id));
+    // 门认「能点开头一局的那两张」用的钩子（check-push-queue 那一批点的是 data-first-playable 的第一张）。原先首玩
+    // 期的软锁也认它；软锁 10-31 方案推12 删了，钩子留着。
+    btn.dataset.firstPlayable = '1';
+    return named(btn, card.id);
+  };
+
+  // ---- 第 1、2 步：一排居中的小卡＋《我会玩》 ------------------------------
+  stopDailyWatch?.();
+  stopDailyWatch = null;
+  if (intro) {
+    // 卡边长照计时挑图形那一页（min(40vw, 176px, 22vh)，排缝 18px，style.css 的 .home-row--intro）；第 2 步方块在左、
+    // 小球在右（SHAPES 的次序）。《我会玩》在这一排正下方居中——它不再是轴上的分界线，只是一颗小按钮。
+    const row = document.createElement('div');
+    row.className = 'home-row home-row--intro';
+    grid.appendChild(row);
+    for (const shape of SHAPES) if (has(shape)) row.appendChild(baseCard(shape));
+    grid.appendChild(knowHowButton(lang, () => handlers.onKnowHow?.()));
+    markArrivals(Array.from(row.children) as HTMLElement[]);
+    return () => {};
+  }
+
   // ---- 每日挑战（第 19 推）-------------------------------------------------
   /**
    * 窄版（鱼眼轴）是轴上的第一站、只有这一张（mountModeAxis 的 leadSolo），打开菜单默认就停在这
    * 一站——一个新会话的默认焦点本来就是第 0 项（readAxisFocus），所以不用另写一句。
    *
    * 宽版（电脑、横屏手机）摆在**基础那一排的最左边**，和基础方块、基础小球三张同尺寸、等间距、整
-   * 排居中（10-09 补充方案 7-12）。第 19 推的时候它在最上面单独一排——四排要站进同一块屏幕，所有
-   * 卡跟着缩了一圈（1440×900 上 175 → 122，见 style.css 的 --home-card-cap）；并进基础那一排之后
-   * 又是三排，卡回到原来那么大。还没打完一局的时候（下面 showDaily），这一排就只有两张基础卡。
+   * 排居中（10-09 补充方案 7-12）。
    *
    * 图按北京时间的星期几换、日期压在上面（dailyArt.ts），到北京零点自动换、切回前台时重算。
    * 读屏念「每日挑战，10 月 3 日」；卡底下那行小字是「每日挑战」。
+   *
+   * 第 3 步才出现（10-31 方案推12 Z-J02；原先是「打完过一局、首玩锁撤了」，10-08 方案 3-D-1 ＋ 10-09 补充方案 6-6）。
+   * 走到这儿的一定是第 3 步以上（第 1、2 步上面已经返回了），所以它永远在。
    */
-  /*
-   * **一局都还没打完的人不摆这张卡**（10-08 方案 3-D-1，玩家拍板：「完成任意一局（含教程局）后
-   * 出现」）。从前它无条件摆在最上面，新人打开菜单第一眼看见的是一张「今天这一局」——可他连
-   * 规矩都还没见过。打完头一局（带教学条的那一局也算）它才冒出来，见 engine/firstPlay.ts 的
-   * finishedAGame。不摆的时候轴的第一站就不是单张了（下面 mountModeAxis 的 leadSolo 跟着它）。
-   */
-  const showDaily = handlers.showDaily ?? true;
   const now = handlers.now ?? Date.now;
   const today = dayIndexOf(now());
-  stopDailyWatch?.();
-  stopDailyWatch = null;
   // 基础那一排先开出来：宽版的每日挑战摆在它的最左边（见上面那段）。
   const baseRow = wide ? newRow() : null;
-  if (showDaily) {
-    const dailyBtn = iconButton(dailyArtHtml(today), dailyAria(lang, today), 'home-icon-btn--daily', s.dailyTitle);
-    // 这儿从前有一句 `dailyBtn.dataset.firstPlayable = '1'`：首玩期它也亮着、首玩引导的小箭头也会指
-    // 到它。6-6 起首玩期根本不摆这张卡（showDaily 是 false），那一句删了——留着的话，哪天谁把摆卡的
-    // 判定改松了，它又会在首玩期亮起来。
+  if (has('daily')) {
+    const dailyBtn = named(iconButton(dailyArtHtml(today), dailyAria(lang, today), 'home-icon-btn--daily', s.dailyTitle), 'daily');
     dailyBtn.addEventListener('click', () => handlers.onDaily());
     stopDailyWatch = watchDay(now, (d) => {
       // 主菜单已经被换掉了：这个钟没有用处了，撤掉（下一次画主菜单会另排一个）。
@@ -420,76 +482,68 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
     else axisCards.push(dailyBtn);
   }
 
-  // ---- 方块 · 小球 · 三角 ------------------------------------------------
+  // ---- 方块 · 小球 --------------------------------------------------------
   for (const shape of SHAPES) {
-    const card = layout.base[shape];
-    const btn = iconButton(
-      BASE_ICON[shape],
-      shapeName(lang, card.id, card.name),
-      handlers.glow?.includes(shape) ? 'home-icon-btn--glow' : '',
-      tag(card.id),
-    );
-    btn.addEventListener('click', () => handlers.onSelectBase(card.id));
-    // 首玩期轴上只摆这两张（玩家定的）。三角这时候也不摆——它本来就在锁里。
-    if (shape === 'square' || shape === 'circle') btn.dataset.firstPlayable = '1';
+    if (!has(shape)) continue;
+    const btn = baseCard(shape);
     if (baseRow) baseRow.appendChild(btn);
     else place(btn);
   }
 
-  // ---- 多人游玩 · 老虎机 · 无限反转 --------------------------------------
-  /**
-   * 天才特供的那两张牌（老虎机、无限反转）：没开通就是图案压暗、正中一把锁、
-   * 右下角收着天才招牌，按下去开订阅窗；开通了按下去直接进那个玩法。两张牌
-   * 除了图和去处以外一模一样，所以只写一遍。
+  // ---- 多人游玩 · 老虎机 · 无限反转 · 步步为营 ----------------------------
+  /*
+   * 老虎机、无限反转、步步为营原先是天才特供（没开通就压暗、正中一把锁、右下角收着天才招牌，按下去开订阅窗）。天才层
+   * 2026-10 取消了（10-31 方案推12 Z-J02 E）：这三张第 4 步才出现，出现了就能玩，不用登录。
    */
-  const geniusCard = (glyph: string, title: string, tagKey: string, open: () => void): HTMLButtonElement => {
-    const locked = !isGenius();
-    const btn = iconButton(glyph, locked ? `${title} · ${s.geniusOnly}` : title, '', tag(tagKey));
-    if (locked) {
-      btn.classList.add('home-icon-btn--locked');
-      lockOverlay(btn);
-    }
-    btn.addEventListener('click', () => (locked ? handlers.onLockedLayout() : open()));
+  const modeCard = (glyph: string, title: string, key: string, open: () => void): HTMLButtonElement | null => {
+    if (!has(key)) return null;
+    const btn = named(iconButton(glyph, title, '', tag(key)), key);
+    btn.addEventListener('click', open);
     return btn;
   };
 
   // 那扇小门点进去直接是小屋那一页，不再绕个人主页。它右边是老虎机和无限反
   // 转——这两个不是新棋盘（挑完图形玩的还是那三个基础玩法），所以不排在下面
   // 的棋盘堆里，跟多人游玩同属「另一种玩法」这一排。
-  const mpBtn = iconButton(ICON_MULTIPLAYER, s.mpTitle, '', tag('multiplayer'));
-  mpBtn.addEventListener('click', handlers.onMultiplayer);
-  const slotBtn = geniusCard(ICON_SLOT_MACHINE, s.randomTargetTitle, 'slot', handlers.onRandomTarget);
-  const flipBtn = geniusCard(ICON_FLIP_MODE, s.flipModeTitle, 'flip', handlers.onFlipMode);
+  const mpBtn = modeCard(ICON_MULTIPLAYER, s.mpTitle, 'multiplayer', handlers.onMultiplayer);
+  const slotBtn = modeCard(ICON_SLOT_MACHINE, s.randomTargetTitle, 'slot', handlers.onRandomTarget);
+  const flipBtn = modeCard(ICON_FLIP_MODE, s.flipModeTitle, 'flip', handlers.onFlipMode);
   // 这一张的读屏名传的是**短名**（tag('puzzle') = 「步步为营」），不是全名
   // 「真正解密 · 步步为营」。全名里带着一个 ` · `，而 check-menu.mjs 读
   // aria-label 之后 .split(' ·')[0]，会把它切成「真正解密」——那道门的期望数
   // 组就得写一个界面上没人见过的名字。全名留给陈列页、规则页、排行榜页签和
   // 结算页，菜单上要的只是认得出来。
-  const puzzleBtn = geniusCard(ICON_PUZZLE_MODE, tag('puzzle'), 'puzzle', handlers.onPuzzleMode);
+  const puzzleBtn = modeCard(ICON_PUZZLE_MODE, tag('puzzle'), 'puzzle', handlers.onPuzzleMode);
   // 窄屏：多人游玩顺着链往下摆，老虎机、无限反转、步步为营收进最后那一段（排在四副《更多
   // 布局》前面）。宽屏上它们跟在计时和炸弹后面，凑成一排六张。
   if (!wide) {
-    place(mpBtn);
-    later(slotBtn);
-    later(flipBtn);
-    later(puzzleBtn);
+    if (mpBtn) place(mpBtn);
+    for (const b of [slotBtn, flipBtn, puzzleBtn]) if (b) later(b);
   }
 
   // ---- 计时 · 炸弹 --------------------------------------------------------
   // 一只沙漏代表整个计时档。宽屏窄屏同一颗：计时占的是一张的位置，不是两张——同
-  // 一个板块在笔记本上和在手机上不该长成两个样子。
+  // 一个板块在笔记本上和在手机上不该长成两个样。
   //
   // 按下去开的是**一整页**（ui/timedMode.ts），不再是那个居中的挑选窗。从前那颗
   // 沙漏点下去会飞到屏幕中间、落定时裂成几只，那段动效 2026-09 玩家定了不再保
   // 留；跟着撤掉的还有 `dataset.reopen = 'timed'`——reopen 那条路本来就是给挑选
   // 窗设计的（打完一局回来把那扇窗重新弹出来），整页版的《返回》直接回挑形状那
   // 一屏，和《无限反转》一样。
-  const timedRow = wide ? newRow() : null;
-  const timedBtn = iconButton(ICON_TIMED_COMBINED, s.sectionTimed, 'home-icon-btn--timed', tag('timed'));
-  timedBtn.addEventListener('click', handlers.onTimedMode);
-  if (timedRow) timedRow.appendChild(timedBtn);
-  else place(timedBtn);
-
+  //
+  // 宽版第二排：**这一排第一次要放卡时才造**（10-31 方案推12：空排不造）。第 3 步起计时、炸弹、多人都在，所以实际上
+  // 它总在；写成懒的是为了不让哪天调了 STAGE_OF 之后冒出一排空的。
+  let timedRow: HTMLElement | null = null;
+  const toTimedRow = (btn: HTMLElement): void => {
+    if (!timedRow) timedRow = newRow();
+    timedRow.appendChild(btn);
+  };
+  if (has('timed')) {
+    const timedBtn = named(iconButton(ICON_TIMED_COMBINED, s.sectionTimed, 'home-icon-btn--timed', tag('timed')), 'timed');
+    timedBtn.addEventListener('click', handlers.onTimedMode);
+    if (wide) toTimedRow(timedBtn);
+    else place(timedBtn);
+  }
 
   // ---- 炸弹，接在计时右边 ------------------------------------------------
   /*
@@ -503,37 +557,32 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
    * 写过「这一格不摆方框」「格子收到 27%」两条；手机上第 18 推就换成了一枚图标（bomb-badge.svg）。现
    * 在两端都是这一枚，和旁边的玩法卡一样是一张方图、一样大（--home-card-cap 管着）。
    */
-  const bombBtn = document.createElement('button');
-  bombBtn.className = wide ? 'home-bomb-card' : 'home-icon-btn home-bomb-mini';
-  bombBtn.setAttribute('aria-label', s.bombBasicTitle);
-  const bombArt = document.createElement('span');
-  bombArt.className = 'home-icon-art';
-  bombArt.innerHTML = ICON_BOMB_MENU;
-  bombBtn.appendChild(bombArt);
-  const bombTag = tag('bomb');
-  if (bombTag) bombBtn.appendChild(tagEl(bombTag));
-  wireTapFeedback(bombBtn);
-  bombBtn.addEventListener('click', handlers.onBombMode);
-  if (timedRow) {
-    timedRow.appendChild(bombBtn);
-    timedRow.appendChild(mpBtn);
-    timedRow.appendChild(slotBtn);
-    timedRow.appendChild(flipBtn);
-    timedRow.appendChild(puzzleBtn);
-  } else {
-    place(bombBtn);
+  if (has('bomb')) {
+    const bombBtn = document.createElement('button');
+    bombBtn.className = wide ? 'home-bomb-card' : 'home-icon-btn home-bomb-mini';
+    bombBtn.setAttribute('aria-label', s.bombBasicTitle);
+    const bombArt = document.createElement('span');
+    bombArt.className = 'home-icon-art';
+    bombArt.innerHTML = ICON_BOMB_MENU;
+    bombBtn.appendChild(bombArt);
+    const bombTag = tag('bomb');
+    if (bombTag) bombBtn.appendChild(tagEl(bombTag));
+    wireTapFeedback(bombBtn);
+    bombBtn.addEventListener('click', handlers.onBombMode);
+    named(bombBtn, 'bomb');
+    if (wide) toTimedRow(bombBtn);
+    else place(bombBtn);
   }
+  if (wide) for (const b of [mpBtn, slotBtn, flipBtn, puzzleBtn]) if (b) toTimedRow(b);
 
   // ---- 最后：每个布局玩法自己露脸，不再藏在「+」后面 ---------------------
   // 从前这里是三张通用的「+」卡，点开才看得到里面有什么。现在直接摆出来：
   // 玩家一眼就知道有哪些棋盘，少一层点击。
   //
   // 顺序按方块 / 圆球 / 三角连续排，一个形状的东西挨在一起：菱形方块、六边
-  // 圆球、七色圆球、六边三角。宽屏四张自成一排。
+  // 圆球、七色圆球、六边三角。宽屏四张自成一排（第 5 步才有这一排，之前整排不造）。
   //
   // 窄屏四副一起收进最后那一段，排在老虎机那三张后面，彼此的先后不变（10-08 方案 3-D-2）。
-  // 从前这儿还要再分一道：能玩的两副顺着链往下摆，天才特供的两副才收到最后——同一组棋盘被拆
-  // 在两处，见上面那段注释。
   //
   // ⚠️ 这一圈走的是 **LAYOUT_SHAPES（三族）**，不是上面那个 SHAPES（两族）。
   // 《更多布局》按「它是哪一族的变体」分组，而六边三角仍然归三角族——拿 SHAPES
@@ -541,26 +590,25 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   // 任何错（check-menu 第一遍就是这么红的）。
   const ordered: { card: ShapeCardMeta; shape: BaseShape }[] = [];
   for (const shape of LAYOUT_SHAPES) {
-    for (const card of layout.moreLayouts[shape]) ordered.push({ card, shape });
+    for (const card of layout.moreLayouts[shape]) if (has(card.id)) ordered.push({ card, shape });
   }
 
-  const layoutRow = wide ? newRow() : null;
+  const layoutRow = wide && ordered.length ? newRow() : null;
   for (const { card, shape } of ordered) {
-    const isLocked = isLayoutLocked(card.id);
+    // 没登录挂锁（天才层 10-31 方案推12 取消；判定同 engine/geniusContent.ts 的 layoutLock，这儿用调用方给的登录态，
+    // 门里好摆）。锁的样子：图压暗、正中一把锁；读屏名后面跟一句「登录后可用」。点了开登录窗。
+    const isLocked = !handlers.signedIn && GENIUS_LAYOUTS.includes(card.id);
     const name = shapeName(lang, card.id, card.name);
     const btn = iconButton(
       layoutIcon(card.id, shape),
-      isLocked ? `${name} · ${s.geniusOnly}` : name,
+      isLocked ? `${name} · ${s.signInOnly}` : name,
       // 进阶三角那张图是横画布，摆进方框里会比别人矮一半。给它一个自己的类，
       // 把它缩到和其它图标看着一样大——按「图形本身占多大」算，不是按方框算。
       layoutIconIsWide(card.id) ? 'home-icon-btn--wide-art' : '',
       tag(card.id),
     );
+    named(btn, card.id);
     if (isLocked) {
-      // 锁着的玩法现在直接摆在主菜单上，得一眼看出来是锁着的：图案压暗，正
-      // 中一把锁，右下角收着那块天才招牌——说明这把锁是哪一家的。招牌的大小
-      // 跟着卡片走（见 .home-icon-btn--locked .center-pick-genius），永远压
-      // 不到锁。
       btn.classList.add('home-icon-btn--locked');
       lockOverlay(btn);
     }
@@ -575,197 +623,30 @@ export function renderMenu(container: HTMLElement, layout: HomeLayout, handlers:
   // 老虎机 · 无限反转 · 步步为营 · 菱形方块 · 六边圆球 · 七色圆球 · 大三角，就是它们被攒起来的次序。
   for (const btn of tail) place(btn);
 
-  /**
-   * 首玩期的《我会玩》。
-   *
-   * 宽版（电脑、横屏手机）摆在整张菜单的**下方**——它不是一个玩法，不该和那十
-   * 几张卡排在同一条链上。窄版那一路不走这儿：轴上它是链条里的一环，见下面
-   * mountModeAxis 那一段。
-   */
-  if (handlers.firstPlayLock && !onAxis) {
-    armFirstPlayLock(grid);
-    const btn = knowHowButton(lang, () => handlers.onKnowHow?.());
-    grid.parentElement?.appendChild(btn);
-  }
-
   if (onAxis) {
-    /**
-     * 首玩期的轴：**十三张全摆出来，只是除了两张基础的以外都挂着锁**。
+    /*
+     * 这儿从前是首玩期那一套：十三张全摆、除两张基础卡都挂锁，中间夹一条《我会玩》分界线（modeAxis 的 divider），
+     * 按到锁着的卡抖一下、冒一个上滑箭头（armFirstPlayLock）。10-31 方案推12 起没到的卡根本不造，那一套全删了；
+     * 《我会玩》只在第 1、2 步摆（上面 intro 那一支）。
      *
-     * 玩家 2026-09 第五轮改的口径：「对于检测到的初始玩家来说，转盘也可以看到所
-     * 有内容只是有锁而已，在基础的方块、小球玩法下面写着『我会玩』，下面是其他
-     * 的玩法。玩家如果点击了『我会玩』就解锁了」。
-     *
-     * 上一版是「轴上只摆那两张」——滑不到别处去，新玩家也就看不见这游戏里到底
-     * 有什么。现在能看见、能滑过去，只是按不动（锁着那几张走 armFirstPlayLock
-     * 那条捕获阶段的拦截：抖一下、光更亮一档，不开局）。
-     *
-     * 《我会玩》就排在两张基础卡后面、其余玩法前面——它是「我不用学，全给我打
-     * 开」的那个闸，位置正好在能玩的和锁着的之间。它跟着轴一起形变、一起滑，所
-     * 以直接当成轴上的一项交给 mountModeAxis（轴只管把元素摆到算出来的位置上，
-     * 不要求每一项都是一张卡）。
+     * 轴对卡少不用特别处理：第 3 步 6 张 4 排（每日挑战｜方块·小球｜多人·计时｜炸弹落单居中）、第 4 步 9 张 5 排、
+     * 第 5 步 13 张 7 排。初始焦点按上次停的那张卡的名字找（AXIS_KEY），找不到回第 0 张；新卡出现时不自动滚过去。
      */
-    let entries: HTMLElement[] = axisCards;
-    /** 首玩期那条「基础 | 锁着」的分界线（见下面），没有就是 undefined。 */
-    let divider: HTMLElement | undefined;
-    let dividerAfter = -1;
-    if (handlers.firstPlayLock) {
-      armFirstPlayLock(
-        grid,
-        axisCards.filter((c) => c.dataset.firstPlayable === '1'),
-      );
-      let after = -1;
-      for (let i = 0; i < axisCards.length; i++) {
-        if (axisCards[i].dataset.firstPlayable === '1') after = i;
-        else axisCards[i].classList.add('home-icon-btn--locked');
-      }
-      /**
-       * **它是一条分界线，不是轴上的一站。**
-       *
-       * 上一版把它当成轴上的一项塞进 entries 里——轴的站距是均匀的（一站
-       * 150–210px），而这颗按钮只有 44px 高，于是它上下各空出一大截。玩家
-       * 2026-09 第九轮报的正是这个：「《我会玩》上方有巨大的空格，按理说就是一
-       * 个小小的文字（文字两边是分割线分出上面基础方块、小球玩法和其他锁住的）
-       * 和按钮不占额外的位置」。
-       *
-       * 所以改成**骑在两站中间的那条缝上**：两条横线夹一行小字，由 modeAxis 每
-       * 帧摆到「最后一张基础卡」和「下一张锁着的卡」正中间（见那儿的 divider）。
-       * 它不占站位，轴还是十三站；线和字跟着卡片一起滑，位置永远对得上。
-       *
-       * 外面那层 `.axis-divider` 才是被摆的那个，按钮仍旧只有文字那么宽——热区
-       * 横贯整屏的话，手指落在屏幕中间随便哪儿都算撤掉引导（门里有一条盯着）。
-       */
-      const skip = knowHowButton(lang, () => handlers.onKnowHow?.());
-      divider = document.createElement('div');
-      divider.className = 'axis-divider';
-      const line = () => {
-        const el = document.createElement('span');
-        el.className = 'axis-divider-line';
-        // 两条线是画，不是内容：读屏念到这儿只该听见「我会玩」。
-        el.setAttribute('aria-hidden', 'true');
-        return el;
-      };
-      divider.append(line(), skip, line());
-      dividerAfter = after;
-    }
-    axisFocus = Math.min(axisFocus, Math.max(entries.length - 1, 0));
+    markArrivals(axisCards);
+    // 纯数字是上一版存的「第几张」（同一个标签页跨过这一次更新时还留着）：照旧当序号用一次，之后存的就是名字了。
+    const initial = /^\d+$/.test(axisFocus)
+      ? Math.min(Number(axisFocus), Math.max(axisCards.length - 1, 0))
+      : Math.max(0, axisCards.findIndex((c) => c.dataset.card === axisFocus));
     const axis = mountModeAxis(grid, {
-      cards: entries,
-      initial: axisFocus,
-      onFocus: saveAxisFocus,
-      divider: divider ? { el: divider, after: dividerAfter } : undefined,
-      // 第一站只有《每日挑战》一张（第 19 推，见上面造它的那一段）；那张卡没摆（一局都还没打完，
-      // 10-08 方案 3-D-1）就没有这一站，第一排照旧两张。
-      leadSolo: showDaily,
+      cards: axisCards,
+      initial,
+      onFocus: (i) => saveAxisFocus(axisCards[i]?.dataset.card ?? ''),
+      // 第一站只有《每日挑战》一张（第 19 推，见上面造它的那一段）。
+      leadSolo: has('daily'),
     });
     return () => axis.destroy();
   }
+  markArrivals(Array.from(grid.querySelectorAll<HTMLElement>('[data-card]')));
   // 宽版没有轴，也就没有要拆的东西。
   return () => {};
-}
-
-/**
- * 头一回打开时的那道软锁。
- *
- * 拦在**捕获**阶段的一个监听器，不是给十几张卡各挂一遍：这一页上的卡是分七八
- * 处摆出来的（基础三张、炸弹的九颗小片、更多布局、天才特供……），逐个去改要
- * 改七八处，还得记得以后新加的卡也照做。拦在这儿，往后加什么卡都自动锁上。
- *
- * 被拦下来的那一下不是「没反应」：两张基础卡抖一下、光更亮一档；他按的那张要
- * 是在两张卡下面，就在那儿冒一个小圆角箭头指他往上滑。
- */
-function armFirstPlayLock(grid: HTMLElement, given?: HTMLElement[]): void {
-  /**
-   * 「能玩的那几张」由调用方点名（`given`），认不到才去 grid 里找。
-   *
-   * 这儿栽过两次，都是同一个毛病——**去问 DOM「哪几张能玩」，而问的时机不对**：
-   *
-   *   · 原先找的是 `.home-icon-btn--glow`。光是**引导**加的（打完第一局才给某一
-   *     张镶上），和「这一张现在能不能点」是两件事；真正头一回打开的人一圈光都
-   *     没有，`basics.length === 0` 当场 return，整道拦截一次都没装上。
-   *   · 改成找 `[data-first-playable]` 之后，轴那一路还是空的：轴上的卡这会儿还
-   *     在 axisCards 那个数组里，要等 mountModeAxis 才进 grid。
-   *
-   * 所以现在不猜了：谁造的卡谁最清楚，直接把那两张传进来。
-   */
-  const basics = given?.length
-    ? given
-    : Array.from(grid.querySelectorAll<HTMLElement>('[data-first-playable="1"]'));
-  if (!basics.length) return;
-  let hint: HTMLElement | null = null;
-  let off = 0;
-
-  grid.addEventListener(
-    'click',
-    (e) => {
-      // 炸弹那一块在宽版（电脑、横屏）上不是 .home-icon-btn，是 .home-bomb-card（menu.ts 上面
-      // 造它的那一句：窄版才是 home-icon-btn home-bomb-mini）。从前这儿只认前者，于是电脑上
-      // 一局都没打过的人照样点得开炸弹——锁在宽屏上漏了这一张（第 14 推）。
-      const btn = (e.target as HTMLElement | null)?.closest?.('.home-icon-btn, .home-bomb-card') as HTMLElement | null;
-      if (!btn || basics.includes(btn)) return;
-      e.stopPropagation();
-      e.preventDefault();
-
-      // 抖 + 更亮一档。先摘再挂，中间读一次 offsetWidth 逼浏览器把「没有这个
-      // 类」当成一帧算掉，否则连按两下第二下不会重播。
-      for (const b of basics) b.classList.remove('home-icon-btn--nudge');
-      void basics[0].offsetWidth;
-      for (const b of basics) b.classList.add('home-icon-btn--nudge');
-
-      /**
-       * 指路：他按的那张不能玩，能玩的在别处。
-       *
-       * 宽版（电脑、横屏）能玩的那两张在**上面**，所以是个上箭头。窄版
-       * 2026-09 第十轮换成了一条横着跑的带子（玩家：「带子取代鱼眼轴」），
-       * 「上面」于是不成立了——能玩的在左边或右边。所以这儿按**实际方位**挑
-       * 箭头，不写死一个方向。
-       *
-       * 摆在哪里也跟着变：宽版插在那一排里，带子那一路挂在**带子这一块**
-       * 上。绝不能插进 `.marquee-copy`：那一份的宽度就是无缝循环绕回去的距离，
-       * 往里面塞一个元素，两份就不一样长了，接缝当场露出来。
-       */
-      const onStrip = grid.classList.contains('mode-strip');
-      const bb = btn.getBoundingClientRect();
-      /** 离屏心最近的那个「能玩的」（带子上真身和克隆各有一份）。 */
-      let near = basics[0].getBoundingClientRect();
-      if (onStrip) {
-        const mid = window.innerHeight / 2;
-        let best = Infinity;
-        for (const el of grid.querySelectorAll<HTMLElement>('[data-first-playable="1"]')) {
-          const r = el.getBoundingClientRect();
-          const d = Math.abs(r.top + r.height / 2 - mid);
-          if (d < best) { best = d; near = r; }
-        }
-      }
-      /*
-       * 带子是无缝循环的，所以能玩的那两张**上下都可能**。鱼眼轴时代它们永
-       * 远在上面，所以只有上箭头；现在要看哪一头更近。
-       */
-      let dir: '' | 'up' | 'down' = '';
-      if (bb.top > near.bottom + 8) dir = 'up';
-      else if (near.top > bb.bottom + 8) dir = 'down';
-      if (dir) {
-        if (!hint) {
-          hint = document.createElement('div');
-          hint.setAttribute('aria-hidden', 'true');
-          hint.innerHTML =
-            '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor"' +
-            ' stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">' +
-            '<path d="M12 19.5 V6"/><path d="M5.5 12 L12 5.4 L18.5 12"/></svg>';
-          if (onStrip) grid.appendChild(hint);
-          else basics[0].parentElement?.insertBefore(hint, basics[0]);
-        }
-        hint.className = `home-up-hint home-up-hint--${dir}`;
-        void hint.offsetWidth;
-        hint.classList.add('home-up-hint--in');
-      }
-
-      window.clearTimeout(off);
-      off = window.setTimeout(() => {
-        for (const b of basics) b.classList.remove('home-icon-btn--nudge');
-        hint?.classList.remove('home-up-hint--in');
-      }, 1400);
-    },
-    true,
-  );
 }

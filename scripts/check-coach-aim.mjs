@@ -89,7 +89,12 @@ const A_MS = 10000;
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 const errs = [];
 
-/** 头一回打开（什么键都不设，除了语言）→ 点轴上第 idx 张 → 开局。 */
+/**
+ * 头一回打开（什么键都不设，除了语言和《我会玩》）→ 点轴上第 idx 张 → 开局。
+ *
+ * 《我会玩》是 10-31 方案推12 起才要的：主菜单一步一步出现之后，新人第 1 步只有小球一张、不上轴，方块那张（idx 0）根本
+ * 不在。按过《我会玩》＝直接到第 3 步，而它不碰教学（firstTimeIn 一个都不看它），两张基础卡都还是头一局——量的还是同一件事。
+ */
 async function openFirst({ idx, lang = 'zhHans', reduce = false, width = 390, height = 844 }) {
   const ctx = await browser.newContext({
     viewport: { width, height },
@@ -103,6 +108,7 @@ async function openFirst({ idx, lang = 'zhHans', reduce = false, width = 390, he
     try {
       localStorage.clear();
       localStorage.setItem('slides_lang', l);
+      localStorage.setItem('slides_know_how', '1');
     } catch (e) { /* 无痕模式 */ }
   }, lang);
   await page.goto(BASE, { waitUntil: 'load' });

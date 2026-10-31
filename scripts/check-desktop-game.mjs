@@ -38,6 +38,7 @@
  * 尺寸），不是某一行 CSS 长什么样——这个仓库栽过好几次「门只认字面量」的跟头。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2] || 'http://localhost:8815/';
 
@@ -146,11 +147,12 @@ async function open(vp, board, coach) {
   const name = board.name;
   const ctx = await browser.newContext({ viewport: { width: vp.w, height: vp.h } });
   const seed = coach ? board.firstSeed : ALL_KEYS;
+  await unlockAll(ctx);
   await ctx.addInitScript((keys) => {
     localStorage.setItem('slides_lang', 'zhHans');
     localStorage.setItem(
       'slides_genius',
-      JSON.stringify({ active: true, channel: 'code', until: Date.now() + 365 * 24 * 3600 * 1000 }),
+      JSON.stringify({ active: true, channel: 'code', code: 'GATEUNLOCK', until: Date.now() + 365 * 24 * 3600 * 1000 }),
     );
     for (const k of keys) localStorage.setItem('slides_played_' + k, '1');
   }, seed);

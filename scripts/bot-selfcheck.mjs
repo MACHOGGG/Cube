@@ -82,6 +82,7 @@
  * 方案那一档挂在 `--soak` 上。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 import { writeFileSync } from 'node:fs';
 import * as SC from '../api/_seedcode.js';
 
@@ -1099,6 +1100,7 @@ const ctx = await browser.newContext({
   // 消行照旧一拍一拍走完（settle 等的就是它们）。
   reducedMotion: 'reduce',
 });
+await unlockAll(ctx);
 await ctx.addInitScript((harvest) => {
   localStorage.setItem('slides_lang', 'zhHans');
   localStorage.setItem('slides_intro_seen', '1');
@@ -1115,7 +1117,7 @@ await ctx.addInitScript((harvest) => {
   // 玩家」原样摆一份：channel 必须是 'code'（别的柜台会被 read() 丢成 NOBODY），
   // 而内部码没过期时 refreshEntitlement 原地掉头，一个请求都不发。
   localStorage.setItem('slides_genius', JSON.stringify({
-    active: true, channel: 'code', until: Date.now() + 365 * 864e5,
+    active: true, channel: 'code', code: 'GATEUNLOCK', until: Date.now() + 365 * 864e5,
   }));
 }, Boolean(HARVEST_OUT));
 await ctx.addInitScript(installProbe);

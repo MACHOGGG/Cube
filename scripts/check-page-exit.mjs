@@ -52,6 +52,7 @@
  * 点外面、Esc 照样关得掉。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 import { readFileSync } from 'node:fs';
 
 const BASE = process.argv[2] || 'http://localhost:8964/';
@@ -85,6 +86,7 @@ const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromi
 let genius = null;
 async function openCtx(size) {
   const ctx = await browser.newContext({ viewport: { width: size.w, height: size.h }, reducedMotion: 'reduce' });
+  await unlockAll(ctx);
   await ctx.addInitScript((g) => {
     localStorage.setItem('slides_lang', 'zhHans');
     localStorage.setItem('slides_intro_seen', '1');
@@ -388,6 +390,7 @@ for (const size of SIZES) {
   for (const asGenius of [false, true]) {
     const tag = `累计得分卡${asGenius ? '（天才）' : '（没登录）'}`;
     const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
+    await unlockAll(ctx);
     await ctx.addInitScript(([key, r, g]) => {
       localStorage.setItem('slides_lang', 'zhHans');
       if (g) localStorage.setItem('slides_genius', g);

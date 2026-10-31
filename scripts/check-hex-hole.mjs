@@ -21,6 +21,7 @@
  *     同样一拖，那一行真的滑了，而且滑完洞还在原地、没有哪一枚停在洞上。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2];
 if (!BASE) {
@@ -35,6 +36,7 @@ const check = (n, ok, extra = '') => {
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
+await unlockAll(ctx);
 await ctx.addInitScript(() => {
   localStorage.setItem('slides_lang', 'zhHans');
   localStorage.setItem('slides_intro_seen', '1');
@@ -43,7 +45,7 @@ await ctx.addInitScript(() => {
   for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle',
     'slides_played_square', 'slides_played_circle', 'slides_know_how']) localStorage.setItem(k, '1');
   // 六边形小球 10-09 起是天才特供（补充方案第一部分第 10 条），不写权益就只按得到一把锁。
-  localStorage.setItem('slides_genius', JSON.stringify({ active: true, channel: 'code', until: Date.now() + 9e10 }));
+  localStorage.setItem('slides_genius', JSON.stringify({ active: true, channel: 'code', code: 'GATEUNLOCK', until: Date.now() + 9e10 }));
 });
 const page = await ctx.newPage();
 const errs = [];

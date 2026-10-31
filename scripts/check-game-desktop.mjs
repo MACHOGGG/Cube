@@ -29,6 +29,7 @@
  * 套：底色还是米白、分数牌还是那条矮的。少了这一条，把整站配色改掉也照样绿。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2];
 if (!BASE) { console.log('用法：node scripts/check-game-desktop.mjs http://localhost:8941/'); process.exit(2); }
@@ -71,6 +72,10 @@ const near = (a, b, tol = 2) => Math.abs(a - b) <= tol;
  */
 async function open(w, h, pick, 新人 = false) {
   const ctx = await browser.newContext({ viewport: { width: w, height: h } });
+  // 新人那一路不铺 unlockAll（那一份记着「小球、方块都打过」，头一局的教学条就不出现了），只按一下《我会玩》：主菜单一步一步
+  // 出现之后（10-31 方案推12）新人第 1 步菜单上只有小球，方块那张不在；《我会玩》直接到第 3 步，而它不碰教学。
+  if (新人) await ctx.addInitScript(() => localStorage.setItem('slides_know_how', '1'));
+  else await unlockAll(ctx);
   await ctx.addInitScript(([新人]) => {
     if (!新人) {
       for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle']) localStorage.setItem(k, '1');

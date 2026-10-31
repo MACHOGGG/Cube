@@ -1,13 +1,12 @@
 import { PRIVILEGES, STRINGS, type Lang } from '../i18n';
 import { pushLayer } from '../engine/backNav';
 import { mountPin } from './authBits';
-import { GENIUS_LAYOUTS } from '../engine/geniusContent';
+import { GENIUS_LAYOUTS, isSignedIn } from '../engine/geniusContent';
 import { shapeName } from './shapeLabels';
 import { isStoreChannel, payeeName } from '../engine/channel';
 import {
   signOut,
   entitlement,
-  isGenius,
   askForCode,
   pairAuth,
   restore,
@@ -363,11 +362,12 @@ async function offerToSave(email: string, password: string): Promise<void> {
  */
 
 /**
- * The window behind 成为 Slides 天才. Already a subscriber? Then it is the
- * status window instead — there is nothing to sell someone who has bought it.
+ * 《登录 / 注册》那颗徽章背后的那扇窗（原《成为 Slides 天才》）。已经登录了就开帐号窗——天才层 2026-10 取消之后
+ * （10-31 方案推12 Z-J02 E），这扇窗要讲的只剩「注册了能做什么」，对一个已经登录的人没有可讲的。原先问的是
+ * isGenius()：订阅过期但登着的人点进来，看到的是一扇让他注册的窗，而他早就注册过了（verify-S S16 那条死路）。
  */
 export function openGeniusWindow(lang: Lang, onChanged: () => void): void {
-  if (isGenius()) return openStatusWindow(lang, onChanged);
+  if (isSignedIn()) return openStatusWindow(lang, onChanged);
 
   const s = STRINGS[lang];
   const store = payeeName();
@@ -375,20 +375,18 @@ export function openGeniusWindow(lang: Lang, onChanged: () => void): void {
   // board names are read from GENIUS_LAYOUTS rather than written out again,
   // so adding a board to the subscription adds it here too and this list can
   // never drift into promising something the code does not lock.
-  // 「订阅后立刻解锁」跟个人主页那一段走：两副棋盘、小屋，再加做好了的几样——
-  // 配色、翻面速度、老虎机模式、更多得分目标、更多布局、世界排名。个人主页上
-  // 还在「敬请期待」的才留在下面那一段（玩家的原话：「一些已经上的内容还没有
-  // 被更新进来」）。
+  // 「登录后就能用」（10-31 方案推12 Z-J02 E：天才层取消，这一窗讲的是注册了能做什么）跟个人主页那块「登录后可用」面板
+  // 走：更多布局那几副、开小屋，再加要登录的那几样——配色、深色界面、翻面速度、更多布局、世界排名。老虎机模式、更多得分
+  // 目标、更多玩法原先也在这儿，推12 起不用登录（主菜单打出来就有），从这张单子上撤了——写在「登录后就能用」底下就成
+  // 了假话。个人主页上还在「敬请期待」的才留在下面那一段。
   const nowList = [
     ...GENIUS_LAYOUTS.map((id) => geniusBoardBlurb(id, lang)),
     s.geniusHostRooms,
     PRIVILEGES[lang][0],
+    s.themeTitle,
     s.flipSpeedTitle,
-    s.randomTargetTitle,
-    PRIVILEGES[lang][2],
     PRIVILEGES[lang][3],
     PRIVILEGES[lang][6],
-    `${PRIVILEGES[lang][4]} · ${s.flipModeTitle} · ${s.puzzleModeTitle}`,
   ];
   /**
    * 这一窗**只列头几条，剩下的收成一个「……」**（玩家 2026-09：这一窗太长了，要

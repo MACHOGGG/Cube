@@ -13,6 +13,7 @@
  * 牌子摘掉），这一局也先坐等待页，第三局入局。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 /**
  * 按住那颗《还是离开》。
@@ -42,6 +43,7 @@ const check = (n, ok, extra = '') => {
 
 async function newPlayer(label) {
   const ctx = await browser.newContext({ viewport: { width: 420, height: 900 } });
+  await unlockAll(ctx);
   await ctx.addInitScript(() => {
     for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
       localStorage.setItem(k, '1');

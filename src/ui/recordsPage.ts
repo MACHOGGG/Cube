@@ -9,7 +9,7 @@ import { openCenterPicker } from './centerPicker';
 import { CTL_BACK } from './ctlIcons';
 import type { ShapeCardMeta } from '../shapes/types';
 import { trackShare } from '../engine/analytics';
-import { isGenius } from '../engine/subscription';
+import { isSignedIn } from '../engine/geniusContent';
 import { signedIn } from '../engine/cloudScores';
 import { wantsSignInHint } from '../engine/signInHint';
 import { mountBoardThumb, mountBoardView } from './leaderboard';
@@ -131,10 +131,10 @@ export function renderRecordsPage(
   const total = totalScoreOf(runs) + evictedScoreOf(keys);
   const glyphOf = new Map(sources.map((src) => [src.card.id, src.card.glyph]));
 
-  // 一句只对还没订阅的人有意义的话：成绩留在这台手机里，除非你是 Slides 天才。
-  // 已经是天才的人，这句话没有任何东西可以告诉他——所以整句消失，只剩
-  //《累计得分》和那个数。第 18 推起它只出现在点开之后的那张大卡上（卡上只有数）。
-  const syncNote = isGenius() ? '' : `<span class="total-card-sub">${s.totalScoreSync}</span>`;
+  // 一句只对还没登录的人有意义的话：「登录之后最近的局存在云端」。已经登录的人，这句话没有任何东西可以告诉他——所以
+  // 整句消失，只剩《累计得分》和那个数。第 18 推起它只出现在点开之后的那张大卡上（卡上只有数）。原先问的是「是不是天
+  // 才」，天才层 10-31 方案推12 取消了；这句话说的本来就是登录。
+  const syncNote = isSignedIn() ? '' : `<span class="total-card-sub">${s.totalScoreSync}</span>`;
 
   // 顶上那一行「登录后打的每一局都会存到云端，换设备也找得回。」＋《登录》（10-11 方案 B-14）：主屏版、iOS
   // 浏览器里没登录的人才有，规则在 engine/signInHint.ts。「本机已有 ≥3 局」数的就是底下这张清单的局数。

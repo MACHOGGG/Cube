@@ -247,7 +247,7 @@ const i18n = read('src/i18n.ts');
 // `codeSentNote`（「已发送，验证码 30 分钟内有效」）2026-10-03 退役：那扇窗的标题已经写着
 // 「已寄到 {email}」，同一拍再说一句「已发送」是把同一件事说两遍；而「30 分钟内有效」是
 // 一个**他做不了任何事**的数——码没过期他看不出区别，过期了服务端会直接说。
-const DEAD_KEYS = ['labelRun4', 'labelBlock22', 'label121', 'labelBigTriangle', 'perfLabel', 'codeSentNote'];
+const DEAD_KEYS = ['labelRun4', 'labelBlock22', 'label121', 'labelBigTriangle', 'perfLabel', 'codeSentNote', 'geniusOnly'];
 // 只认**真的声明或读取**，不认注释里提到的名字：i18n.ts 里正写着一段注释解释这
 // 五个为什么删了（「下一个人会拿 labelBlock22 去标一个凑不出来的图案」）。按
 // \bkey\b 去找，那段注释自己就会把门顶红——一条一上来就红的门，最后一定会被人

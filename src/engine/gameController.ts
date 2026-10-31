@@ -1953,8 +1953,12 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     if (!resolving) checkEnd('watch');
   }
 
-  function doPause() {
-    if (!started || gameOver || paused) return;
+  /**
+   * 停住这一局（表、教学条的计时、连锁、死局那 1.4 秒），不碰暂停面板。《暂停》和局中灯泡（10-31 方案推12 Z-J03：
+   * 点灯泡先停住、打开规则窗，关了接着打——中间不必翻出整块暂停面板）都走它。停住了回 true。
+   */
+  function freeze(): boolean {
+    if (!started || gameOver || paused) return false;
     paused = true;
     timer.pause();
     // 教学条的计时（A 的 10 秒、C 至少 5 秒）随暂停冻结（10-11 方案 D-1）。
@@ -1968,6 +1972,11 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       stuckTimer = 0;
       stuckHeldMs = Math.max(0, stuckDueAt - performance.now());
     }
+    return true;
+  }
+
+  function doPause() {
+    if (!freeze()) return;
     // 开局倒数那一屏借的是同一层面板，那时候「再来一局 / 结束游戏」无从谈
     // 起，所以那条路上挂了 .pause--pre 把它们藏起来（见 gameShell 的
     // #startPauseBtn）。现在是真的在打了，摘掉。写在这儿而不是那颗《暂停》
@@ -2084,6 +2093,14 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   // 多人局里没有这颗键——一场同步竞赛暂停不了，那个位置让给了《离开房间》。
   refs.buttons.stop?.addEventListener('click', doPause);
   refs.buttons.continueBtn.addEventListener('click', doResume);
+  // 局中灯泡（10-31 方案推12 Z-J03）：先停住，打开这一局那一份规则（和暂停面板《怎么玩》同一份），关窗接着打。
+  // 灯泡只在单人局有（gameShell 只在给了 bulbKey 的单人局造它）。
+  refs.buttons.hint?.addEventListener('click', () => {
+    if (!refs.openRules || !freeze()) return;
+    refs.openRules(() => {
+      if (paused && !gameOver) doResume();
+    });
+  });
   // A run now ends in exactly two ways, and both are unambiguous: the player
   // presses 结束, or the board itself runs out (every tile turned, or no
   // face-up tile can ever be flipped). Nothing else can navigate away from a

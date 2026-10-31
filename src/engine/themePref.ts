@@ -18,7 +18,8 @@
  * 和 palettePref 一样：存一格、往 <html> 上盖一个属性、通知在看的人。判定只写一
  * 遍（下面的 `theme()`），别处一律问它。
  */
-import { isGenius, onGeniusChange } from './subscription';
+import { onGeniusChange } from './subscription';
+import { isSignedIn } from './geniusContent';
 
 export type Theme = 'light' | 'dark';
 
@@ -68,9 +69,12 @@ export function pickedTheme(): Theme {
   return picked;
 }
 
-/** 现在**实际**用着的那一套。深紫要有权限，没权限一律米白。 */
+/**
+ * 现在**实际**用着的那一套。深紫要登录（10-31 方案推12 Z-J02 E：天才层取消，原先要订阅），没登录一律米白。
+ * 「登录」按 geniusContent.ts 的 isSignedIn 算（D49 Q25：令牌失效、本机仍登着的人照样算；兑过码的也算）。
+ */
 export function theme(): Theme {
-  return picked === 'dark' && isGenius() ? 'dark' : 'light';
+  return picked === 'dark' && isSignedIn() ? 'dark' : 'light';
 }
 
 /** 把它盖到 <html> 上，样式表跟着走。 */

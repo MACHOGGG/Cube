@@ -18,6 +18,7 @@
  * 「离家出走」的 90 秒，整趟两三分钟。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2] || 'http://localhost:8960/';
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
@@ -35,6 +36,7 @@ const api = (body) =>
 
 async function newPlayer(label, opts = {}) {
   const ctx = await browser.newContext({ viewport: { width: 420, height: 900 } });
+  await unlockAll(ctx);
   await ctx.addInitScript(() => {
     for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
       localStorage.setItem(k, '1');

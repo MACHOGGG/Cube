@@ -41,6 +41,18 @@ export type RunKeyFor = (data: RunData) => string | null;
 let restoredFor = '';
 let running: Promise<number> | null = null;
 
+/**
+ * 云上那份存档**整份**交给谁看一眼（10-31 方案推12 Z-J02：主菜单一步一步出现）。
+ *
+ * 落回本机的只有现行规则的局（main.ts 的 runKeyFor 对旧规则的局回 null），可旧规则的局恰恰是老玩家打过哪些玩法最好的
+ * 证据——换手机登录、等云端接回之后，主菜单该和他昨天看到的一样多。所以过滤之前先把全部局的 data 交出去。只挂一个
+ * （main.ts 开机时挂）；它抛错不能连累接回战绩，包一层 try。
+ */
+let archiveHook: ((runs: RunData[]) => void) | null = null;
+export function onCloudArchive(fn: (runs: RunData[]) => void): void {
+  archiveHook = fn;
+}
+
 /** 现在是谁：邮箱，或者内部码。都没有就是空的（没登录）。 */
 const whoAmI = (): string => signedInEmail() || entitlement().code || '';
 
@@ -67,6 +79,11 @@ export function restoreCloudRuns(keyFor: RunKeyFor): Promise<number> {
     }
     restoredFor = me;
     running = null;
+    try {
+      archiveHook?.(mine.archive.map((e) => e?.data).filter((d): d is RunData => !!d && typeof d === 'object'));
+    } catch {
+      /* 菜单那一头出了错，不连累战绩接回来 */
+    }
     const byKey = new Map<string, StoredRun[]>();
     for (const entry of mine.archive) {
       const data = entry?.data;

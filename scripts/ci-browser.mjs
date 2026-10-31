@@ -57,7 +57,7 @@ export const SERVER = '<server>';
 const RULE_ART = join(tmpdir(), 'ci-browser-ruleart.mjs');
 
 /** 片名。和 ci.yml 里 browser 那个矩阵的 shard 一一对应（check-ci-browser 量）。 */
-export const SHARDS = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'seed-deal', 'oldcss'];
+export const SHARDS = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'seed-deal', 'oldcss'];
 
 export const GATES = [
   // 最早收进 CI 的四道（下面这一组），都是当时真的拦下过回归的。
@@ -779,8 +779,8 @@ export const GATES = [
     run: ['scripts/check-cvd-texture.mjs', SERVER],
   },
   // 首玩记号走到结算页才写（10-31 方案推06 Z-C04，站长 10-14 J-2、10-22 Q1）：倒数中《<》/ 返回 / 刷新、打到一半
-  // 刷新都不写 slides_played_square、slides_tutorial_seen、slides_cvd_offer，再点方块教学条照旧；走到结算页才写、方块
-  // 熄光；两个页面共用一份存储时，另一页的主菜单当场撤掉拦截。什么键都不预设。
+  // 刷新都不写 slides_played_circle、slides_tutorial_seen*、slides_cvd_offer，再点小球教学条照旧；走到结算页才写、主菜单
+  // 到第 2 步（方块出现、亮着）；两个页面共用一份存储时，另一页的主菜单当场跟上。什么键都不预设（推12 起量的是小球那局）。
   {
     name: '首玩记号走到结算页才写，另一页跟上',
     shard: 'g', secs: 120, port: 8939,
@@ -792,6 +792,22 @@ export const GATES = [
     name: '交卷待发队列：补交、不收不留、只用原帐号',
     shard: 'g', secs: 120, port: 8940,
     run: ['scripts/check-push-queue.mjs', SERVER],
+  },
+  // ── h 片（10-31 方案推12 加的第十片：主菜单逐步出现、局中灯泡两道新门放进 g 片会把它撑到 25 分钟，超过 15 分钟那条线）──
+  // 主菜单一步一步出现（10-31 方案推12 Z-J02）：第 1 步只有小球（五种尺寸居中）、教学局走到结算才升、每日 / 炸弹 / 代号老
+  // 虎机 / 小屋都只到第 4 步、无限反转到第 5 步（没登录布局挂锁、点了登录窗）、《我会玩》、只升不降、老玩家迁移、新人按
+  // 顺序、小屋学规则不跳步、减弱动态、焦点不动、存不进全摆、屋主挑玩法、老虎机介绍页、小红书三步。兑 TESTMONTH 一次。
+  {
+    name: '主菜单一步一步出现',
+    shard: 'h', secs: 420, port: 8943,
+    run: ['scripts/check-menu-stages.mjs', SERVER],
+  },
+  // 局中灯泡（10-31 方案推12 Z-J03）：前两局「左暂停｜右灯泡」、第 3 局回正中（再来一局也算、教学局也算）、每日挑战单独数、
+  // 小屋局没有、点灯泡先停住开这一局的规则关了接着走、#stopBtn 盒子不动、横屏上下分两半 ≥44。
+  {
+    name: '局中灯泡：前两局、暂停那块牌分两半',
+    shard: 'h', secs: 200, port: 8944,
+    run: ['scripts/check-hint-bulb.mjs', SERVER],
   },
 ];
 

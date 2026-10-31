@@ -80,6 +80,11 @@ async function pageAt(at, { width = 390, height = 844, mobile = true, played = t
         localStorage.setItem('slides_played_circle', '1');
         localStorage.setItem('slides_played_finished', '1');
       }
+      // played: 'all'：主菜单第 5 步（推12，10-31 Z-J02）——十三张全摆。只铺两张基础卡是第 3 步，电脑上只有两排。
+      if (played === 'all') {
+        for (const [k, v] of [['slides_played_tier3', '1'], ['slides_played_tier4', '1'], ['slides_played_stage', '5'],
+          ['slides_played_stage_shown', '5'], ['slides_played_migrated_v1', '1']]) localStorage.setItem(k, v);
+      }
     },
     { played, lang },
   );
@@ -205,32 +210,49 @@ const WHITE = 'rgb(255, 255, 255)';
   await ctx.close();
 }
 
-// ── ⑤ 一局都还没打完的人没有这张卡；打完一局（头一局那个带教学条的也算）它才出现 ─────────
+// ── ⑤ 主菜单第 3 步才摆这张卡（10-31 方案推12 Z-J02）─────────────────────────────────
 //
-// 10-08 方案 3-D-1，玩家拍板：「完成任意一局（含教程局）后出现」。从前（第 19 推）这一节量的是
-// 「首玩期间也亮着、点得开」——新人打开菜单第一眼看见的是一张「今天这一局」，可他连规矩都还没
-// 见过。现在：
-//   a. 新人（首玩期、一局没打完）：手机轴上和电脑那一排里都没有它；轴的第一站是两张基础卡；
-//   b. 同一个人真打一局——点开方块、暂停、《结束游戏》，结算页出来，按《首页》回去——它出现在最
-//      上面（轴的第一站，单独一张）；
-//   c. 改版之前打完过的人（本地只有结算页那颗光的钥匙 slides_played_endcard）照样有它；
-//   d. 存不进 localStorage（无痕窗口）的人照样有它——宁可多摆，不要永远不摆。
+// 原先是「打完过一局、首玩锁撤了才摆」（10-08 方案 3-D-1 ＋ 10-09 补充方案 6-6，一个判定 dailyCardShown）。站长 10-30 改成
+// 主菜单一步一步出现：小球那局教学走到结算页是第 2 步（方块出现），方块那局走到结算页（或按《我会玩》）才是第 3 步——每日
+// 挑战、多人、计时、炸弹一起出现（engine/menuStage.ts 的 STAGE_OF.daily = 3）。所以：
+//   a. 第 2 步（只打完过小球那局）：手机、电脑都没有它；
+//   b. 同一个人把方块那局打到结算页、按《首页》回去——它出现在最上面（轴的第一站，单独一张）；
+//   c. 老玩家只打过方块（迁移按「有过的最高一步」：只有方块 → 第 2 步）：没有它（方案那一条例子，「只打过小球的老玩家 → 第 2 步」）；
+//   d. 存不进 localStorage（无痕窗口）的人照样有它——全部摆出来；
+//   e. 第 2 步按《我会玩》→ 第 3 步，它出来了。
 {
   const t = NOON(SC.dayIndexOf(Date.now()));
-  // a. 手机：首玩期
-  const { ctx, page } = await pageAt(t, { played: false, wait: false });
-  await page.waitForTimeout(500);
-  const a = await page.evaluate(() => ({
+  /** 一台只打完过小球那局的手机（第 2 步）。 */
+  const stage2 = async (w = 390, h = 844, mobile = true) => {
+    const ctx = await browser.newContext({ viewport: { width: w, height: h }, isMobile: mobile, hasTouch: mobile });
+    await ctx.addInitScript(() => {
+      if (sessionStorage.getItem('daily_gate') === '1') return;
+      sessionStorage.setItem('daily_gate', '1');
+      localStorage.clear();
+      localStorage.setItem('slides_lang', 'zhHans');
+      localStorage.setItem('slides_intro_seen', '1');
+      localStorage.setItem('slides_played_circle', '1');
+      localStorage.setItem('slides_played_finished', '1');
+    });
+    const page = await ctx.newPage();
+    page.on('pageerror', (e) => errs.push(e.message));
+    await page.route('**/*', (route) => (route.request().method() === 'HEAD' ? route.abort() : route.continue()));
+    await page.clock.install({ time: t });
+    await page.goto(BASE, { waitUntil: 'load' });
+    await page.waitForSelector('#homeGrid [data-card]', { timeout: 20000 });
+    await page.waitForTimeout(400);
+    return { ctx, page };
+  };
+  const look = (page) => page.evaluate(() => ({
     daily: document.querySelectorAll('.home-icon-btn--daily').length,
-    cards: document.querySelectorAll('.mode-axis > .home-icon-btn').length,
-    locked: document.querySelectorAll('.mode-axis > .home-icon-btn--locked').length,
-    first: [...document.querySelectorAll('.mode-axis > .home-icon-btn')].slice(0, 2).map((e) => (e.getAttribute('aria-label') || '').split(' ·')[0]),
+    cards: [...document.querySelectorAll('#homeGrid [data-card]')].map((c) => c.dataset.card),
   }));
-  check('⑤a 首玩期（尺子）：轴摆出来了、别的玩法锁着', a.cards > 0 && a.locked > 0, `${a.cards} 张 / 锁着 ${a.locked}`);
-  check('⑤a 一局都还没打完：手机轴上没有每日挑战', a.daily === 0, `${a.daily} 张`);
-  check('⑤a 轴的头两张是两张基础卡（第一站不再是单独一张）', a.first.join(' ') === '经典方块 经典小球', a.first.join(' / '));
-  // b. 真打一局：点开方块、暂停、结束游戏、回首页。
-  await page.$$eval('.mode-axis > .home-icon-btn:not(.home-icon-btn--locked)', (els) => els[0].click());
+  // a. 手机：第 2 步
+  const { ctx, page } = await stage2();
+  const a = await look(page);
+  check('⑤a 第 2 步：手机上没有每日挑战，只有方块、小球', a.daily === 0 && a.cards.join() === 'square,circle', JSON.stringify(a));
+  // b. 把方块那局打到结算页：点开方块、暂停、结束游戏、回首页。
+  await page.$eval('#homeGrid [data-card="square"]', (e) => e.click());
   await page.waitForSelector('#startBtn', { state: 'attached', timeout: 15000 });
   await page.$eval('#startBtn', (e) => e.click());
   await page.waitForFunction(() => document.querySelectorAll('#boardWrap [data-r][data-c]').length > 0, null, { timeout: 30000 });
@@ -248,20 +270,16 @@ const WHITE = 'rgb(255, 255, 255)';
     const axisCards = [...document.querySelectorAll('.mode-axis > .home-icon-btn')];
     return { daily: document.querySelectorAll('.home-icon-btn--daily').length, firstIsDaily: axisCards[0]?.classList.contains('home-icon-btn--daily') ?? false };
   });
-  check('⑤b 打完一局回到主菜单：每日挑战出现了，在轴的第一站', back && b.daily === 1 && b.firstIsDaily, JSON.stringify(b));
+  check('⑤b 方块那局走到结算页 → 第 3 步：每日挑战出现了，在轴的第一站', back && b.daily === 1 && b.firstIsDaily, JSON.stringify(b));
   await ctx.close();
-  // a'. 电脑那一排：首玩期也没有它
+  // a'. 电脑：第 2 步也没有它
   {
-    const { ctx, page } = await pageAt(t, { played: false, wait: false, width: 1440, height: 900, mobile: false });
-    await page.waitForTimeout(400);
-    const w = await page.evaluate(() => ({
-      daily: document.querySelectorAll('.home-icon-btn--daily').length,
-      firstRow: [...(document.querySelector('.home-grid > .home-row')?.children ?? [])].map((e) => (e.getAttribute('aria-label') || '').split(' ·')[0]),
-    }));
-    check('⑤a 电脑：一局都还没打完，最上面那一排不是每日挑战', w.daily === 0 && w.firstRow.join(' ') === '经典方块 经典小球', JSON.stringify(w));
+    const { ctx, page } = await stage2(1440, 900, false);
+    const w = await look(page);
+    check('⑤a 电脑：第 2 步没有每日挑战', w.daily === 0 && w.cards.join() === 'square,circle', JSON.stringify(w));
     await ctx.close();
   }
-  // c. 改版之前就打完过的人：只有结算页那颗光的钥匙
+  // c. 只打过方块的老玩家（没有 slides_played_stage、没有迁移哨兵）
   {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
     await ctx.addInitScript(() => {
@@ -276,8 +294,10 @@ const WHITE = 'rgb(255, 255, 255)';
     const page = await ctx.newPage();
     await page.route('**/*', (route) => (route.request().method() === 'HEAD' ? route.abort() : route.continue()));
     await page.goto(BASE, { waitUntil: 'load' });
-    const has = await page.waitForSelector('.home-icon-btn--daily', { timeout: 15000 }).then(() => true).catch(() => false);
-    check('⑤c 改版之前打完过的人（只有 slides_played_endcard）照样有每日挑战', has);
+    await page.waitForSelector('#homeGrid [data-card]', { timeout: 20000 });
+    await page.waitForTimeout(300);
+    const c = await look(page);
+    check('⑤c 只打过方块的老玩家迁移成第 2 步：没有每日挑战', c.daily === 0 && c.cards.join() === 'square,circle', JSON.stringify(c));
     await ctx.close();
   }
   // d. localStorage 用不了
@@ -293,51 +313,18 @@ const WHITE = 'rgb(255, 255, 255)';
     await page.route('**/*', (route) => (route.request().method() === 'HEAD' ? route.abort() : route.continue()));
     await page.goto(BASE, { waitUntil: 'load' });
     const has = await page.waitForSelector('.home-icon-btn--daily', { timeout: 20000 }).then(() => true).catch(() => false);
-    check('⑤d localStorage 用不了：宁可多摆——每日挑战在', has);
+    check('⑤d localStorage 用不了：全部摆出来——每日挑战在', has);
     await ctx.close();
   }
-}
-
-// ── ⑤e 首玩锁还在的时候也没有这张卡（10-09 补充方案 6-6）──────────────────────────────
-//
-// 方案原话：「新手拦截和引导期间（首玩锁生效时），主菜单不渲染今日挑战卡；删掉 menu.ts 的
-// dailyBtn.dataset.firstPlayable = '1'。和 3-D-1『完成任意一局后才出现』合并成同一个判定。」
-// 两条大多数时候是同一件事，量不一样的那一种人：**打完过一局**（slides_played_finished），可两张
-// 基础卡一张都没开过、也没按《我会玩》——比如只在别人的小屋里打完过一局。按 3-D-1 他该有，按 6-6
-// 他还在首玩期：没有这张卡，首玩引导也就不会指到它身上（轴上能按的只剩两张基础卡）。尺子：同一个
-// 人按了《我会玩》，锁撤了，卡就出来——不然「没有」可能只是这一页根本没画出来。
-{
-  const t = NOON(SC.dayIndexOf(Date.now()));
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
-  await ctx.addInitScript(() => {
-    if (sessionStorage.getItem('daily_gate') === '1') return;
-    sessionStorage.setItem('daily_gate', '1');
-    localStorage.clear();
-    localStorage.setItem('slides_lang', 'zhHans');
-    localStorage.setItem('slides_intro_seen', '1');
-    localStorage.setItem('slides_played_finished', '1');
-  });
-  const page = await ctx.newPage();
-  page.on('pageerror', (e) => errs.push(e.message));
-  await page.route('**/*', (route) => (route.request().method() === 'HEAD' ? route.abort() : route.continue()));
-  await page.clock.install({ time: t });
-  await page.goto(BASE, { waitUntil: 'load' });
-  await page.waitForSelector('.mode-axis .home-icon-btn', { timeout: 20000 });
-  await page.waitForTimeout(400);
-  const e = await page.evaluate(() => ({
-    daily: document.querySelectorAll('.home-icon-btn--daily').length,
-    locked: document.querySelectorAll('.mode-axis > .home-icon-btn--locked').length,
-    open: [...document.querySelectorAll('.mode-axis > .home-icon-btn:not(.home-icon-btn--locked)')].map((b) => (b.getAttribute('aria-label') || '').split(' ·')[0]),
-    knowHow: !!document.querySelector('.know-how-btn'),
-  }));
-  check('⑤e 首玩锁还在（尺子）：别的玩法锁着、《我会玩》在', e.locked > 0 && e.knowHow, JSON.stringify(e));
-  check('⑤e 打完过一局、可首玩锁还在：没有每日挑战', e.daily === 0, `${e.daily} 张`);
-  check('⑤e 轴上按得动的只有两张基础卡（首玩引导不会指到别处）', e.open.join(' ') === '经典方块 经典小球', e.open.join(' / '));
-  // 尺子：按了《我会玩》，锁撤了，卡就出来。
-  await page.evaluate(() => document.querySelector('.know-how-btn').click());
-  const after = await page.waitForSelector('.mode-axis .home-icon-btn--daily', { timeout: 8000 }).then(() => true).catch(() => false);
-  check('⑤e（尺子）按了《我会玩》锁撤了，每日挑战出来了', after);
-  await ctx.close();
+  // e. 第 2 步按《我会玩》→ 第 3 步
+  {
+    const { ctx, page } = await stage2();
+    check('⑤e（尺子）第 2 步：《我会玩》在、没有每日挑战', !!(await page.$('.know-how-btn')) && (await look(page)).daily === 0);
+    await page.evaluate(() => document.querySelector('.know-how-btn').click());
+    const after = await page.waitForSelector('.mode-axis .home-icon-btn--daily', { timeout: 8000 }).then(() => true).catch(() => false);
+    check('⑤e 按了《我会玩》到第 3 步，每日挑战出来了', after);
+    await ctx.close();
+  }
 }
 
 // ── ⑥ 电脑宽屏：每日挑战在基础那一排的最左边，三张一样大、等距、整排居中；三排一屏放下 ─────
@@ -350,11 +337,12 @@ const WHITE = 'rgb(255, 255, 255)';
 //   · 各行等距（≤1px）、不用滚、最后一排压不到底排。
 // 同一节顺带量 7-17 的炸弹卡（方案：「放在 check-daily 量三排的那一节旁边」）：卡里是一枚 svg、没有
 // .bomb-panel；图那一格是方的（宽高差 ≤2px），和同一排的计时那张宽、高各差 ≤2px。
-// 首玩期这一排只有两张基础卡，归 ⑤a。
+// 第 2 步这一排只有两张基础卡，归 ⑤a。
 {
   const SIZES = [[1440, 900], [1920, 1080], [1366, 768], [1280, 800], [1536, 864]];
   for (const [W, H] of SIZES) {
-    const { ctx, page } = await pageAt(NOON(SC.dayIndexOf(Date.now())), { width: W, height: H, mobile: false });
+    // 量的是十三张全摆时的三排（第 5 步）。
+    const { ctx, page } = await pageAt(NOON(SC.dayIndexOf(Date.now())), { width: W, height: H, mobile: false, played: 'all' });
     await page.waitForTimeout(600);
     const m = await page.evaluate(() => {
       const rows = [...document.querySelectorAll('.home-grid > .home-row')];

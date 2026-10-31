@@ -1,5 +1,5 @@
 import { STRINGS, type Lang } from '../i18n';
-import { isGenius } from '../engine/subscription';
+import { isSignedIn } from '../engine/geniusContent';
 import { countdownDigit } from '../engine/clockSync';
 import { countFrom, cvdOfferHtml, flipHintHtml, isLandscapeMode, pushDigit, startStageHtml } from './startStage';
 import { colorblindOn, setColorblind } from '../engine/palettePref';
@@ -97,10 +97,10 @@ export interface MultiplayerHandlers {
   onBack: () => void;
   /** The countdown has run out: deal the seeded board and race. */
   onMatchStart: (match: MatchStart) => void;
-  /** Opening a room is the subscriber's — this shows them what that is. */
+  /** 开小屋要登录（10-31 方案推12；原先要订阅）：没登录的人按《开小屋》，开登录窗。 */
   onNeedGenius: () => void;
   /**
-   * 服务器不认这台设备了（403 geniusOnly）：把**登录**那扇窗打开。
+   * 服务器不认这台设备了（403 signInToHost；推11 之前是 geniusOnly）：把**登录**那扇窗打开。
    *
    * 和 onNeedGenius 是两件事，必须分开走。这个人多半已经付过钱了，缺的只是
    * 在这台设备上再登一次；而 onNeedGenius 那条路第一句就是「他是不是天
@@ -195,8 +195,6 @@ const esc = (v: string) =>
 export function errorText(reason: RoomError, lang: Lang): string {
   const s = STRINGS[lang];
   switch (reason) {
-    case 'geniusOnly':
-      return s.mpNeedGenius;
     // 开小屋只要登录（10-31 方案推11 Z-J01）：没登录（或令牌不作数了）点《开小屋》，服务器回这个词。
     case 'signInToHost':
       return s.signInToHost;
@@ -407,11 +405,9 @@ export function renderMultiplayerPage(
 
   function renderHome(message = '') {
     stopAll();
-    // 开房间是订阅（或内部码）才有的事，所以那块天才招牌一直挂着——它说的是
-    // 「这件事属于天才」，对已经开通的人同样成立：那是他才有的权利。
-    // 变的只有那把锁：还没开通的人才看得到它，按下去弹订阅那一页；开通了的
-    // 人只剩招牌，按下去直接开房。
-    const needsGenius = !isGenius();
+    // 开小屋要登录（10-14 F-1 h，10-31 方案推12：原先要订阅或内部码）。那把锁只有没登录的人看得到，按下去开登录窗；
+    // 登着的人按下去直接开房。「登录」按 isSignedIn 算（D49 Q25；兑过码的也算）。
+    const needsGenius = !isSignedIn();
 
     /**
      * 那颗键上的字，拆成「不动的」和「要换的」两截。
@@ -604,9 +600,8 @@ export function renderMultiplayerPage(
      * `busy` 是两颗键**共用**的：连点《开小屋》再点《开竞赛》，也只该开出一间。
      */
     const openRoom = async (contest: boolean) => {
-      // Checked here as well as on the server, so the answer is the paywall
-      // rather than an error message.
-      if (!isGenius()) return handlers.onNeedGenius();
+      // 这儿先问一遍（服务器也问）：没登录的人看到的是登录窗，不是一句报错。
+      if (!isSignedIn()) return handlers.onNeedGenius();
       if (busy) return;
       busy = true;
       msg.textContent = s.workingLabel;
@@ -623,35 +618,15 @@ export function renderMultiplayerPage(
       if (dead) return;
       if (!made.ok) {
         /*
-         * 服务器答 geniusOnly，走到这儿就一定不是「你不是天才」。
+         * 服务器答 signInToHost（10-31 方案推11 起开小屋只问「登录了没有」）：走到这儿的人本机缓存都说「登着」——上面
+         * 那道 isSignedIn() 已经把没登录的人拦在登录窗那边了。所以服务器说没登录，说的其实是**这台设备手里那把令牌
+         * 它已经不认了**（在别处改过密码、换过邮箱，或者令牌过期）：说那一句、把登录那扇窗打开，他缺的就是在这台设备上
+         * 再登一次。
          *
-         * 上面那道 `if (!isGenius())` 已经把没开通的人拦在付费墙那边了——能
-         * 发出这个请求的，本机缓存都说「我是天才」。所以服务器说不是，说的
-         * 其实是另一件事：**这台设备手里那把令牌它已经不认了**（在别处改过
-         * 密码、换过邮箱，或者令牌过期）。
-         *
-         * 原先这儿一律走 errorText，而 geniusOnly 那一档回的是
-         * mpNeedGenius ——「加入 Slides 天才搭建的小屋」。那是分割线底下那句
-         * 招呼，既没说出了什么事，也没给出路：一个付过钱的人按下《开小屋》，
-         * 屏幕上跳出一句和他处境无关的话，然后就没有然后了。线上真出过：
-         * 同一台设备上 /api/scores 连着 401、/api/room 连着 403，玩家看到的
-         * 只有那一句。
-         *
-         * 现在照实说（sessionGone，全站同一句），并且把登录那扇窗打开——他
-         * 缺的就是在这台设备上再登一次。
+         * 这儿原先还有一支 geniusOnly（旧服务端在天才那一道门槛上回的），10-31 方案推12 删了：推11 之后服务器不再回它。
          */
-        // 10-31 方案推11 起服务器回的是 signInToHost（开小屋只问登录了没有）；geniusOnly 那一支是旧服务端的回包，推12 再清。
-        // 两样都是「这台设备在服务器眼里没登录」：说那一句、打开登录窗。
         if (made.reason === 'signInToHost') {
           msg.textContent = s.signInToHost;
-          handlers.onSessionGone();
-          return;
-        }
-        if (made.reason === 'geniusOnly') {
-          msg.textContent = s.sessionGone;
-          // 开的是**登录**窗，不是「办会员」那条路：本机缓存这会儿还以为自己
-          // 是天才，那条路会因此拐进《账户》窗——里面没有登录入口（见
-          // MultiplayerHandlers 的 onSessionGone）。
           handlers.onSessionGone();
           return;
         }

@@ -13,11 +13,13 @@
  *   · 屋主解散之后，客人拿到的是通知/战绩，不留在旧小屋页。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 const BASE = process.argv[2];
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 let fail = 0; const check = (n, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${n}${extra ? '  ' + extra : ''}`); if (!ok) fail++; };
 async function newPlayer() {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await unlockAll(ctx);
   await ctx.addInitScript(() => { for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle']) localStorage.setItem(k, '1'); localStorage.setItem('slides_lang', 'zhHans'); });
   const page = await ctx.newPage(); await page.goto(BASE, { waitUntil: 'load' }); await page.waitForSelector('#navProfile', { timeout: 20000 }); return { ctx, page };
 }

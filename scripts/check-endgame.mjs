@@ -30,6 +30,7 @@
  * 要开浏览器、一跑好几分钟，所以留在本地手跑，不进 CI。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2] || 'http://localhost:8961/';
 /** 滑多少步就收工（一步约 1.2 秒）。 */
@@ -43,6 +44,7 @@ const check = (n, ok, extra = '') => {
 };
 
 const ctx = await browser.newContext({ viewport: { width: 430, height: 900 } });
+await unlockAll(ctx);
 await ctx.addInitScript(() => {
   localStorage.setItem('slides_lang', 'zhHans');
   localStorage.setItem('slides_intro_seen', '1');

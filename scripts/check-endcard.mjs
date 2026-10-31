@@ -17,6 +17,7 @@
  * 比例的占位图——量的是排版，不是那一局打了多少分。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 import { readFileSync } from 'node:fs';
 
 const BASE = process.argv[2] || 'http://localhost:8817/';
@@ -58,6 +59,7 @@ const REACH = (ids) => {
 
 for (const [tag, vp] of [['横屏 844×390', { width: 844, height: 390 }], ['竖屏 390×844', { width: 390, height: 844 }]]) {
   const ctx = await browser.newContext({ viewport: vp });
+  await unlockAll(ctx);
   await ctx.addInitScript(seed);
   const page = await ctx.newPage();
   await page.goto(BASE, { waitUntil: 'load' });

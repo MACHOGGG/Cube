@@ -11,9 +11,10 @@
  *
  * 玩家 2026-09 定的那一条有两半，而且两半会互相打架，所以要一起量：
  *
- *   ① 按下去**立刻**跳过所有引导的锁——主菜单不再只让点基础方块和基础小球，
- *     那圈指路的光也撤掉，按钮自己也不该再在（引导没在拦却摆着一颗跳过引导的
- *     按钮，正是玩家点名不要的「意料之外的界面」）。
+ *   ① 按下去**立刻**跳过引导——10-31 方案推12 起主菜单一步一步出现（engine/menuStage.ts），《我会玩》＝直接到第 3 步：
+ *     每日挑战、方块、小球、多人、计时、炸弹六张摆出来，那圈指路的光撤掉，按钮自己也不该再在（引导没在拦却摆着一颗
+ *     跳过引导的按钮，正是玩家点名不要的「意料之外的界面」）。按钮只在第 1、2 步摆，在那一排卡的正下方（不再是轴
+ *     上的分界线）。
  *   ② **每个玩法头一回进去自带的教学照旧**（玩家原话：「第一次点击开每个玩法
  *     还是会触发自带的教学」）。这一条最容易被顺手做掉：把「跳过引导」实现成
  *     「把所有 firstTimeIn 都记成已看过」就一次性把教学条也关了，而且不会报
@@ -27,17 +28,10 @@ const BASE = process.argv[2] || 'http://localhost:8953/';
 const XHS = process.argv[3] || '';
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 let fail = 0;
-/**
- * 轴 / 带子上一共几站。
- *
- * 2026-09（《侵蚀阶梯》v1.2 PR-6）从 14 收到 12：三角那副基础棋盘和 V 形三角都删了。
- * 和 check-mode-axis.mjs 里那个 CARDS 是同一个数，两处要一起改——张数钉死而不是从页
- * 面上数出来，就是为了「哪天一张卡悄悄不见了」这道门会红。
- */
-// 第 19 推起多一张《每日挑战》（轴上第一站、独占一排），12 → 13。10-08 方案 3-D-1 起它只给打完
-// 过一局的人摆（玩家拍板「完成任意一局（含教程局）后出现」），而这道门量的正是一局都还没打完的
-// 首玩期——轴上没有它，回到 12。
-const CARDS = 12;
+/** 第 3 步网页主菜单上几张（每日挑战、方块、小球、多人、计时、炸弹）。钉死而不是从页面上数：哪天一张卡悄悄不见了，这儿会红。 */
+const CARDS = 6;
+/** 第 3 步小红书主菜单上几张（每日挑战＋六张玩法卡）。 */
+const XHS_CARDS = 7;
 
 const check = (n, ok, extra = '') => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${n}${extra ? '  ' + extra : ''}`);
@@ -45,341 +39,152 @@ const check = (n, ok, extra = '') => {
 };
 
 /**
- * 一台全新的手机：没有任何存档，只把语言和开场动画跳过。
+ * 一台全新的手机：没有任何存档，只设语言。
  *
- * **只在头一次导航清空**（拿 sessionStorage 当哨兵）。`addInitScript` 是每次导
- * 航都跑的，写成无条件 `localStorage.clear()` 就会在刷新那一步把刚才按下的
- * 《我会玩》连带清掉——这道门第一版正是这样，于是「刷新之后还算跳过」红了两
- * 条，而后面「教学条照旧」那一条反倒变成假绿（它量的是没按过的状态）。
+ * **只在头一次导航清空**（拿 sessionStorage 当哨兵）。`addInitScript` 是每次导航都跑的，写成无条件
+ * `localStorage.clear()` 就会在刷新那一步把刚才按下的《我会玩》连带清掉。
  */
-async function freshPage(ctx) {
+async function freshPage(ctx, preset = {}) {
   const page = await ctx.newPage();
-  await page.addInitScript(() => {
+  await page.addInitScript((kv) => {
     if (sessionStorage.getItem('gate_primed') === '1') return;
     localStorage.clear();
     localStorage.setItem('slides_lang', 'zhHans');
-    localStorage.setItem('slides_intro_seen', '1');
+    for (const [k, v] of Object.entries(kv)) localStorage.setItem(k, v);
     sessionStorage.setItem('gate_primed', '1');
-  });
+  }, preset);
   await page.goto(BASE, { waitUntil: 'load' });
   await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
   await page.waitForTimeout(400);
   return page;
 }
-
-/**
- * 点主菜单上的一张玩法卡。
- *
- * 手机竖屏的主菜单是那条鱼眼轴（`.mode-axis`），它铺满整幅宽、自己收手势，离焦
- * 点远的卡因此吃不到指针事件——Playwright 的 `page.click()` 会一路重试到超时，
- * 报「`#homeGrid` intercepts pointer events」。玩家在真机上是先滑到那一张再点，
- * 这道门量的不是轴（那是 check-mode-axis 的活），是「按下去之后会怎样」，所以
- * 直接在按钮上派发 click，不复刻滑动那一段。
- *
- * 找不到那张卡就返回 false（首玩期轴上只摆基础方块和基础小球两张，别的玩法根本
- * 不在 DOM 里）——调用方据此判断，而不是吞掉一个超时。
- */
-async function clickCard(page, label) {
-  const el = await page.$(`.home-icon-btn[aria-label^="${label}"]`);
-  if (!el) return false;
-  await el.evaluate((e) => e.click());
-  return true;
-}
+const cardsOf = (p) => p.evaluate(() => [...document.querySelectorAll('#homeGrid [data-card]')].map((c) => c.dataset.card));
+const glowOf = (p) => p.evaluate(() => [...document.querySelectorAll('#homeGrid .home-icon-btn--glow')].map((c) => c.dataset.card));
+/** 在页面里派发 click（手机主菜单第 3 步起是鱼眼轴，离焦点远的卡吃不到指针事件——见 check-mode-axis）。 */
+const tap = (p, card) => p.$eval(`#homeGrid [data-card="${card}"]`, (e) => e.click()).then(() => true).catch(() => false);
 
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 const errs = [];
 ctx.on('page', (p) => p.on('pageerror', (e) => errs.push(e.message)));
 
-// ── 1. 新人一进来：拦着，而且摆着那颗按钮 ───────────────────────────
+// ── 1. 新人一进来：第 1 步，摆着那颗按钮 ──────────────────────────────
 let page = await freshPage(ctx);
 {
   const seen = await page.evaluate(() => {
     const b = document.querySelector('.know-how-btn');
     const r = b?.getBoundingClientRect();
-    const glow = new Set([...document.querySelectorAll('.home-icon-btn--glow')].map((e) => e.dataset.stripIdx ?? e.getAttribute('aria-label'))).size;
-    // 轴上这一项是被鱼眼缩放过的，屏幕上的高度＝版面高度 × 这一帧的 scale。量
-    // 「热区够不够 44px」要看**版面**高度：它离中线远的时候本来就该小一圈，滑到
-    // 中线上又会胀到 44×1.6。除掉 scale 才是那个不变量。
-    const sc = Number((b?.style.transform.match(/scale\(([\d.]+)\)/) || [0, '1'])[1]) || 1;
+    const row = document.querySelector('.home-row--intro')?.getBoundingClientRect();
     return {
-      text: b?.textContent?.trim() || '',
-      h: (r?.height || 0) / sc, w: (r?.width || 0) / sc, scale: sc,
-      top: r?.top ?? -1, glow,
+      text: b?.textContent?.trim() || '', h: r?.height || 0, w: r?.width || 0,
+      cx: r ? r.left + r.width / 2 : 0, top: r?.top ?? -1, rowBottom: row?.bottom ?? 1e9, vw: document.documentElement.clientWidth,
+      divider: !!document.querySelector('.axis-divider'),
     };
   });
-  check('新人的主菜单上有《我会玩》', seen.text === '我会玩', JSON.stringify(seen.text));
-  check('热区不小于 44px（看着小，按着不小）', seen.h >= 44, `版面 ${seen.h.toFixed(1)}px 高 × ${seen.w.toFixed(1)}px 宽（这一帧 scale ${seen.scale}）`);
-  /*
-   * 带子上的东西摆了**两份**（无缝循环靠的就是这个，见 engine/marquee.ts），
-   * 所以得按 data-strip-idx 去重。不去重的话这儿量出来是 4，而它并不是「多了
-   * 两张发光的卡」，是同两张各有一个分身。
-   */
-  check('这时候两张基础卡还镶着光', seen.glow === 2, `${seen.glow} 张`);
-
-  /**
-   * 它在轴上的**位置**：两张基础卡之后、其余玩法之前。
-   *
-   * 口径 2026-09 第五轮定的（玩家原话：「在基础的方块、小球玩法下面写着『我会
-   * 玩』，下面是其他的玩法」）。前两轮它先是页面下方的一颗按钮、又是浮在底排上
-   * 方的一颗；现在它是**链条里的一环**，所以量的是「第几项」，不再是「在谁下面
-   * 多少像素」——轴上每一项的屏幕位置随时在变，量像素等于量这一帧的运气。
-   *
-   * 热区那一条（上面）和「按下去解锁」那一条（下面）没变：它仍然是跳过引导的唯
-   * 一出口。
-   */
-  const order = await page.evaluate(() => {
-    const host = document.querySelector('.home-grid');
-    const b = document.querySelector('.know-how-btn');
-    if (!host || !b) return null;
-    /*
-     * 只看**真身那一份**。
-     *
-     * 带子（.mode-strip）把内容摆了两份，第二份是 `cloneNode` 出来的画（整个
-     * aria-hidden）。两份一起数的话，十四张卡数出二十八张、两张发光的数出四张
-     * ——都不是真的多了，是同一件东西的分身。
-     */
-    const copy = host.querySelector('.marquee-copy') || host;
-    const cards = [...copy.children].filter((e) => e.classList.contains('home-icon-btn'));
-    const box = b.closest('.axis-divider') || b;
-    const onAxis = host.classList.contains('mode-axis');
-    /*
-     * 量的是「它夹在能玩的和锁着的之间」。两种排法要用两把尺子：
-     *
-     *   · **带子**用布局坐标（offsetTop）：它每帧都在走，屏幕坐标量的是这一帧的
-     *     运气。
-     *   · **鱼眼轴**只能用屏幕坐标。轴把十四张卡**绝对定位在同一条线上**
-     *     （`top: calc(50% − …)`），前后全靠 transform 排开——offsetTop 十四张
-     *     一模一样，连分界线也一样，按它分「上头/下头」分出来是两个空集。这道门
-     *     从第十一轮菜单换回轴那天起就是这么红的（「上头有（空）」）。轴不会自己
-     *     滑（玩家点名不要自动滑），停着的时候屏幕坐标是稳的，正好拿来量。
-     */
-    const ly = (e) => {
-      if (!onAxis) return e.offsetTop + e.offsetHeight / 2;
-      const r = e.getBoundingClientRect();
-      return r.top + r.height / 2;
-    };
-    const my = ly(box);
-    const before = cards.filter((e) => ly(e) < my);
-    const after = cards.filter((e) => ly(e) > my);
-    return {
-      onStrip: host.classList.contains('mode-strip'),
-      onAxis,
-      before: before.map((e) =>
-        e.classList.contains('home-icon-btn--daily') ? '每日挑战' : (e.getAttribute('aria-label') || '').split(' ·')[0]),
-      afterLocked: after.length > 0 && after.every((e) => e.classList.contains('home-icon-btn--locked')),
-      stations: cards.length,
-      inStrip: box.parentElement === copy,
-    };
-  });
-  // 第 19 推那一版首玩期间最上面还有一张《每日挑战》；10-08 方案 3-D-1 起一局都还没打完的人没
-  // 有它（打完头一局才冒出来，check-daily ⑤ 量那一条），所以分界线上头又只是两张基础卡。名字按
-  // 类认：它的读屏名带日期，天天变——万一它回来了，这儿会写着「每日挑战」。
-  check(
-    '《我会玩》就在两张基础卡下面（上头只有它们俩，没有每日挑战）',
-    order?.before.length === 2 && order.before.join(' ') === '经典方块 经典小球',
-    `上头有 ${order?.before.join(' ') || '（空）'}`,
-  );
-  check('它下面那些玩法这会儿都锁着', order?.afterLocked === true);
-  if (order?.onStrip) {
-    check('带子那一路：它就排在带子里（跟着一起滑）', order?.inStrip === true);
-    // 一份里 CARDS 张卡：分界线不算一站。
-    check(`带子上还是 ${CARDS} 项`, order?.stations === CARDS, `${order?.stations} 项`);
-  }
-  if (order?.onAxis) {
-    // 轴上 CARDS 张卡（分界线不算一站）。少一张就是首玩期那一组锁没摆全。
-    check(`轴上还是 ${CARDS} 项`, order?.stations === CARDS, `${order?.stations} 项`);
-  }
-
-  /**
-   * 拦着：按一张不该点的卡，不会开局。
-   *
-   * 这一条的口径也是第五轮换的。上一版轴上只摆那两张，所以量的是「别的玩法根本
-   * 不在菜单上」；现在**全摆出来了，只是挂着锁**（玩家：「转盘也可以看到所有内容
-   * 只是有锁而已」）。于是两样都要量：它在（找得到、有锁），以及按下去开不了局。
-   *
-   * 少了前一半，「按不开」会在卡片压根不存在时自动通过，量的是空气；少了后一
-   * 半，锁就只是一张图。
-   */
-  /*
-   * 拿哪一张量：**计时挑战**——免费的，只在首玩期锁着。原先拿的是菱形方块，10-09 起它挂的是天才的
-   * 锁（补充方案第一部分第 10 条），按完《我会玩》照样开不了：拿它量「首玩期那把锁撤了没有」，量
-   * 到的会是另一把锁。
-   */
-  const lockedCard = await page.evaluate(() => {
-    // **直接子元素**，不是后代：炸弹那张卡里嵌着九颗小片，其中一颗的名字也叫
-    // 「进阶炸弹 · 菱形方块」——按后代找会先撞上它（它是画不是控件，自然没有
-    // 锁），于是这一条会莫名其妙地红。
-    // 带子把内容摆了两份，只看真身那一份（第二份是 aria-hidden 的克隆）。
-    const host = document.querySelector('.home-grid');
-    const copy = host.querySelector('.marquee-copy') || host;
-    const el = [...copy.children].find(
-      (e) =>
-        e.classList.contains('home-icon-btn') &&
-        (e.getAttribute('aria-label') || '').startsWith('计时挑战'),
-    );
-    return el ? { there: true, locked: el.classList.contains('home-icon-btn--locked') } : { there: false };
-  });
-  check('首玩期别的玩法也摆在菜单上，只是挂着锁', lockedCard.there === true && lockedCard.locked === true, JSON.stringify(lockedCard));
-  const reachable = await clickCard(page, '计时挑战');
-  await page.waitForTimeout(900);
-  const stillMenu = await page.evaluate(() => !!document.querySelector('.home-grid'));
-  check('按别的玩法开不起来（锁在拦着）', stillMenu);
+  check('新人的主菜单（第 1 步）上有《我会玩》', seen.text === '我会玩', JSON.stringify(seen.text));
+  check('热区不小于 44px 高', seen.h >= 44, `${seen.h.toFixed(1)}px`);
+  check('宽只有字那么宽（不是横贯整屏的一条）', seen.w > 0 && seen.w <= 140, `${seen.w.toFixed(1)}px`);
+  check('在那一排卡的正下方、居中', seen.top >= seen.rowBottom - 0.5 && Math.abs(seen.cx - seen.vw / 2) <= 2, JSON.stringify(seen));
+  check('不再是轴上的分界线', !seen.divider);
+  check('第 1 步只有小球一张、亮着', (await cardsOf(page)).join() === 'circle' && (await glowOf(page)).join() === 'circle',
+    `${(await cardsOf(page)).join()} · 亮 ${(await glowOf(page)).join()}`);
 }
 
-// ── 2. 按下去：锁、光、按钮自己，一起撤掉 ────────────────────────────
+// ── 2. 按下去：直接到第 3 步 ───────────────────────────────────────
 {
-  // 轴上那一项多半在屏幕外（它是第 3 项），Playwright 的 click 会等它「进视口」
-  // 然后超时。轴不是滚动容器，滚不出来——直接派发一次 click，和玩家滑过去按那一
-  // 下是同一条路。
   await page.evaluate(() => document.querySelector('.know-how-btn').click());
   await page.waitForTimeout(700);
-  const after = await page.evaluate(() => ({
-    btn: !!document.querySelector('.know-how-btn'),
-    glow: new Set([...document.querySelectorAll('.home-icon-btn--glow')].map((e) => e.dataset.stripIdx ?? e.getAttribute('aria-label'))).size,
-    menu: !!document.querySelector('.home-grid'),
-  }));
-  check('按完按钮自己不在了', after.btn === false);
-  check('按完那圈指路的光也撤了', after.glow === 0, `${after.glow} 张`);
-  check('按完还在主菜单上（不是跳到别处去了）', after.menu);
-
-  // 真的解锁了：刚才按不开的那一张现在按得开。
-  check('按完计时挑战按得开了（找得到这张卡）', await clickCard(page, '计时挑战'));
-  await page.waitForFunction(
-    () => document.querySelectorAll('#boardWrap .tile, #boardWrap .ball, #startBtn, .timed-page').length > 0,
-    { timeout: 15000 },
-  ).catch(() => {});
-  const opened = await page.evaluate(
-    () => !document.querySelector('.home-grid') || !!document.querySelector('#startBtn'),
-  );
-  check('刚才按不开的那一张现在开得了', opened);
+  const cards = await cardsOf(page);
+  check(`按完：第 3 步 ${CARDS} 张`, cards.length === CARDS, cards.join());
+  check('按完按钮自己不在了', !(await page.$('.know-how-btn')));
+  check('按完那圈指路的光也撤了', (await glowOf(page)).length === 0, (await glowOf(page)).join());
+  check('slides_played_stage = 3', (await page.evaluate(() => localStorage.getItem('slides_played_stage'))) === '3');
+  check('按完计时挑战按得开（找得到这张卡）', await tap(page, 'timed'));
+  await page.waitForSelector('.slot-pick-opt, .timed-page', { timeout: 15000 }).catch(() => {});
+  check('计时那一页开了', !(await page.$('#homeGrid')));
 }
 
-// ── 3. 刷新之后还算跳过（记住了，不是这一屏的临时状态）─────────────
+// ── 3. 刷新之后还是第 3 步 ─────────────────────────────────────────
 {
   await page.goto(BASE, { waitUntil: 'load' });
   await page.waitForSelector('.home-icon-btn', { timeout: 20000 });
   await page.waitForTimeout(500);
-  const after = await page.evaluate(() => ({
-    btn: !!document.querySelector('.know-how-btn'),
-    glow: new Set([...document.querySelectorAll('.home-icon-btn--glow')].map((e) => e.dataset.stripIdx ?? e.getAttribute('aria-label'))).size,
-  }));
-  check('刷新之后按钮不再出现', after.btn === false);
-  check('刷新之后光也不再出现', after.glow === 0, `${after.glow} 张`);
+  check('刷新之后按钮不再出现', !(await page.$('.know-how-btn')));
+  check(`刷新之后仍是 ${CARDS} 张`, (await cardsOf(page)).length === CARDS);
 }
 
 // ── 4. 关键的那一半：自带的教学**照旧** ─────────────────────────────
-//
-// 按过《我会玩》的人第一次点开基础方块，棋盘底下那块教学条还是要在。把「跳过
-// 引导」实现成「把 firstTimeIn 全记成已看过」就会在这儿露出来。
 {
-  await clickCard(page, '经典方块');
-  await page.waitForTimeout(900);
-  if (await page.$('#startBtn')) await page.$eval('#startBtn', (e) => e.click());
-  await page.waitForFunction(() => document.querySelectorAll('#boardWrap .tile').length > 0, { timeout: 25000 });
-  await page.waitForTimeout(1500);
-  const coach = await page.evaluate(() => {
-    const el = document.querySelector('.coach-bar');
-    return { there: !!el, text: (el?.textContent || '').slice(0, 20) };
-  });
-  check('按过《我会玩》，头一回开方块照样有教学条', coach.there, JSON.stringify(coach.text));
+  await tap(page, 'circle');
+  const coach = await page.waitForSelector('.coach-bar:not([hidden])', { timeout: 30000 }).then(() => true).catch(() => false);
+  check('按过《我会玩》，头一回开小球照样有教学条', coach);
 }
 await page.close();
 
-// ── 5. 引导没在拦的时候，不该摆这颗按钮 ─────────────────────────────
+// ── 5. 第 3 步的人不该摆这颗按钮 ──────────────────────────────────
 {
-  const p2 = await ctx.newPage();
-  await p2.addInitScript(() => {
-    if (sessionStorage.getItem('gate_primed') === '1') return;
-    sessionStorage.setItem('gate_primed', '1');
-    localStorage.clear();
-    localStorage.setItem('slides_lang', 'zhHans');
-    localStorage.setItem('slides_intro_seen', '1');
-    // 已经打过一局方块：锁本来就该撤了（lockedForFirstPlay 判的是这两把钥匙）。
-    localStorage.setItem('slides_played_square', '1');
-  });
-  await p2.goto(BASE, { waitUntil: 'load' });
-  await p2.waitForSelector('.home-icon-btn', { timeout: 20000 });
-  await p2.waitForTimeout(400);
-  const shown = await p2.evaluate(() => !!document.querySelector('.know-how-btn'));
-  check('打过一局的人看不到这颗按钮（锁本来就撤了）', shown === false);
+  const p2 = await freshPage(ctx, { slides_played_circle: '1', slides_played_square: '1' });
+  check('打过小球、方块两局的人（第 3 步）看不到这颗按钮', !(await p2.$('.know-how-btn')) && (await cardsOf(p2)).length === CARDS);
+  await p2.close();
+}
+{
+  const p2 = await freshPage(ctx, { slides_played_circle: '1' });
+  check('第 2 步（打过小球）还摆着这颗按钮', !!(await p2.$('.know-how-btn')) && (await cardsOf(p2)).join() === 'square,circle', (await cardsOf(p2)).join());
   await p2.close();
 }
 
-// ── 6. 小红书那一版 ─────────────────────────────────────────────────
-//
-// 那一版的「新手拦截」不是锁——五张卡一直点得开，压暗只是路标（xhs/src/menu.ts
-// 的 dim）。所以这儿量的是「压暗撤没撤」，不是「开不开得了」。
+// ── 6. 小红书那一版：第 1、2 步有按钮，按下去到第 3 步 ────────────────────────
 if (XHS) {
   console.log('\n---- 小红书版 ----');
-  const p3 = await ctx.newPage();
-  p3.on('pageerror', (e) => errs.push('xhs: ' + e.message));
-  await p3.addInitScript(() => {
-    localStorage.clear();
-    // 头一局小球已经打过 → 直接进主菜单；方块还没打过 → 压暗还在。
-    localStorage.setItem('slides.xhs.firstRun', '1');
-  });
-  await p3.goto('file://' + (XHS.startsWith('/') ? XHS : process.cwd() + '/' + XHS), { waitUntil: 'load' });
-  // 等卡片，不是等一个固定的毫秒数：那一版开机有一段开场动画，写死 2500ms 会在
-  // 动画还没播完时量到一张空页面，然后红得莫名其妙（这道门第一版就是这样）。
-  await p3.waitForSelector('.home-icon-btn', { timeout: 30000 }).catch(() => {});
-  await p3.waitForTimeout(600);
-  const dimmedNow = () =>
-    p3.evaluate(() => [...document.querySelectorAll('.home-icon-btn')].filter((e) => /dim/.test(e.className)).length);
-  const shot = await p3.evaluate(() => {
-    const b = document.querySelector('.know-how-btn');
-    const r = b?.getBoundingClientRect();
-    return { text: b?.textContent?.trim() || '', h: r?.height || 0, cards: document.querySelectorAll('.home-icon-btn').length };
-  });
-  const dim0 = await dimmedNow();
-  check('小红书版主菜单上也有《我会玩》', shot.text === '我会玩', JSON.stringify({ 文字: shot.text, 卡: shot.cards, 压暗: dim0 }));
-  check('小红书版热区不小于 44px', shot.h >= 44, `${shot.h.toFixed(1)}px`);
-  check('小红书版这时候确实压着暗（拦截在生效）', dim0 > 0, `${dim0} 张`);
-  if (shot.text === '我会玩') {
-    await p3.evaluate(() => document.querySelector('.know-how-btn').click());
-    await p3.waitForTimeout(800);
-    const after = await p3.evaluate(() => ({
-      btn: !!document.querySelector('.know-how-btn'),
-      cards: document.querySelectorAll('.home-icon-btn').length,
-    }));
-    check('小红书版按完按钮自己不在了', after.btn === false);
-    check('小红书版按完压暗撤了', (await dimmedNow()) === 0, `压暗 ${dim0} → ${await dimmedNow()}`);
-    check('小红书版按完还在主菜单上', after.cards >= 4, `${after.cards} 张卡`);
-  }
-  await p3.close();
-
-  // 新人状态《我会玩》摆在哪（10-15 补充 K-5：卡改成网页移动端那么大、主菜单能往下滑之后，它挪到「经典方块 / 经典小球」
-  // 那一排后面）：两个视口各开一次，量它在经典小球那张卡的下面、首屏看得见、不压底排。原先摆在整页最下面，卡一变大就
-  // 落到首屏以外了。
-  for (const [w, h] of [[390, 844], [320, 568]]) {
-    const vctx = await browser.newContext({ viewport: { width: w, height: h }, isMobile: true, hasTouch: true });
-    const p4 = await vctx.newPage();
-    p4.on('pageerror', (e) => errs.push(`xhs ${w}×${h}: ` + e.message));
-    await p4.addInitScript(() => {
-      localStorage.clear();
-      localStorage.setItem('slides.xhs.firstRun', '1');
-    });
-    await p4.goto('file://' + (XHS.startsWith('/') ? XHS : process.cwd() + '/' + XHS), { waitUntil: 'load' });
-    await p4.waitForSelector('.home-icon-btn', { timeout: 30000 }).catch(() => {});
-    await p4.waitForTimeout(600);
-    const at = await p4.evaluate(() => {
-      const kh = document.querySelector('.know-how-btn');
-      const base = document.querySelector('.home-grid > .home-row:not(.xhs-daily-row)');
-      const ball = base?.querySelectorAll('.home-icon-btn')[1];
-      const nav = document.querySelector('.home-nav');
-      const r = (el) => (el ? el.getBoundingClientRect() : null);
-      return { kh: r(kh), ball: r(ball), nav: r(nav), vh: innerHeight, nextIsRow: kh?.previousElementSibling === base };
-    });
-    const ok = at.kh && at.ball && at.nav;
-    check(`小红书版 ${w}×${h} 新人状态：《我会玩》紧跟在基础那一排后面`, !!ok && at.nextIsRow, JSON.stringify({ 有: !!at.kh, 紧跟: at.nextIsRow }));
-    if (ok) {
-      check(`小红书版 ${w}×${h}：在经典小球那张卡的下面`, at.kh.top >= at.ball.bottom - 0.5, `卡底 ${at.ball.bottom.toFixed(1)} / 按钮顶 ${at.kh.top.toFixed(1)}`);
-      check(`小红书版 ${w}×${h}：首屏看得见、不压底排`, at.kh.bottom <= Math.min(at.vh, at.nav.top) + 0.5,
-        `按钮底 ${at.kh.bottom.toFixed(1)} / 底排顶 ${at.nav.top.toFixed(1)} / 屏高 ${at.vh}`);
+  const file = 'file://' + (XHS.startsWith('/') ? XHS : process.cwd() + '/' + XHS);
+  for (const [name, preset, n] of [
+    ['第 1 步（头一局小球没打完）', { 'slides.xhs.firstRun': '1' }, 1],
+    ['第 2 步（头一局小球打完了）', { 'slides.xhs.firstRun': '1', 'slides.xhs.story.circle': '1' }, 2],
+  ]) {
+    for (const [w, h] of [[390, 844], [320, 568]]) {
+      const vctx = await browser.newContext({ viewport: { width: w, height: h }, isMobile: true, hasTouch: true });
+      const p3 = await vctx.newPage();
+      p3.on('pageerror', (e) => errs.push(`xhs ${w}×${h}: ` + e.message));
+      await p3.addInitScript((kv) => {
+        if (sessionStorage.getItem('gate_primed') === '1') return;
+        sessionStorage.setItem('gate_primed', '1');
+        localStorage.clear();
+        for (const [k, v] of Object.entries(kv)) localStorage.setItem(k, v);
+      }, preset);
+      await p3.goto(file, { waitUntil: 'load' });
+      await p3.waitForSelector('.home-icon-btn', { timeout: 30000 }).catch(() => {});
+      await p3.waitForTimeout(600);
+      const at = await p3.evaluate(() => {
+        const kh = document.querySelector('.know-how-btn');
+        const row = document.querySelector('.home-row--intro');
+        const nav = document.querySelector('.home-nav');
+        const r = (el) => (el ? el.getBoundingClientRect() : null);
+        return {
+          n: document.querySelectorAll('#xhsGrid .home-icon-btn').length,
+          text: kh?.textContent?.trim() ?? '', kh: r(kh), row: r(row), nav: r(nav), vh: innerHeight, next: kh?.previousElementSibling === row,
+        };
+      });
+      const tag = `小红书 ${name} ${w}×${h}`;
+      check(`${tag}：${n} 张卡＋《我会玩》`, at.n === n && at.text === '我会玩', JSON.stringify({ n: at.n, text: at.text }));
+      if (at.kh && at.row && at.nav) {
+        check(`${tag}：按钮紧跟在那一排下面、热区 ≥44`, at.next && at.kh.top >= at.row.bottom - 0.5 && at.kh.height >= 44, JSON.stringify(at.kh));
+        check(`${tag}：首屏看得见、不压底排`, at.kh.bottom <= Math.min(at.vh, at.nav.top) + 0.5, `按钮底 ${at.kh.bottom.toFixed(1)} / 底排顶 ${at.nav.top.toFixed(1)}`);
+      }
+      if (w === 390) {
+        await p3.evaluate(() => document.querySelector('.know-how-btn')?.click());
+        await p3.waitForTimeout(800);
+        const after = await p3.evaluate(() => ({
+          btn: !!document.querySelector('.know-how-btn'),
+          n: document.querySelectorAll('#xhsGrid .home-icon-btn').length,
+          stage: localStorage.getItem('slides.xhs.stage'),
+        }));
+        check(`${tag}：按完到第 3 步（${XHS_CARDS} 张、按钮不在）`, !after.btn && after.n === XHS_CARDS && after.stage === '3', JSON.stringify(after));
+      }
+      await vctx.close();
     }
-    await vctx.close();
   }
 }
 
 console.log(errs.length ? '\n页面报错：' + errs.slice(0, 3).join(' | ') : '\n全程零报错');
+if (errs.length) fail++;
 await browser.close();
 process.exit(fail ? 1 : 0);

@@ -21,6 +21,7 @@
  *   ③ 第三局同一族：服务器不再多留四秒，他也不再被问。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2];
 if (!BASE) {
@@ -37,6 +38,7 @@ const check = (n, ok, extra = '') => {
 /** @param seen 预设「看过教学」——屋主预设（这一台问的不是他），客人**不预设**（问的就是他）。 */
 async function newPlayer(seen) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await unlockAll(ctx);
   await ctx.addInitScript((pre) => {
     if (sessionStorage.getItem('gate_primed') === '1') return;
     sessionStorage.setItem('gate_primed', '1');

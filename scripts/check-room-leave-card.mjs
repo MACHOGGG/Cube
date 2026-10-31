@@ -15,6 +15,7 @@
  *      和它的战绩图在上，这一局单人的结算和它自己那张图在下。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 import { afterRestart } from './lib/afterRestart.mjs';
 
 const BASE = process.argv[2];
@@ -31,6 +32,7 @@ const check = (n, ok, extra = '') => {
 
 async function newPlayer() {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await unlockAll(ctx);
   await ctx.addInitScript(() => {
     for (const k of ['slides_tutorial_seen', 'slides_tutorial_seen_circle', 'slides_tutorial_seen_triangle'])
       localStorage.setItem(k, '1');

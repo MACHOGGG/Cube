@@ -127,6 +127,11 @@ export interface ShapeGameOpts {
    */
   dailyStage?: { emblem: string; from: number };
   /**
+   * 局中灯泡按哪个玩法数（10-31 方案推12 Z-J03，engine/hintBulb.ts）：前两局暂停那块牌上多一颗灯泡。入口那一页给
+   * （main.ts、xhs/src/main.ts）；不给就没有灯泡（小屋局就不给）。
+   */
+  bulbKey?: string;
+  /**
    * 这一局用哪一串种子码发牌（第 19 推，engine/seedCode.ts）。
    *
    * 不给就由控制器自己随手抽一串（每一局单人游戏都用种子发牌——方案原话），所以平常开一局

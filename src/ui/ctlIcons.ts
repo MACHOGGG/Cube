@@ -64,6 +64,16 @@ export const CTL_CVD = custom('ctl-cvd') ?? ctlGlyph(
     '<path d="M50 24 A26 26 0 0 0 50 76 Z" fill="var(--ctl-mark)"/>',
 );
 
+/**
+ * 局中那颗灯泡（10-31 方案推12 Z-J03，#hintBtn）：同一副圆盘，浅色盘里一枚棕色灯泡——玻璃罩、灯颈、两道螺口。前两局
+ * 摆在暂停那块牌的右半边（见 ui/gameShell.ts）。换成自己的：ctl-bulb.svg。
+ */
+export const CTL_BULB = custom('ctl-bulb') ?? ctlGlyph(
+  '<path d="M50 22 A19 19 0 0 1 61 56.5 V62 H39 V56.5 A19 19 0 0 1 50 22 Z" fill="var(--ctl-mark)"/>' +
+    '<rect x="40" y="66" width="20" height="5" rx="2.5" fill="var(--ctl-mark)"/>' +
+    '<rect x="43" y="74" width="14" height="5" rx="2.5" fill="var(--ctl-mark)"/>',
+);
+
 /** 开局页那颗《返回》：同一副圆盘，里面是一支向左的箭。换成自己的：ctl-back.svg。 */
 export const CTL_BACK = custom('ctl-back') ?? ctlGlyph(
   '<path d="M60 30 L40 50 L60 70" fill="none" stroke="var(--ctl-mark)" stroke-width="11" ' +

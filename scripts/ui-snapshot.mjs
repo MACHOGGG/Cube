@@ -18,6 +18,7 @@
  * 上读回来的任何 style="..." 都是人手动调的那一处，对着改代码就行。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -195,6 +196,7 @@ for (const screen of SCREENS) {
     deviceScaleFactor: 2,
   });
   // 语言定成简体中文，教学标成看过——不然每次抓到的都是第一次访问的那两屏。
+  await unlockAll(ctx);
   await ctx.addInitScript(() => {
     localStorage.setItem('slides_lang', 'zhHans');
     localStorage.setItem('slides_tutorial_seen', '1');

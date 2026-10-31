@@ -16,6 +16,7 @@
  * 或者掉到屏幕外面。所以这里量的是它和棋盘、和四周那几颗键的实际位置关系。
  */
 import { chromium } from 'playwright';
+import { unlockAll } from './lib/unlockAll.mjs';
 
 const BASE = process.argv[2] || 'http://localhost:8817/';
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
@@ -80,6 +81,7 @@ const midY = (a) => (a.t + a.b) / 2;
 for (const shape of SHAPES) {
   for (const [tag, vp] of [['竖屏', { width: 390, height: 844 }], ['横屏', { width: 844, height: 390 }]]) {
     const ctx = await browser.newContext({ viewport: vp });
+    await unlockAll(ctx);
     await ctx.addInitScript(seed);
     const page = await ctx.newPage();
     const ok = await openGame(page, shape);
