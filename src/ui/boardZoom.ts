@@ -1,4 +1,5 @@
 import { ZOOM_BACK_MS, ZOOM_HOLD_MS, zoomFrom, type Fit } from '../engine/liveFit';
+import { beatScale } from '../engine/flipSpeed';
 
 /**
  * 「剩下的部分长大了」那一下动画——五副外边族共用。
@@ -118,12 +119,12 @@ export function createBoardZoom(el: HTMLElement, reduceMotion: () => boolean): B
        */
       void el.offsetWidth;
       timers.push(window.setTimeout(() => {
-        el.style.transition = `transform ${ZOOM_BACK_MS}ms ${EASING}`;
+        el.style.transition = `transform ${Math.round(ZOOM_BACK_MS * beatScale())}ms ${EASING}`;
         el.style.transform = 'translate3d(0, 0, 0) scale(1)';
         // 过渡结束之后把那几句样式摘掉：留着 `will-change: transform` 会让这一层一直占着
         // 合成器的内存，而棋盘这一层上还有翻面、淡出好几样动画要用。
-        timers.push(window.setTimeout(clearTransform, ZOOM_BACK_MS + 60));
-      }, ZOOM_HOLD_MS));
+        timers.push(window.setTimeout(clearTransform, Math.round(ZOOM_BACK_MS * beatScale()) + 60));
+      }, Math.round(ZOOM_HOLD_MS * beatScale())));
     },
 
     cancel() {

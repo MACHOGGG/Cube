@@ -48,3 +48,17 @@ export function stepCoefFor({ par, cleared, tiles, moves, apply }: StepCoefInput
   const x = ((par * cleared) / tiles) / moves;
   return Math.max(1, x) ** 2;
 }
+
+/**
+ * 剩余色块九折（站长 10-25，10-31 方案推14 Z-B08）：没清盘就结束（判死「无法继续匹配」、玩家手动结束）时，盘上每剩一枚
+ * 没翻的色块（不含活炸弹），拼出分乘一次 LEFTOVER_K。计时到点、炸弹相连、步步为营、无限反转不扣。
+ *
+ * **循环连乘，不用 Math.pow / `**`**：服务端（api/_maxscore.js 的 leftoverScale，手抄一份）逐位相等才收，而 Math.pow 在
+ * 不同内核里末位可能不同。
+ */
+export const LEFTOVER_K = 0.9;
+export function leftoverScale(n: number): number {
+  let f = 1;
+  for (let i = 0; i < n; i++) f *= LEFTOVER_K;
+  return f;
+}

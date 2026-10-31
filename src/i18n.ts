@@ -123,16 +123,32 @@ export interface I18nStrings {
   comingSoon: string;
   multiplayerTitle: string;
   rankingsTitle: string;
-  /** 排行榜那一块。 */
-  rankTotalBoard: string;
-  /** 排行榜上那六个母标签。点开来是它旗下的几张榜（见 ui/leaderboard 的 boardGroups）。 */
+  /** 排行榜第三行（玩法）那几颗药丸的字（推14 Z-B15 起；原先是母标签，那一套撤了）。 */
   rankTabBase: string;
   rankTabTimed: string;
   rankTabBomb: string;
-  rankTabLayout: string;
   rankTabSlot: string;
   rankTabFlip: string;
   rankTabPuzzle: string;
+  /** 排行榜三行筛选（10-31 方案推14 Z-B15，附录甲 §4、§17.2、§17.3）：第一行三颗、第二行、每行最前那颗、两个页签、行标题、表头与提示。占位：{family} {mode} {others} {bomb} {timed} {advanced}。 */
+  rankFamilySquare: string;
+  rankFamilyBall: string;
+  rankFamilyTri: string;
+  rankTierNormal: string;
+  rankTierPro: string;
+  rankAll: string;
+  rankScopeGlobal: string;
+  rankScopeDaily: string;
+  rankRowFamily: string;
+  rankRowTier: string;
+  rankRowMode: string;
+  rankDefaultNote: string;
+  rankGreyMode: string;
+  rankGreyFamily: string;
+  rankPartialNote: string;
+  rankResetNote: string;
+  rankOutside200: string;
+  rankBombNote: string;
   rankLocked: string;
   rankLockedCta: string;
   rankSignedOut: string;
@@ -823,6 +839,14 @@ export interface I18nStrings {
    * 之后时间不计分，教学也收成五条——借下标的写法当场就指空了。所以单给一个键。
    */
   endTipComposite: string;
+  /** 无限反转结算页底下那一句（只摆头一回，同 endTipComposite 的摆法；10-31 方案推14 Z-B07，站长 D37 甲）。 */
+  endTipFlip: string;
+  /** 无限反转结算明细「拼出得分」与「综合得分」之间那一行（V15，推14 Z-B06）。 */
+  flipCoefLabel: string;
+  /** 结算明细「剩余色块 n 枚」那一行左栏（countPhrase 带复数；只在九折系数 < 1 时摆，推14 Z-B08）。 */
+  leftoverLabel: string;
+  /** 炸弹局只剩拆不掉的炸弹：结算明细「拼出得分」下面那一行小字（站长 D36 甲，推14 Z-B20）。 */
+  endOnlyBombsLeft: string;
   patternNowLabel: string;
   /** HUD 左边那一块的标题：拼出得分。 */
   builtScoreHudLabel: string;
@@ -863,7 +887,6 @@ export interface I18nStrings {
   timeNotScoredLabel: string;
   /** 徽章：清盘 / 解锁 1 枚。 */
   badgeSwept: string;
-  badgeUnlockedOne: string;
   /** 老虎机局到过第 1 级的徽章「降到底」（10-11 方案 B-6；基础局那一枚还是「解锁 1 枚」）。 */
   badgeBottomOut: string;
   patternPointsLabel: string;
@@ -943,8 +966,6 @@ export interface I18nStrings {
   seedNoBoard: string;
   /** 七色圆球那一天，竖着拿手机时倒数之前只摆这一句（方案原话「请横屏」），不带任何棋盘标识。 */
   dailyTurn: string;
-  /** 排行榜上那个「今日」标签。 */
-  rankTabDaily: string;
   /** 小红书那一版：本机今天每日挑战最好的一局，「{n}」换成分数。 */
   dailyBest: string;
   // ---- shared shape UI ----
@@ -1013,8 +1034,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     sectionTimed: 'Timed challenge',
     flipModeTitle: 'Endless flip',
     flipModeTagline: 'Score to make a star, score again to turn it back · stars never clear · 100 s',
-    timedModeTagline: '100-second challenge',
-    flipScoringHint: 'The scoring shape stays at four pieces all game · no Move multiplier',
+    timedModeTagline: 'Squares 100 s · Balls 60 s',
+    flipScoringHint: 'The scoring shape stays at four pieces all game · no Move multiplier; Flip multiplier at the end',
     puzzleModeTitle: 'Puzzle · Step by step',
     puzzleModeTagline: 'Balls start with 15 moves, squares with 22. A move that scores is free. Any other move costs 1. No clock.',
     stepsLeftLabel: 'Moves left',
@@ -1038,14 +1059,30 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     comingSoon: 'Coming soon',
     multiplayerTitle: 'Multiplayer',
     rankingsTitle: 'Records & rankings',
-    rankTotalBoard: 'Overall',
     rankTabBase: 'Base',
     rankTabTimed: 'Timed',
     rankTabBomb: 'Bomb',
-    rankTabLayout: 'Layouts',
     rankTabSlot: 'Slots',
     rankTabFlip: 'Flip',
     rankTabPuzzle: 'Step by step',
+    rankFamilySquare: 'Squares',
+    rankFamilyBall: 'Balls',
+    rankFamilyTri: 'Triangles',
+    rankTierNormal: 'Standard',
+    rankTierPro: 'Pro',
+    rankAll: 'All',
+    rankScopeGlobal: 'Global',
+    rankScopeDaily: 'Today’s challenge',
+    rankRowFamily: 'Board',
+    rankRowTier: 'Standard / Pro',
+    rankRowMode: 'Mode',
+    rankDefaultNote: 'Whole site: each player’s best run (Pro and Endless flip included)',
+    rankGreyMode: '{family} have no {mode} mode',
+    rankGreyFamily: '{family} have none of the selected modes',
+    rankPartialNote: 'No {mode} for {family} — showing {others} only',
+    rankResetNote: 'Triangles only have Base — Mode reset to All',
+    rankOutside200: 'You’re outside the top 200',
+    rankBombNote: '{bomb} includes {timed} and {advanced}',
     rankLocked: 'Your runs may already be on the board — sign in to see it',
     rankLockedCta: 'Sign in',
     rankSignedOut: 'Sign in and your runs go on the board',
@@ -1072,8 +1109,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     endSessionExpired: 'Your sign-in has expired — this run wasn’t uploaded.',
     endNotUploaded: 'This run wasn’t uploaded; it’s still saved on this device.',
     profileSessionExpired: 'Sign-in expired · Sign in again',
-    flipSpeedTitle: 'Star speed',
-    flipSpeedHint: 'How fast a piece becomes a star. Everything else stays the same.',
+    flipSpeedTitle: 'Speed',
+    flipSpeedHint: 'How fast pieces flip, patterns light up and stars clear.',
     flipSpeedLocked: 'Sign in to change this. Here is what it does.',
     flipSpeedSlow: 'Slow',
     flipSpeedFast: 'Fast',
@@ -1327,7 +1364,11 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     labelRunN: 'Run of {n}',
     labelPattern: 'Pattern',
     labelWholeLine: 'Full line',
-    endTipComposite: 'Final score = build score \u00d7 move multiplier. Fewer moves, bigger multiplier \u2014 it never drops below \u00d71.00.',
+    endTipComposite: 'Final score = build score × move multiplier. Fewer moves, bigger multiplier — never below ×1.00. If you stop before the board is clear, each coloured piece left multiplies it by 0.9.',
+    endTipFlip: 'Final score = build score × flip multiplier (×6 on Classic Squares, ×2.5 on Classic Balls). Scoring in a row pays more, up to 5 in a row.',
+    flipCoefLabel: 'Flip multiplier',
+    leftoverLabel: '{n} coloured tile left|{n} coloured tiles left',
+    endOnlyBombsLeft: 'Only bombs that can no longer be defused are left.',
     patternNowLabel: 'Pattern is now {n} tile|Pattern is now {n} tiles',
     builtScoreHudLabel: 'Build score',
     flipRowLabel: 'Flipped {n} ×2',
@@ -1340,7 +1381,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     compositeLabel: 'Final score',
     timeNotScoredLabel: 'Time {t} (not scored)',
     badgeSwept: 'Board cleared',
-    badgeUnlockedOne: 'Unlocked 1-tile',
     badgeBottomOut: 'Bottom rung',
     patternPointsLabel: 'Pattern points',
     comboBonusLabel: 'Streak & chain bonus',
@@ -1371,7 +1411,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     seedNewer: 'This game code needs a newer version of Slides',
     seedNoBoard: "Games you start by typing in a code aren't ranked. Today's challenge still is.",
     dailyTurn: 'Turn your phone sideways',
-    rankTabDaily: 'Today',
     dailyBest: "Today's best {n}",
     shareStartLabel: 'Start',
     shareEndLabel: 'End',
@@ -1405,8 +1444,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     sectionTimed: 'Défi chronométré',
     flipModeTitle: 'Retournement infini',
     flipModeTagline: 'Marquer crée une étoile, marquer encore la ramène · les étoiles ne s’effacent jamais · 100 s',
-    timedModeTagline: 'Défi de 100 secondes',
-    flipScoringHint: 'Le motif reste à quatre pièces toute la partie · pas de Coefficient de coups',
+    timedModeTagline: 'Carrés 100 s · Billes 60 s',
+    flipScoringHint: 'Le motif reste à quatre pièces toute la partie · pas de Coefficient de coups ; Coefficient de retournement à la fin',
     puzzleModeTitle: 'Énigme · Pas à pas',
     puzzleModeTagline: '15 coups pour les billes, 22 pour les carrés. Un coup qui marque ne coûte rien. Les autres en coûtent 1. Sans chronomètre.',
     stepsLeftLabel: 'Coups',
@@ -1430,14 +1469,30 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     comingSoon: 'Bientôt disponible',
     multiplayerTitle: 'Multijoueur',
     rankingsTitle: 'Historique et classements',
-    rankTotalBoard: 'Général',
     rankTabBase: 'Base',
     rankTabTimed: 'Chrono',
     rankTabBomb: 'Bombe',
-    rankTabLayout: 'Plateaux',
     rankTabSlot: 'Machine',
     rankTabFlip: 'Infini',
     rankTabPuzzle: 'Pas à pas',
+    rankFamilySquare: 'Carrés',
+    rankFamilyBall: 'Billes',
+    rankFamilyTri: 'Triangles',
+    rankTierNormal: 'Standard',
+    rankTierPro: 'Pro',
+    rankAll: 'Tous',
+    rankScopeGlobal: 'Mondial',
+    rankScopeDaily: 'Défi du jour',
+    rankRowFamily: 'Plateau',
+    rankRowTier: 'Standard / Pro',
+    rankRowMode: 'Mode',
+    rankDefaultNote: 'Tout le site : meilleure partie de chaque joueur (Pro et Retournement infini compris)',
+    rankGreyMode: 'Pas de mode {mode} pour les {family}',
+    rankGreyFamily: 'Aucun des modes choisis pour les {family}',
+    rankPartialNote: 'Pas de {mode} pour les {family} : seuls les {others} comptent',
+    rankResetNote: 'Les Triangles n’ont que le mode Base : mode remis sur « Tous »',
+    rankOutside200: 'Vous êtes au-delà du top 200',
+    rankBombNote: 'Le mode {bomb} comprend {timed} et {advanced}',
     rankLocked: 'Vos parties comptent peut-être déjà — connectez-vous pour voir le classement',
     rankLockedCta: 'Se connecter',
     rankSignedOut: 'Connectez-vous et vos parties entrent au classement',
@@ -1464,8 +1519,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     endSessionExpired: 'Votre session a expiré : cette partie n’a pas été envoyée.',
     endNotUploaded: 'Cette partie n’a pas été envoyée ; elle reste enregistrée sur cet appareil.',
     profileSessionExpired: 'Session expirée · Se reconnecter',
-    flipSpeedTitle: 'Vitesse des étoiles',
-    flipSpeedHint: 'À quelle vitesse une pièce devient une étoile. Le reste ne change pas.',
+    flipSpeedTitle: 'Vitesse',
+    flipSpeedHint: 'Vitesse à laquelle les pièces se retournent, les motifs s’allument et les étoiles s’effacent.',
     flipSpeedLocked: 'Connectez-vous pour le régler. Voici ce qu’il fait.',
     flipSpeedSlow: 'Lent',
     flipSpeedFast: 'Rapide',
@@ -1719,7 +1774,11 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     labelRunN: 'Suite de {n}',
     labelPattern: 'Motif',
     labelWholeLine: 'Ligne entière',
-    endTipComposite: 'Score final = score de jeu \u00d7 coefficient de coups. Moins de coups, plus gros coefficient \u2014 jamais sous \u00d71,00.',
+    endTipComposite: 'Score final = score de jeu × coefficient de coups. Moins de coups, plus gros coefficient — jamais sous ×1,00. Si la partie s’arrête avant que le plateau soit vide, chaque pièce colorée restante le multiplie par 0,9.',
+    endTipFlip: 'Score final = score de jeu × coefficient de retournement (×6 sur les Carrés classiques, ×2,5 sur les Billes classiques). Marquer à la suite rapporte plus, jusqu’à 5 fois de suite.',
+    flipCoefLabel: 'Coefficient de retournement',
+    leftoverLabel: '{n} pièce colorée restante|{n} pièces colorées restantes',
+    endOnlyBombsLeft: 'Il ne reste que des bombes qu’on ne peut plus désamorcer.',
     patternNowLabel: 'Le motif passe à {n} pièce|Le motif passe à {n} pièces',
     builtScoreHudLabel: 'Score de jeu',
     flipRowLabel: '{n} retournée ×2|{n} retournées ×2',
@@ -1732,7 +1791,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     compositeLabel: 'Score final',
     timeNotScoredLabel: 'Temps {t} (hors score)',
     badgeSwept: 'Plateau vidé',
-    badgeUnlockedOne: 'Motif à 1 pièce',
     badgeBottomOut: 'Dernier échelon',
     patternPointsLabel: 'Points de motifs',
     comboBonusLabel: 'Bonus de série',
@@ -1763,7 +1821,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     seedNewer: 'Ce code de partie demande une version plus récente de Slides',
     seedNoBoard: 'Les parties lancées en saisissant un code ne sont pas classées. Le défi du jour, si.',
     dailyTurn: 'Tournez votre téléphone',
-    rankTabDaily: "Aujourd'hui",
     dailyBest: 'Meilleur du jour {n}',
     shareStartLabel: 'Début',
     shareEndLabel: 'Fin',
@@ -1797,8 +1854,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     sectionTimed: '計時挑戰',
     flipModeTitle: '無限反轉',
     flipModeTagline: '得分變星星，再得分變回色塊，來回反轉，星星不消除，100 秒',
-    timedModeTagline: '100s 挑戰',
-    flipScoringHint: '得分圖案整局都是 4 枚 · 不乘步數係數',
+    timedModeTagline: '方塊 100 秒 · 小球 60 秒',
+    flipScoringHint: '得分圖案整局都是 4 枚 · 不乘步數係數，結算乘反轉係數',
     puzzleModeTitle: '真正解密 · 步步為營',
     puzzleModeTagline: '小球 15 步，方塊 22 步。沒得分的一步扣 1 步，得分的一步不扣。沒有時間限制。',
     stepsLeftLabel: '餘步',
@@ -1822,14 +1879,30 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     comingSoon: '敬請期待',
     multiplayerTitle: '多人遊玩',
     rankingsTitle: '成績與排名',
-    rankTotalBoard: '總榜',
     rankTabBase: '基礎',
     rankTabTimed: '計時',
     rankTabBomb: '炸彈',
-    rankTabLayout: '特殊佈局',
     rankTabSlot: '老虎機',
     rankTabFlip: '無限反轉',
     rankTabPuzzle: '步步為營',
+    rankFamilySquare: '方塊',
+    rankFamilyBall: '小球',
+    rankFamilyTri: '三角',
+    rankTierNormal: '普通',
+    rankTierPro: 'Pro',
+    rankAll: '全部',
+    rankScopeGlobal: '全球榜',
+    rankScopeDaily: '今日挑戰',
+    rankRowFamily: '棋盤',
+    rankRowTier: '普通 / Pro',
+    rankRowMode: '玩法',
+    rankDefaultNote: '全站：每人最好的一局（含 Pro 和無限反轉）',
+    rankGreyMode: '{family}沒有{mode}玩法',
+    rankGreyFamily: '{family}沒有所選的玩法',
+    rankPartialNote: '{family}沒有{mode}玩法，只算{others}',
+    rankResetNote: '三角只有基礎玩法，玩法已改回「全部」',
+    rankOutside200: '您在前 200 名以外',
+    rankBombNote: '{bomb}含{timed}、{advanced}',
     rankLocked: '您的排名或許已經上榜，登入後查看',
     rankLockedCta: '登入',
     rankSignedOut: '登入之後，您的成績才會上榜',
@@ -1856,8 +1929,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     endSessionExpired: '登入已過期，本局未上傳',
     endNotUploaded: '本局未上傳到雲端，本機紀錄照常保留',
     profileSessionExpired: '登入已過期 · 重新登入',
-    flipSpeedTitle: '變成星星的速度',
-    flipSpeedHint: '一枚棋子變成星星要多快。其他的都不變。',
+    flipSpeedTitle: '速度',
+    flipSpeedHint: '棋子翻面、得分圖案亮起、星星一組組消掉，都跟著它變快變慢。',
     flipSpeedLocked: '登入後可以調。先看看它是做什麼的。',
     flipSpeedSlow: '慢',
     flipSpeedFast: '快',
@@ -2111,7 +2184,11 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     labelRunN: '{n}連',
     labelPattern: '圖案',
     labelWholeLine: '整線',
-    endTipComposite: '綜合得分 = 拼出得分 × 步數係數。步數越少係數越高，最低 ×1.00，只加不減。',
+    endTipComposite: '綜合得分 = 拼出得分 × 步數係數。步數越少係數越高，最低 ×1.00；沒清盤就結束時，剩下的色塊每枚再打一次九折。',
+    endTipFlip: '綜合得分 = 拼出得分 × 反轉係數（經典方塊 ×6，經典小球 ×2.5）。連續得分越多分越高，連擊最多算 5 次。',
+    flipCoefLabel: '反轉係數',
+    leftoverLabel: '剩餘色塊 {n} 枚',
+    endOnlyBombsLeft: '剩下的是拆不掉的炸彈。',
     patternNowLabel: '得分圖案變成 {n} 枚',
     builtScoreHudLabel: '拼出得分',
     flipRowLabel: '翻面 {n} 枚 ×2',
@@ -2124,7 +2201,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     compositeLabel: '綜合得分',
     timeNotScoredLabel: '用時 {t}（不計分）',
     badgeSwept: '清盤',
-    badgeUnlockedOne: '解鎖 1 枚',
     badgeBottomOut: '降到底',
     patternPointsLabel: '圖案分',
     comboBonusLabel: '連擊加成',
@@ -2155,7 +2231,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     seedNewer: '這個代號要新版本才能玩',
     seedNoBoard: '手動輸入代號開的局不計入排行榜（今日挑戰照常計入）',
     dailyTurn: '請橫屏',
-    rankTabDaily: '今日',
     dailyBest: '今日最佳 {n}',
     shareStartLabel: '開始',
     shareEndLabel: '結束',
@@ -2189,8 +2264,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     sectionTimed: '计时挑战',
     flipModeTitle: '无限反转',
     flipModeTagline: '得分变星星，再得分变回色块，来回反转，星星不消除，100 秒',
-    timedModeTagline: '100s 挑战',
-    flipScoringHint: '得分图案整局都是 4 枚 · 不乘步数系数',
+    timedModeTagline: '方块 100 秒 · 小球 60 秒',
+    flipScoringHint: '得分图案整局都是 4 枚 · 不乘步数系数，结算乘反转系数',
     puzzleModeTitle: '真正解密 · 步步为营',
     puzzleModeTagline: '小球 15 步，方块 22 步。没得分的一步扣 1 步，得分的一步不扣。没有时间限制。',
     stepsLeftLabel: '余步',
@@ -2214,14 +2289,30 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     comingSoon: '敬请期待',
     multiplayerTitle: '多人游玩',
     rankingsTitle: '成绩与排名',
-    rankTotalBoard: '总榜',
     rankTabBase: '基础',
     rankTabTimed: '计时',
     rankTabBomb: '炸弹',
-    rankTabLayout: '特殊布局',
     rankTabSlot: '老虎机',
     rankTabFlip: '无限反转',
     rankTabPuzzle: '步步为营',
+    rankFamilySquare: '方块',
+    rankFamilyBall: '小球',
+    rankFamilyTri: '三角',
+    rankTierNormal: '普通',
+    rankTierPro: 'Pro',
+    rankAll: '全部',
+    rankScopeGlobal: '全球榜',
+    rankScopeDaily: '今日挑战',
+    rankRowFamily: '棋盘',
+    rankRowTier: '普通 / Pro',
+    rankRowMode: '玩法',
+    rankDefaultNote: '全站：每人最好的一局（含 Pro 和无限反转）',
+    rankGreyMode: '{family}没有{mode}玩法',
+    rankGreyFamily: '{family}没有所选的玩法',
+    rankPartialNote: '{family}没有{mode}玩法，只算{others}',
+    rankResetNote: '三角只有基础玩法，玩法已改回「全部」',
+    rankOutside200: '您在前 200 名以外',
+    rankBombNote: '{bomb}含{timed}、{advanced}',
     rankLocked: '您的排名或许已经上榜，登录后查看',
     rankLockedCta: '登录',
     rankSignedOut: '登录之后，您的成绩才会上榜',
@@ -2248,8 +2339,8 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     endSessionExpired: '登录已过期，本局未上传',
     endNotUploaded: '本局未上传到云端，本机记录照常保留',
     profileSessionExpired: '登录已过期 · 重新登录',
-    flipSpeedTitle: '变成星星的速度',
-    flipSpeedHint: '一枚棋子变成星星要多快。其他的都不变。',
+    flipSpeedTitle: '速度',
+    flipSpeedHint: '棋子翻面、得分图案亮起、星星一组组消掉，都跟着它变快变慢。',
     flipSpeedLocked: '登录后可以调。先看看它是做什么的。',
     flipSpeedSlow: '慢',
     flipSpeedFast: '快',
@@ -2503,7 +2594,11 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     labelRunN: '{n}连',
     labelPattern: '图案',
     labelWholeLine: '整线',
-    endTipComposite: '综合得分 = 拼出得分 × 步数系数。步数越少系数越高，最低 ×1.00，只加不减。',
+    endTipComposite: '综合得分 = 拼出得分 × 步数系数。步数越少系数越高，最低 ×1.00；没清盘就结束时，剩下的色块每枚再打一次九折。',
+    endTipFlip: '综合得分 = 拼出得分 × 反转系数（经典方块 ×6，经典小球 ×2.5）。连续得分越多分越高，连击最多算 5 次。',
+    flipCoefLabel: '反转系数',
+    leftoverLabel: '剩余色块 {n} 枚',
+    endOnlyBombsLeft: '剩下的是拆不掉的炸弹。',
     patternNowLabel: '得分图案变成 {n} 枚',
     builtScoreHudLabel: '拼出得分',
     flipRowLabel: '翻面 {n} 枚 ×2',
@@ -2516,7 +2611,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     compositeLabel: '综合得分',
     timeNotScoredLabel: '用时 {t}（不计分）',
     badgeSwept: '清盘',
-    badgeUnlockedOne: '解锁 1 枚',
     badgeBottomOut: '降到底',
     patternPointsLabel: '图案分',
     comboBonusLabel: '连击加成',
@@ -2547,7 +2641,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     seedNewer: '这个代号要新版本才能玩',
     seedNoBoard: '手动输入代号开的局不计入排行榜（今日挑战照常计入）',
     dailyTurn: '请横屏',
-    rankTabDaily: '今日',
     dailyBest: '今日最佳 {n}',
     shareStartLabel: '开始',
     shareEndLabel: '结束',
@@ -2621,6 +2714,8 @@ export const PRIVILEGES: Record<Lang, string[]> = {
  * piece / star，pièce colorée / étoile）。
  *
  * 例外只有一处：《无限反转》是玩法的名字，不是描述动作的词，照旧叫它。
+ *
+ * 例外二：`flipSpeedHint`（拉杆说明）里的「棋子翻面」是站长 2026-10-25（D30）逐字批的，照留（10-31 方案推14 Z-B10）。
  */
 /**
  * 教学那**五条**——玩家 2026-09 逐字定的（《侵蚀阶梯》v1.2 上线那一版）。
@@ -2635,7 +2730,7 @@ export const PRIVILEGES: Record<Lang, string[]> = {
  * **五条句末一律不带句号**（站长 10-31：「每条教学内容都统一不加」，第 5 条的「～」留着）。规则书 rules.ts 照常带。
  *
  * 第 3 条「得分图案会随着游戏解锁而变小」（D17 甲：原先是「变化」）说的就是侵蚀阶梯（§2）：图案从 4 枚一路
- * 降到 1 枚。屏幕上那一块《得分图案》画的是同一件事（ui/patternBlock.ts），所以这
+ * 降到 2 枚（ero2 起 F5，到 2 为止；10-31 方案推14 Z-B02）。屏幕上那一块《得分图案》画的是同一件事（ui/patternBlock.ts），所以这
  * 句话指得到实物。
  *
  * 第 4 条按棋盘分两套（见下面 TUTORIAL_RULE4）：外边族说「最外面的一条线」，方块
@@ -2694,34 +2789,34 @@ export const TUTORIAL_RULES: Record<Lang, string[]> = {
  * 「最少要 3 枚」「消完之后，剩下的部分整体放大」两句删掉（方案给的四语原文；英文按这张表的英式拼
  * 法写 same-colour，法文撇号和这一块别的句子一样用弯的）。删之前查过：教学条往后那一条（第 5 条
  * 「尝试全部消除吧～」）、配图都不靠这两句；靠着它们逐字比对的只有门（check-multiplayer），跟着改了。
- * 完整的规矩（至少 3 枚、整体放大、门槛降到 1）照旧写在规则书里（src/rules.ts）。方案点名的是小球，
- * 菱形方块、三角那两句没动。
+ * 完整的规矩（够长、整体放大、门槛放开）照旧写在规则书里（src/rules.ts）。方案点名的是小球，菱形方块、三角那两句
+ * 当时没动；10-31 方案推14 Z-B12（站长 D32 丙）把这两副的「最少要 3 枚」也删了——规则书《消除》那一条起不再写门槛数字。
  */
 export type RuleShape = 'circle' | 'square' | 'squareDiamond' | 'triangle';
 export const TUTORIAL_RULE4: Record<Lang, Record<RuleShape, string>> = {
   en: {
     circle: 'Fill the current outermost edge with same-colour stars to score and clear it',
     square: 'Stars of one colour filling a whole row or column score and clear, and the board closes up',
-    squareDiamond: 'Stars of one colour filling the outermost line score and clear. At least 3 of them. What is left then grows to fill the board',
-    triangle: 'Stars of one colour filling the outermost line score and clear. At least 3 of them. What is left then grows to fill the board',
+    squareDiamond: 'Stars of one colour filling the outermost line score and clear. What is left then grows to fill the board',
+    triangle: 'Stars of one colour filling the outermost line score and clear. What is left then grows to fill the board',
   },
   fr: {
     circle: 'Remplissez l’arête la plus extérieure d’étoiles de même couleur pour marquer et l’effacer',
     square: 'Des \u00e9toiles de m\u00eame couleur sur toute une ligne ou colonne marquent et disparaissent, et le plateau se referme',
-    squareDiamond: 'Des étoiles de même couleur sur la ligne la plus externe marquent et disparaissent. Au moins 3. Ce qui reste s’agrandit ensuite pour remplir le plateau',
-    triangle: 'Des étoiles de même couleur sur la ligne la plus externe marquent et disparaissent. Au moins 3. Ce qui reste s’agrandit ensuite pour remplir le plateau',
+    squareDiamond: 'Des étoiles de même couleur sur la ligne la plus externe marquent et disparaissent. Ce qui reste s’agrandit ensuite pour remplir le plateau',
+    triangle: 'Des étoiles de même couleur sur la ligne la plus externe marquent et disparaissent. Ce qui reste s’agrandit ensuite pour remplir le plateau',
   },
   zhHant: {
     circle: '同色星星連滿此刻最外面的一條邊，就得分並消除',
     square: '同色星星連滿整行或整列，就得分並消除，棋盤合攏',
-    squareDiamond: '同色星星連滿此刻最外面的一條線，就得分並消除。最少要 3 枚。消完之後，剩下的部分整體放大',
-    triangle: '同色星星連滿此刻最外面的一條線，就得分並消除。最少要 3 枚。消完之後，剩下的部分整體放大',
+    squareDiamond: '同色星星連滿此刻最外面的一條線，就得分並消除。消完之後，剩下的部分整體放大',
+    triangle: '同色星星連滿此刻最外面的一條線，就得分並消除。消完之後，剩下的部分整體放大',
   },
   zhHans: {
     circle: '同色星星连满此刻最外面的一条边，就得分并消除',
     square: '同色星星连满整行或整列，就得分并消除，棋盘合拢',
-    squareDiamond: '同色星星连满此刻最外面的一条线，就得分并消除。最少要 3 枚。消完之后，剩下的部分整体放大',
-    triangle: '同色星星连满此刻最外面的一条线，就得分并消除。最少要 3 枚。消完之后，剩下的部分整体放大',
+    squareDiamond: '同色星星连满此刻最外面的一条线，就得分并消除。消完之后，剩下的部分整体放大',
+    triangle: '同色星星连满此刻最外面的一条线，就得分并消除。消完之后，剩下的部分整体放大',
   },
 };
 
@@ -2776,7 +2871,7 @@ export const MODE_TIPS: Record<
     bomb: 'Sliding, scoring and clearing work as before. Red is the bomb colour. Four reds touching blow up. Any four that touch will do it. A bomb next to a scoring shape takes two hits to defuse: the first only cracks it.',
     flip: 'Score and a coloured piece turns into a star. In Endless flip a star that scores turns back into a coloured piece. So same-colour stars never clear. The same group of pieces can score twice in a row, then has to wait 5 moves before it scores again. 100 seconds. Off you go!',
     slot: 'Slot machine spins one scoring shape at the start. Only that shape scores this game. Build it and those pieces turn into stars. It shrinks too: one piece fewer at each step of the ladder — the bigger the shape, the more pieces it keeps at the bottom. Once it has shrunk, any still-joined part of it counts. Clearing works as before. Give it a go!',
-    timed: '100 seconds on the clock — how many points can you get?',
+    timed: '{s} seconds on the clock — how many points can you get?',
     layout: 'Same rules, different board. Fancy the challenge?',
     puzzle: 'Balls start with 15 moves, squares with 22. A move that scores is free. Any other move costs 1. Moves never come back. How high can you score?',
   },
@@ -2784,7 +2879,7 @@ export const MODE_TIPS: Record<
     bomb: 'Le glissement, les points et les disparitions ne changent pas. Le rouge est la couleur de la bombe. Quatre rouges qui se touchent explosent. N’importe lesquels, du moment qu’ils se touchent. Une bombe voisine d’une figure qui marque se désamorce en deux coups : le premier ne fait que la fissurer.',
     flip: 'Quand vous marquez, la pièce devient une étoile. Dans Retournement infini, une étoile qui marque redevient une pièce colorée. Les étoiles de même couleur ne disparaissent donc jamais. Un même groupe de pièces peut marquer deux fois de suite, puis doit attendre 5 coups avant de marquer à nouveau. 100 secondes. C’est parti !',
     slot: 'Machine à sous tire une figure gagnante au départ. Seule cette figure marque cette partie. Formez-la et ces pièces deviennent des étoiles. Elle rétrécit aussi : une pièce de moins à chaque palier — plus la figure est grande, plus il en reste au dernier palier. Une fois réduite, toute partie encore reliée compte. Les disparitions ne changent pas. À vous !',
-    timed: '100 secondes au compteur — combien de points allez-vous marquer ?',
+    timed: '{s} secondes au compteur — combien de points allez-vous marquer ?',
     layout: 'Mêmes règles, autre plateau. Vous relevez le défi ?',
     puzzle: '15 coups au départ pour les billes, 22 pour les carrés. Un coup qui marque ne coûte rien. Les autres en coûtent 1. Les coups ne reviennent jamais. Quel score allez-vous atteindre ?',
   },
@@ -2792,7 +2887,7 @@ export const MODE_TIPS: Record<
     bomb: '滑動、得分、消除都和以前一樣。紅色是炸彈色。四個紅的連在一起就會爆炸。任意四個碰到一起都算。得分圖案旁邊的炸彈挨兩下才拆：第一下只留裂紋。',
     flip: '得分之後色塊會變成星星。《無限反轉》裡星星得分會再變回色塊。所以同色星星永遠不會消除。同一組棋子連得兩次分後要歇一歇，滿 5 步再拼出來才又算分。限時 100 秒。開始吧！',
     slot: '《老虎機》開局會轉出一個得分圖案。這一局只有它算分。拼出它就得分，那幾枚變成星星。它也會變小：每降一級少一枚，圖案越大，最後剩得越多。變小之後，它任意還連著的那幾枚都算。消除規則不變。快挑戰一下吧！',
-    timed: '限時100s，能得多少分呢？',
+    timed: '限時 {s} 秒，能得多少分呢？',
     layout: '規則相同，佈局不同，您能挑戰麼？',
     puzzle: '小球開局 15 步，方塊 22 步。沒得分的一步扣 1 步，得分的一步不扣。步數只減不增。您能得多少分？',
   },
@@ -2800,7 +2895,7 @@ export const MODE_TIPS: Record<
     bomb: '滑动、得分、消除都和以前一样。红色是炸弹色。四个红的连在一起就会爆炸。任意四个碰到一起都算。得分图案旁边的炸弹挨两下才拆：第一下只留裂纹。',
     flip: '得分之后色块会变成星星。《无限反转》里星星得分会再变回色块。所以同色星星永远不会消除。同一组棋子连得两次分后要歇一歇，满 5 步再拼出来才又算分。限时 100 秒。开始吧！',
     slot: '《老虎机》开局会转出一个得分图案。这一局只有它算分。拼出它就得分，那几枚变成星星。它也会变小：每降一级少一枚，图案越大，最后剩得越多。变小之后，它任意还连着的那几枚都算。消除规则不变。快挑战一下吧！',
-    timed: '限时100s，能得多少分呢？',
+    timed: '限时 {s} 秒，能得多少分呢？',
     layout: '规则相同，布局不同，您能挑战么？',
     puzzle: '小球开局 15 步，方块 22 步。没得分的一步扣 1 步，得分的一步不扣。步数只减不增。您能得多少分？',
   },

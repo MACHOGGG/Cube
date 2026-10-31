@@ -29,6 +29,7 @@ export type PlayKey =
   | 'layout'
   | 'endcard'
   | 'totaltip'
+  | 'fliptip'
   | 'howhint'
   | 'finished';
 
@@ -180,6 +181,16 @@ export function markFinishedAGame(): void {
 export function claimFirstTotalTip(): boolean {
   if (!firstTimeIn('totaltip')) return false;
   markOpened('totaltip');
+  return true;
+}
+
+/**
+ * 无限反转结算页那一句「综合得分 = 拼出得分 × 反转系数」该不该摆（站长 10-25 D37 甲，10-31 方案推14 Z-B07）。只摆头一回，
+ * 和 claimFirstTotalTip 各记各的（自己那把 slides_played_fliptip）：反转局不烧基础局那一次，基础局也不烧这一次。
+ */
+export function claimFirstFlipTip(): boolean {
+  if (!firstTimeIn('fliptip')) return false;
+  markOpened('fliptip');
   return true;
 }
 

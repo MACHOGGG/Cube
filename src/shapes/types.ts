@@ -68,7 +68,7 @@ export interface ShapeGameOpts {
   /**
    * 无限反转（只有基础方块和小球有）：图案得分翻面之后，一组里正面的翻成反
    * 面、反面的翻回正面，正反无限反转；反面同色连成一行 / 列不消除；没有
-   * 「翻完了」这回事——一局只由计时结束（engine/modeClock.ts 的 MODE_SECONDS，100 秒）。
+   * 「翻完了」这回事——一局只由计时结束（engine/modeClock.ts 的 FLIP_SECONDS，100 秒）。
    */
   flip?: boolean;
   /**
@@ -162,6 +162,11 @@ export interface ShapeGameOpts {
    * 的 claimFirstTotalTip）。五条规矩的最后一条从棋盘底下挪到了那儿。
    */
   shouldTeachTotal?: () => boolean;
+  /**
+   * 头一回打完无限反转，明细底下补一句「综合得分 = 拼出得分 × 反转系数」（engine/firstPlay.ts 的 claimFirstFlipTip，
+   * 推14 Z-B07）。只有方块、小球开得出反转，别的棋盘传了也不用。
+   */
+  shouldTeachFlip?: () => boolean;
 }
 
 export interface ShapeGame {

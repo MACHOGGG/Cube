@@ -17,7 +17,7 @@ import type { Lang } from './i18n';
  *
  * 0 = 还没有写过一条：这一套从 10-11 起才有，线上的旧页面不认 `release`，照旧比 `sha`（见 engine/newVersion.ts）。
  */
-export const RELEASE = 11;
+export const RELEASE = 12;
 
 export type ReleaseNote = Record<Lang, string>;
 
@@ -92,6 +92,14 @@ export const CHANGELOG: Readonly<Record<number, ReleaseNote>> = {
     zhHant: '新增：局中燈泡提示',
     en: 'New: a hint bulb in your first games',
     fr: 'Nouveau\u00a0: l\u2019ampoule d\u2019aide',
+  },
+  // 10-31 方案推14（Z-B23，ero2 全站规则大更新、清档）：V16 站长定的简体原文（附录甲 §1 推14 那一行）。收尾逐一消除、整线消除
+  // 音、榜单重做、Pro 新规都并在这一条里，不另占号。
+  12: {
+    zhHans: '新规则上线，战绩重新开始',
+    zhHant: '新規則上線，戰績重新開始',
+    en: 'New rules are live: records start fresh',
+    fr: 'Nouvelles r\u00e8gles en ligne \u2014 palmar\u00e8s \u00e0 z\u00e9ro',
   },
 };
 

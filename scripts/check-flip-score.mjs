@@ -21,7 +21,7 @@ if (!src) {
   console.error('用法: node scripts/check-flip-score.mjs <打包好的 scoring.mjs>');
   process.exit(2);
 }
-const { createCascadeStepper, POINTS_PER_FLIP, flipStreakMult, flipStreakDelta, FLIP_STREAK_CAP } = await import(src);
+const { createCascadeStepper, POINTS_PER_FLIP, flipStreakMult, flipStreakDelta, FLIP_STREAK_CAP, flipCoefFor } = await import(src);
 
 let fail = 0;
 const check = (name, ok, extra = '') => {
@@ -145,11 +145,11 @@ check('POINTS_PER_FLIP 是 2', POINTS_PER_FLIP === 2, String(POINTS_PER_FLIP));
 
 // ── 无限反转的加分气泡：印的倍率 × 分 = 真正加上去的分（第 14 推）──────────────
 //
-// 气泡上那个「×N」原先自己算 `1.5 ** 连击数`，没套 FLIP_STREAK_CAP：连击过了十次，加分
+// 气泡上那个「×N」原先自己算 `1.5 ** 连击数`，没套 FLIP_STREAK_CAP：连击过了封顶那一次，加分
 // 早就封顶了，气泡上的倍率还在往上翻。现在两处都从 flipStreakMult 拿；这儿把连击 0–20
-// 挨个对一遍（方案点名的那个区间，一半在封顶前、一半在封顶后）。
+// 挨个对一遍（方案点名的那个区间，封顶前后都有）。封顶 10-31 方案推14 Z-B06 起从 10 次改成 5 次（约 7.6 倍）。
 {
-  check('（尺子）封顶那一档是 10', FLIP_STREAK_CAP === 10, String(FLIP_STREAK_CAP));
+  check('（尺子）封顶那一档是 5', FLIP_STREAK_CAP === 5, String(FLIP_STREAK_CAP));
   const bad = [];
   for (let chain = 0; chain <= 20; chain++) {
     for (const points of [1, 2, 4, 6, 9, 12, 16, 25]) {
@@ -159,15 +159,58 @@ check('POINTS_PER_FLIP 是 2', POINTS_PER_FLIP === 2, String(POINTS_PER_FLIP));
     }
   }
   check('连击 0–20：气泡倍率 × 分 = 实际加分', bad.length === 0, bad.slice(0, 3).join(' / ') || '168 组对上');
-  check('过了封顶，倍率不再往上翻（连击 20 和 10 一样）', flipStreakMult(20) === flipStreakMult(10),
-    `${flipStreakMult(10)} / ${flipStreakMult(20)}`);
-  check('封顶之前照常往上翻（连击 9 < 连击 10）', flipStreakMult(9) < flipStreakMult(10));
+  check(`过了封顶，倍率不再往上翻（连击 20 和 ${FLIP_STREAK_CAP} 一样）`, flipStreakMult(20) === flipStreakMult(FLIP_STREAK_CAP),
+    `${flipStreakMult(FLIP_STREAK_CAP)} / ${flipStreakMult(20)}`);
+  check(`封顶之前照常往上翻（连击 ${FLIP_STREAK_CAP - 1} < 连击 ${FLIP_STREAK_CAP}）`, flipStreakMult(FLIP_STREAK_CAP - 1) < flipStreakMult(FLIP_STREAK_CAP));
+  check('封顶那一档约 7.6 倍（1.5⁵）', flipStreakMult(FLIP_STREAK_CAP).toFixed(1) === '7.6', String(flipStreakMult(FLIP_STREAK_CAP)));
 
   // 气泡那一处真的在用 flipStreakMult（它在 gameController 的闭包里，单独叫不出来）。
   const { readFileSync } = await import('node:fs');
   const gc = readFileSync(new URL('../src/engine/gameController.ts', import.meta.url), 'utf8');
   check('加分气泡的倍率从 flipStreakMult 拿（不再自己算 1.5 的几次方）',
     /const shownMult = hooks\.flip \? flipStreakMult\(flipChain\)/.test(gc) && !/FLIP_STREAK_BASE \*\* /.test(gc));
+}
+
+// ── 反转系数（10-31 方案推14 Z-B06，V15）：结算时拼出得分 × 系数 = 综合得分 ─────────────────────────
+//
+// 方块 ×6、小球 ×2.5（认不出的给 1）；结算页摆「拼出得分 → 反转系数 → 综合得分」三行，乘起来对得上；简繁英 ×6.00、法文
+// ×6,00（Z-B08）；老档（没有 flipCoef）不摆那一行。结算页那几行在 runRecord.ts，这儿当场打一份包来量。
+{
+  check('反转系数：方块 6、小球 2.5', flipCoefFor('square') === 6 && flipCoefFor('circle') === 2.5, `${flipCoefFor('square')} / ${flipCoefFor('circle')}`);
+  check('反转系数：认不出的棋盘给 1（不会把分乘成 0 或 NaN）', flipCoefFor('triangleBig') === 1 && flipCoefFor('nope') === 1);
+  const { build } = await import('esbuild');
+  const { mkdtempSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { pathToFileURL, fileURLToPath } = await import('node:url');
+  const dir = mkdtempSync(join(tmpdir(), 'flip-score-'));
+  const out = join(dir, 'rr.mjs');
+  await build({ entryPoints: [fileURLToPath(new URL('../src/engine/runRecord.ts', import.meta.url))], bundle: true, format: 'esm', outfile: out, logLevel: 'silent' });
+  const { runBreakdown } = await import(pathToFileURL(out).href);
+  rmSync(dir, { recursive: true, force: true });
+  const run = {
+    shapeId: 'square', shapeFallback: '方块', modeKey: 'flip', flipRules: 2, score: 120, flipCoef: 6, totalScore: 720,
+    patternPoints: 80, comboBonusPoints: 40, linePoints: 0, lines: 0, flips: 30, moves: 40, elapsedSec: 100,
+    ratePercent: 50, bonusMult: 1, best: 0, reason: '时间到', neverFlipped: 0, unflippedScale: 1, timeMult: 1,
+    extraPenalty: 0, extraPenaltyReason: '', hazardEnd: false, at: 0,
+  };
+  const LABEL = {
+    zhHans: ['拼出得分', '反转系数', '综合得分'], zhHant: ['拼出得分', '反轉係數', '綜合得分'],
+    en: ['Build score', 'Flip multiplier', 'Final score'], fr: ['Score de jeu', 'Coefficient de retournement', 'Score final'],
+  };
+  for (const [lang, [built, coef, total]] of Object.entries(LABEL)) {
+    const rows = runBreakdown(run, lang);
+    const at = (l) => rows.findIndex(([x]) => x === l);
+    const want = lang === 'fr' ? '×6,00' : '×6.00';
+    check(`${lang}：结算页摆「${built} → ${coef} → ${total}」，顺序对、${want}、乘起来 = 综合分`,
+      at(built) >= 0 && at(coef) === at(built) + 1 && at(total) === at(coef) + 1 && rows[at(coef)][1] === want &&
+        Number(rows[at(built)][1]) * Number(rows[at(coef)][1].slice(1).replace(',', '.')) === Number(rows[at(total)][1]),
+      rows.map(([l, v]) => `${l}=${v}`).join(' | '));
+  }
+  const legacy = { ...run, totalScore: 120 };
+  delete legacy.flipCoef;
+  const old = runBreakdown(legacy, 'zhHans');
+  check('老档（没有 flipCoef）不摆反转系数那一行', !old.some(([l]) => l === '反转系数'), old.map(([l, v]) => `${l}=${v}`).join(' | '));
 }
 
 console.log(fail ? `\n${fail} 条没过` : '\n全过');

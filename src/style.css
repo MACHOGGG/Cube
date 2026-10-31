@@ -489,6 +489,11 @@
 .overlay--end .modal .end-row--avg > span,
 .overlay--end .modal .end-row--tip > span { display: inline; width: auto; padding: 0; }
 .overlay--end .modal .end-row--tip { padding-top: 4px; color: var(--ink-soft); }
+/* 炸弹局只剩拆不掉的炸弹：「拼出得分」那一行正下方一行小字（站长 D36 甲，10-31 方案推14 Z-B20）。字号、颜色照 .end-row--tip
+   抄一份。它要紧跟在拼出得分后面（DOM 次序），所以不能做成表的标题行（caption 只去表头表底）；表格又没有 CSS 的 colspan，
+   于是它占左边那一格，里面那一层宽 0、至少 100%：不撑宽抬头那一栏（否则数那一栏被整列往右推），字在这一栏里折行。 */
+.overlay--end .modal .end-row--note > span { font-size: 13px; line-height: 19px; font-weight: 400; color: var(--ink-soft); padding-bottom: 2px; }
+.overlay--end .modal .end-row--note > span > span { display: block; width: 0; min-width: 100%; }
 .overlay--end .modal .end-daily-note {
   grid-column: 1 / 3; grid-row: 4;
   margin: 6px 0 0;
@@ -3490,30 +3495,53 @@ body:has(.center-pick--back) .home-nav { display: none; }
 .records-panels .rank-row { padding: 6px 9px; gap: 6px; }
 .records-panels .rank-place { min-width: 1.6em; font-size: 0.72rem; }
 .records-panels .rank-name, .records-panels .rank-score { font-size: 0.78rem; }
-/* 切页分两行：上一行是母标签（总榜 + 六个大类），下一行是钻进去之后那一类
-   旗下的几张榜。两行都横着滚，都不换行——换行会让这一排在中文和法文里各有
-   各的高度，底下的榜跟着上下跳。 */
-.rank-tabs {
-  display: flex; gap: 6px; overflow-x: auto; overflow-y: hidden;
-  padding-bottom: 2px; scrollbar-width: none; flex: 0 0 auto;
+/* 排行榜三行筛选（10-31 方案推14 Z-B15，lb-filter §4）：上面「全球榜 / 今日挑战」两个页签，选中那颗底下一道 3px 的杠；
+   全球榜底下三行药丸——族、普通 / Pro、玩法——每行上面一个看得见的小标题（也是 role="group" 的名字）。
+   药丸高 28、间隔 6、左右内距 11（WCAG 2.5.8 的 24×24 够），flex-wrap 折行不横滚。三种状态：没选 = 白 55%（叠在长春花蓝的
+   面板上约 #D3D6EB）、字 #453023；已选 = 深墨 #2E2430 底 ＋ 白字 ＋ 字前一个勾；不能选 = 无底、1.5px 虚线框、字 60%。色卡不跟
+   主题翻（浅色 / 深色 / 色盲三套这一块一样）——它站在那块固定颜色的板子上。只有现成的 140 ms 底色过渡，减弱动态效果时关掉。
+   新 CSS 都要在 Chrome 61 上可用：用 margin 不用 flex 的 gap 的地方见下。 */
+.rank-side, .rank-main { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.rank-main { min-height: 0; }
+.rank-scope { display: flex; gap: 18px; }
+.rank-scope-tab {
+  cursor: pointer; background: none; border: none; padding: 4px 0 6px;
+  font-family: 'Karla', sans-serif; font-size: 0.86rem; font-weight: 700; color: #453023;
+  border-bottom: 3px solid transparent;
 }
-.rank-tabs::-webkit-scrollbar { display: none; }
-.rank-tab {
-  flex: 0 0 auto; cursor: pointer; white-space: nowrap;
+.rank-scope-tab--on { border-bottom-color: #2E2430; }
+.rank-filters { display: flex; flex-direction: column; gap: 8px; }
+.rank-filters[hidden] { display: none; }
+.rank-filter { display: flex; flex-direction: column; gap: 4px; }
+.rank-filter-title { font-family: 'Karla', sans-serif; font-size: 0.72rem; font-weight: 700; color: #453023; opacity: 0.8; letter-spacing: 0.02em; }
+.rank-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.rank-chip {
+  height: 28px; padding: 0 11px; cursor: pointer; white-space: nowrap; box-sizing: border-box;
   font-family: 'Karla', sans-serif; font-size: 0.78rem; font-weight: 600;
-  color: #453023; background: rgba(255, 255, 255, 0.55); border: none;
-  border-radius: var(--r-full); padding: 6px 13px;
+  color: #453023; background: rgba(255, 255, 255, 0.55); border: 1.5px solid transparent;
+  border-radius: var(--r-full);
   transition: background 140ms ease;
 }
-.rank-tab--on { background: rgba(255, 255, 255, 0.96); }
-/* 下一行：点开一个母标签之后，它旗下那几张榜。药丸是同一套，只是底色再淡
-   一档——上一行答的是「在哪一类」，这一行答的是「这一类里的哪一张」。没点开
-   时这一行是 hidden 的，不占地方。
-   往上收 5px：.rank-view 那 12px 的行距是给「标签 / 榜」这两块之间用的，两
-   行标签本来就是一件东西，贴近一点才像一组。 */
-.rank-tabs--sub { margin-top: -5px; }
-.rank-tabs--sub .rank-tab { background: rgba(255, 255, 255, 0.4); }
-.rank-tabs--sub .rank-tab--on { background: rgba(255, 255, 255, 0.96); }
+.rank-chip[aria-pressed='true'] { background: #2E2430; color: #fff; }
+.rank-chip[aria-pressed='true']::before { content: '✓'; margin-right: 4px; font-weight: 800; }
+.rank-chip--grey { background: none; border: 1.5px dashed rgba(69, 48, 35, 0.6); color: rgba(69, 48, 35, 0.6); cursor: default; }
+.rank-chip:focus-visible, .rank-scope-tab:focus-visible { outline: 2px solid #2E2430; outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .rank-chip { transition: none; }
+}
+/* 表头那句和变灰提示：同一个 aria-live="polite" 区。空着时不占地方。 */
+.rank-notes { display: flex; flex-direction: column; gap: 2px; }
+.rank-say, .rank-head { margin: 0; font-family: 'Karla', sans-serif; font-size: 0.74rem; line-height: 1.35; color: #453023; }
+.rank-say:empty, .rank-head:empty { display: none; }
+.rank-say { font-weight: 700; }
+/* 行首的第二枚图（玩法）。 */
+.rank-glyph--mode { opacity: 0.9; }
+/* 电脑（全站现成的电脑档断点 1000）：左右两栏，左栏 300 不滚，右栏的榜自己滚。 */
+@media (min-width: 1000px) {
+  .rank-view { flex-direction: row; align-items: flex-start; }
+  .rank-view > .rank-side { flex: 0 0 300px; }
+  .rank-view > .rank-main { flex: 1 1 auto; align-self: stretch; }
+}
 .rank-body { display: flex; flex-direction: column; gap: 5px; overflow-y: auto; min-height: 0; }
 /* 名次行：和记录行同一套（白格子 --surface，字 --ink / --ink-soft，一起跟主题翻）。 */
 .rank-row {
@@ -5294,6 +5322,8 @@ html.is-tutorial .home-nav { display: none; }
   width: min(560px, 92vw); max-height: 76vh; overflow-y: auto; overscroll-behavior: contain;
   cursor: default;
 }
+/* 排行榜那一块放大之后放宽到 880（推14 Z-B15：电脑上左右两栏）。 */
+.records-panel--ranks.records-panel--big { width: min(880px, 92vw); }
 
 /* A game screen has to fit its board, the score/rate/clock HUD and the
    pattern hints in one viewport — having to scroll before the board is even
@@ -6930,8 +6960,8 @@ body.is-room-host::after {
    底色和《记录与排名》里那半块一样是那个长春花蓝——榜上的字（rank-foot /
    rank-empty 是白的）和灰条都是按这个底色画的，换成白底就什么都看不见了。 */
 .rank-page-panel {
-  width: 100%; max-width: 560px; margin: 0 auto; box-sizing: border-box;
-  background: #9BA5D6; border-radius: var(--r-xl);
+  width: min(880px, 92vw); margin: 0 auto; box-sizing: border-box;
+  background: var(--card-periwinkle); border-radius: var(--r-xl);
   padding: 26px 22px; min-height: 46vh;
 }
 .rank-page-panel .rank-body { overflow: visible; }

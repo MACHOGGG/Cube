@@ -1,3 +1,4 @@
+import { DEFAULT_SELECTION, normalize, selectionKey, type LbMode, type LbSelection } from './lbCells';
 import type { RunData } from './runRecord';
 import { entitlement, signedInEmail } from './subscription';
 import { isStoreChannel } from './channel';
@@ -115,12 +116,17 @@ export const runIdOf = (data: RunData): string => `${data.at}-${data.shapeId}-${
 
 /** 榜上的一行。 */
 export interface BoardRow {
+  /** 名次。同分同名次（1、2、2、4，站长 D38 甲，推14 Z-B16）。 */
   rank: number;
   name: string;
   score: number;
   me: boolean;
-  /** 总榜上这一行是哪个玩法的那一局（单局榜没有这个字段）。 */
-  mode?: string;
+  /** 这一行是哪副棋盘的那一局（合并榜才有；画行首图，推14 Z-B15）。今日榜没有。 */
+  board?: string;
+  /** 这一行是哪个玩法（base / timed / bomb / slot / flip / puzzle）。今日榜没有。 */
+  kind?: LbMode;
+  /** 这一行来自 Pro 榜（挂「Pro」小标，§10.4：只选 Pro 时也挂）。 */
+  pro?: boolean;
   /**
    * 步步为营**清盘**的那一局还剩几步（第 14 推，api/scores.js 的 decodeBoard）。只有清盘的
    * 局才有；同分的两局，剩得多的排在前面。
@@ -129,13 +135,18 @@ export interface BoardRow {
 }
 
 export interface BoardPage {
-  mode: string;
   rows: BoardRow[];
-  /** 这张榜上一共多少人。 */
-  players: number;
-  /** 我自己的名次。没打过这个玩法就是 null——不是第一名。 */
-  me: { rank: number; score: number } | null;
+  /**
+   * 我自己那一行。一局都没有就是 null——不是第一名。rank 为 null：在前 200 名以外（界面印「200+」，读屏念
+   * rankOutside200，推14 Z-B15）。
+   */
+  me: { rank: number | null; score: number; left?: number } | null;
+  /** 今日榜那一天（mode: 'daily' 才有）。 */
+  day?: string;
 }
+
+/** 看哪一张：三行选择（合并榜），或者今日榜。 */
+export type BoardQuery = LbSelection | 'daily';
 
 /** 云上这个账号的样子。 */
 export interface CloudMine {
@@ -413,14 +424,15 @@ export type BoardResult =
  */
 const BOARD_TTL_MS = 10_000;
 const boardCache = new Map<string, { at: number; page: BoardPage }>();
-const cacheKey = (mode?: string) => mode ?? '';
+/** 缓存键是规范化之后的选择（[]、全集、乱序得到同一个键，engine/lbCells.ts 的 selectionKey）。 */
+const cacheKey = (q: BoardQuery) => (q === 'daily' ? 'daily' : 'sel:' + selectionKey(q));
 
 /** 这张榜手上有没有一份还新鲜的。有就先把它画出来，别让屏幕空着。 */
-export function cachedBoard(mode?: string): BoardPage | null {
-  const hit = boardCache.get(cacheKey(mode));
+export function cachedBoard(q: BoardQuery = DEFAULT_SELECTION): BoardPage | null {
+  const hit = boardCache.get(cacheKey(q));
   if (!hit) return null;
   if (Date.now() - hit.at > BOARD_TTL_MS) {
-    boardCache.delete(cacheKey(mode));
+    boardCache.delete(cacheKey(q));
     return null;
   }
   return hit.page;
@@ -431,10 +443,25 @@ export function invalidateBoards(): void {
   boardCache.clear();
 }
 
-export async function fetchBoard(mode?: string): Promise<BoardResult> {
-  const r = await post<BoardPage>({ action: 'board', ...(mode ? { mode } : {}) });
+/**
+ * 取一张榜。三行选择照服务端的请求格式交：{ families?, tiers?, modes? }，「全部」那一行不传（推14 Z-B15）；今日榜照旧
+ * { mode: 'daily' }。
+ */
+export async function fetchBoard(q: BoardQuery = DEFAULT_SELECTION): Promise<BoardResult> {
+  let req: Record<string, unknown>;
+  if (q === 'daily') req = { action: 'board', mode: 'daily' };
+  else {
+    const n = normalize(q);
+    req = {
+      action: 'board',
+      ...(n.families.length ? { families: n.families } : {}),
+      ...(n.tiers.length ? { tiers: n.tiers } : {}),
+      ...(n.modes.length ? { modes: n.modes } : {}),
+    };
+  }
+  const r = await post<BoardPage>(req);
   if (r.ok) {
-    boardCache.set(cacheKey(mode), { at: Date.now(), page: r.body });
+    boardCache.set(cacheKey(q), { at: Date.now(), page: r.body });
     return { ok: true, page: r.body };
   }
   if (r.status === 0) return { ok: false, reason: r.error === 'signedOut' ? 'signedOut' : 'network' };

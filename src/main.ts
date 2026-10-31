@@ -1,5 +1,5 @@
 import { injectStyles } from './injectStyles';
-import { unlockAudio, wireClickCues } from './engine/juice';
+import { unlockAudio, unlockNextAudio, wireClickCues } from './engine/juice';
 import { applyAppIcon } from './ui/appIcons';
 import { showLoadingScreen } from './ui/loadingScreen';
 import { initAnalytics, trackScreen, trackLanguage } from './engine/analytics';
@@ -53,6 +53,7 @@ import {
   BASIC_KEYS,
   claimFirstEndcard,
   claimFirstTotalTip,
+  claimFirstFlipTip,
   firstTimeIn,
   glowingBasics,
   markOpened,
@@ -73,7 +74,7 @@ import { syncHomeSlot } from './ui/homeSlot';
 import { openLegalWindow } from './ui/legalWindow';
 import { installBackNav, setScreenBack } from './engine/backNav';
 import { drawOne, type Family, type TargetPattern } from './engine/targets';
-import { MODE_SECONDS } from './engine/modeClock';
+import { FLIP_SECONDS, timedSecondsFor } from './engine/modeClock';
 import { createSquareGame } from './shapes/square';
 import { cardOf, familyFromName, registerCards } from './shapes/registry';
 import { createTriangleGame } from './shapes/triangle';
@@ -107,6 +108,23 @@ function warmAudio() {
 }
 window.addEventListener('pointerdown', warmAudio);
 window.addEventListener('keydown', warmAudio);
+/*
+ * 整线消除那一声走的是另一套（cuelume 0.2.8，engine/juice.ts 的 playLineClear，10-31 方案推14 Z-B26）。它在「页面还没有过
+ * 用户激活」时什么都不做（isBlocked），而触屏上第一下 pointerdown 不算用户激活（要到 pointerup / touchend / click 才算）——
+ * 只在 pointerdown 里解一次，触屏上这一套可能一直建不起来。所以另挂这几种手势，每次都试，直到它回 true 才摘。0.2.2 那一套
+ * 的解锁（上面 warmAudio）一字不改。
+ */
+const NEXT_WARM_EVENTS = ['pointerup', 'touchend', 'click', 'keydown'] as const;
+let nextWarm = false;
+function warmNext() {
+  if (nextWarm) return;
+  void unlockNextAudio().then((ok) => {
+    if (!ok || nextWarm) return;
+    nextWarm = true;
+    for (const t of NEXT_WARM_EVENTS) window.removeEventListener(t, warmNext);
+  });
+}
+for (const t of NEXT_WARM_EVENTS) window.addEventListener(t, warmNext);
 
 const rootEl = document.getElementById('app');
 if (!rootEl) throw new Error('#app not found');
@@ -188,7 +206,7 @@ const recordSources: RecordSource[] = [
     // 这一格的字是**给玩家看的时长**，所以从常量来，不手写：从前它写死 ' · 60s'，
   // 而真正生效的秒数在另外一处；改一头忘一头，记录页上就标着一个数、局里跑着
   // 另一个数，而两张榜的键是同一个，玩家没法分辨自己那条是哪一版打的。
-  ...games.map((g) => ({ card: g.card, suffix: suffixFor('timed'), mode: ` · ${MODE_SECONDS}s` })),
+  ...games.map((g) => ({ card: g.card, suffix: suffixFor('timed'), mode: ` · ${timedSecondsFor(g.card.id)}s` })),
   ...games.map((g) => ({ card: g.card, suffix: suffixFor('bomb'), mode: ' · 💥' })),
   ...layoutGames.map((g) => ({ card: g.card, suffix: suffixFor('base'), mode: ' · +' })),
   ...bombLayoutGames.map((g) => ({ card: g.card, suffix: suffixFor('bomb'), mode: ' · + 💥' })),
@@ -239,11 +257,8 @@ const runKeyFor: RunKeyFor = (data) => {
   );
 };
 
-/**
- * 《无限反转》一局多长。**不再是自己的数**——玩家 2026-09 把带钟的三个玩法统一成
- * 100 秒，所以这里只是给那个常量起了个本地名字（见 engine/modeClock.ts）。
- */
-const FLIP_SECONDS = MODE_SECONDS;
+// 《无限反转》一局多长：engine/modeClock.ts 的 FLIP_SECONDS（100 秒）；计时挑战、定时炸弹按棋盘走 timedSecondsFor
+// （小球 60、方块 100，10-31 方案推14 Z-B05）。不在这儿另起本地名字。
 
 let activeDestroy: (() => void) | null = null;
 let currentLang: Lang = 'zhHans';
@@ -990,7 +1005,7 @@ function launchSeedGame(g: SeedGame, stage: { emblem: string; from: number }) {
         ? basicCoach(g.board)
         : tipFor('layout', () => layoutTip(currentLang))
       : v.mode === 'timed'
-        ? tipFor('timed', () => timedTip(currentLang))
+        ? tipFor('timed', () => timedTip(currentLang, g.board))
         : v.mode === 'slot' && target
           ? tipFor('slot', () => slotTip(currentLang, target))
           : v.mode === 'flip'
@@ -1065,7 +1080,7 @@ function showBombMode() {
         game,
         {
           bomb: true,
-          timeLimitSec: tier === 'timed' ? MODE_SECONDS : undefined,
+          timeLimitSec: tier === 'timed' ? timedSecondsFor(id) : undefined,
           ...tipFor('bomb', () => bombTip(currentLang, tipShape(id))),
           // 炸弹三档合一个灯泡计数。
           bulbKey: 'bomb',
@@ -1105,7 +1120,7 @@ function showTimedMode() {
       // 第三个参数是《返回》去哪：回挑形状那一屏再选一个，和《无限反转》一样（玩
       // 家 2026-09 拍的板）。整页取代了那扇窗，reopen 那条路一并撤掉——它本来就是
       // 给窗设计的。
-      showGame(game, { timeLimitSec: MODE_SECONDS, ...tipFor('timed', () => timedTip(currentLang)), bulbKey: 'timed' }, showTimedMode);
+      showGame(game, { timeLimitSec: timedSecondsFor(game.card.id), ...tipFor('timed', () => timedTip(currentLang, game.card.id)), bulbKey: 'timed' }, showTimedMode);
     },
   });
   wireHomeTitle();
@@ -1605,6 +1620,8 @@ function showGame(game: ShapeGame, opts?: ShapeGameOpts, onBack?: () => void) {
   const fullOpts: ShapeGameOpts = {
     shouldLeadOut: claimFirstEndcard,
     shouldTeachTotal: claimFirstTotalTip,
+    // 无限反转结算页那一句（推14 Z-B07）：控制器只在反转局问它，挂在每一局上不会被别的局烧掉。
+    shouldTeachFlip: claimFirstFlipTip,
     // 结算页那颗「重新登录」（10-11 方案 A-12）：令牌不作数了，这一局没传上去。开登录窗，登回来就把那一行收起来。
     onReLogin: (done) => openAuthWindow(currentLang, done),
     // 主屏版、iOS 浏览器里没登录的人：结算页三颗键上面说一句「登录后打的每一局都会存到云端」（10-11 方案 B-14，

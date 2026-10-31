@@ -7,6 +7,13 @@
  * motion itself, so callers never have to remember to.
  */
 import { play } from 'cuelume';
+/*
+ * 整线星星消除那一声换成 cuelume **0.2.8** 的 `ready`（「一声温暖的玻璃音」，站长 10-29 晚，10-31 方案推14 Z-B26）：npm 别名
+ * `cuelume-next` 只为这一声装（package.json 钉死 npm:cuelume@0.2.8）；其余音效仍用 0.2.2（含「开始游戏」那一声 0.2.2 的
+ * ready、老虎机降到底那一声 droplet）。**只有这个文件可以 import cuelume-next**（check-clear-sound 量）。两套都受
+ * slides_sound 开关管、首个手势都要解锁（unlockAudio）。
+ */
+import { play as playNext, unlock as unlockNext, setEnabled as setEnabledNext } from 'cuelume-next';
 
 // 这一句搬去了 reducedMotion.ts（那儿一个依赖都没有，小游戏那边的 dragChain
 // 只需要它，不该为它把整个 juice 拖进去）。这儿原样再导出一次，全站几十处
@@ -236,6 +243,12 @@ const CUE = {
  */
 const SOUND_KEY = 'slides_sound';
 let sound = readSound();
+// 0.2.8 那一套按开关先定一次（关着的话正在响的尾巴也收掉，见 setSoundOn）。0.2.2 那一套的 setEnabled 跟随是推29（F2）的事。
+try {
+  setEnabledNext(sound);
+} catch {
+  /* 没有 AudioContext 的环境（老内核、node 门）：不响就是了 */
+}
 
 function readSound(): boolean {
   try {
@@ -253,6 +266,12 @@ export function soundOn(): boolean {
 export function setSoundOn(next: boolean): void {
   if (next === sound) return;
   sound = next;
+  // 0.2.8 那一套同时跟着开关走：关的时候正在响的那一声 ready 几毫秒内收掉（推14 Z-B26）。
+  try {
+    setEnabledNext(next);
+  } catch {
+    /* 同上 */
+  }
   try {
     localStorage.setItem(SOUND_KEY, sound ? '1' : '0');
   } catch {
@@ -285,9 +304,22 @@ export function playFlip(): void {
   cue(CUE.flip.name, CUE.flip.vol);
 }
 
-/** A whole line clearing — the bigger, rarer moment. */
+/**
+ * 老虎机「降到底」那一下（gameController 的 bigMoment('celebrate')）——仍是 0.2.2 的 droplet：站长只点了整线星星消除，那一下
+ * 不是整线消除（推14 Z-B26）。下线的教学（storyTutorial.ts，推35 删）也还调它。
+ */
 export function playClear(): void {
   cue(CUE.clear.name, CUE.clear.vol);
+}
+
+/**
+ * 整线星星消除（站长 10-29 晚，推14 Z-B26）：只有这一声用 cuelume 0.2.8 的 ready；其余全是 0.2.2。音量 0.8 是初值（沿用原
+ * clear 那一格），站长真机听过要调只改 LINE_CLEAR.vol 这一个数（check-clear-sound 读这个常量，不写死）。
+ */
+export const LINE_CLEAR = { name: 'ready', vol: 0.8 } as const;
+export function playLineClear(): void {
+  if (!sound) return; // 和 cue() 同一个开关
+  playNext(LINE_CLEAR.name, { volume: LINE_CLEAR.vol });
 }
 
 /** 完成 / 结束 — every button that closes something out for good. */
@@ -355,6 +387,21 @@ export function playClose(): void {
  */
 export function unlockAudio(): void {
   play('tick', { volume: 0.0002 });
+  // 0.2.8 那一套（整线消除那一声）也在同一下手势里解锁；回不回 true 由调用的那一头看（main.ts 的 warmNext 重试到成功）。
+  void unlockNextAudio();
+}
+
+/**
+ * 0.2.8 那一套的解锁（推14 Z-B26）：回它自己的 unlock() 的结果。读码，0.2.8 在「页面还没有过用户激活」时什么都不做
+ * （isBlocked）；按 HTML 标准，触屏上第一下 pointerdown 不算用户激活，要到 pointerup / touchend / click 才算——所以网页
+ * 入口在这几种手势里一直重试，直到它回 true 才摘监听。
+ */
+export function unlockNextAudio(): Promise<boolean> {
+  try {
+    return unlockNext().catch(() => false);
+  } catch {
+    return Promise.resolve(false);
+  }
 }
 
 /**

@@ -40,15 +40,16 @@ export const MAX_SCORE = 1_000_000_000;
  *   N    全盘几枚（客户端的 hooks.boardTiles）。
  *   d    一枚最多同时在几条线上（线族数）。
  *   Lmax 一条线上最多几枚活格（六边圆球中心那个永久空位不算，所以是 6 不是 7）。
- *   par  基准步数（engine/erosion.ts 的表）。
+ *   par  基准步数（engine/erosion.ts 的表；ero2 起 ×1.2，10-31 方案推14 Z-B02）。
+ *   proPar  Pro 局的基准步数 = ⌈par × 1.5⌉（engine/erosion.ts 的 proParOf，Z-B13）。
  */
 export const BOARD_LIMITS = Object.freeze({
-  square: Object.freeze({ N: 36, d: 2, Lmax: 6, par: 54 }),
-  circle: Object.freeze({ N: 28, d: 3, Lmax: 7, par: 28 }),
-  squareDiamond: Object.freeze({ N: 36, d: 3, Lmax: 6, par: 54 }),
-  circleHex: Object.freeze({ N: 36, d: 3, Lmax: 6, par: 54 }),
-  circleSeven: Object.freeze({ N: 49, d: 3, Lmax: 7, par: 86 }),
-  triangleBig: Object.freeze({ N: 54, d: 3, Lmax: 11, par: 81 }),
+  square: Object.freeze({ N: 36, d: 2, Lmax: 6, par: 65, proPar: 98 }),
+  circle: Object.freeze({ N: 28, d: 3, Lmax: 7, par: 34, proPar: 51 }),
+  squareDiamond: Object.freeze({ N: 36, d: 3, Lmax: 6, par: 65, proPar: 98 }),
+  circleHex: Object.freeze({ N: 36, d: 3, Lmax: 6, par: 65, proPar: 98 }),
+  circleSeven: Object.freeze({ N: 49, d: 3, Lmax: 7, par: 104, proPar: 156 }),
+  triangleBig: Object.freeze({ N: 54, d: 3, Lmax: 11, par: 98, proPar: 147 }),
 });
 
 /**
@@ -75,10 +76,15 @@ export const FLIP_STEP = Object.freeze({
   circle: Object.freeze({ raw: 570, beats: 120 }),
 });
 
-/** 无限反转一局几秒（src/engine/modeClock.ts 的 MODE_SECONDS）。报上来的用时多给 5 秒的余量。 */
+/** 无限反转一局几秒（src/engine/modeClock.ts 的 FLIP_SECONDS）。报上来的用时多给 5 秒的余量。 */
 export const FLIP_SECONDS = 100;
-/** 连击倍率的封顶：1.5¹⁰（src/engine/scoring.ts 的 FLIP_STREAK_BASE ** FLIP_STREAK_CAP）。 */
-export const FLIP_MULT_CAP = 1.5 ** 10;
+/** 连击倍率的封顶：1.5⁵（src/engine/scoring.ts 的 FLIP_STREAK_BASE ** FLIP_STREAK_CAP；ero2 起 5 次，原先 10 次）。 */
+export const FLIP_MULT_CAP = 1.5 ** 5;
+/**
+ * 无限反转的「反转系数」（V15，10-31 方案推14 Z-B06）：综合分 = round(拼出分 × 它)。和 src/engine/scoring.ts 的 FLIP_COEF
+ * 一字不差，check-scores-guard ⑩ 对上。**vetRun 用服务器自己这一份，不信客户端报的 flipCoef。**
+ */
+export const FLIP_COEF = Object.freeze({ square: 6, circle: 2.5 });
 /** 每翻一枚几分（src/engine/scoring.ts 的 POINTS_PER_FLIP）。 */
 export const POINTS_PER_FLIP = 2;
 /** 炸弹相连收场扣几分（src/engine/bomb.ts 的 BOMB_HAZARD_PENALTY）。 */
@@ -95,10 +101,13 @@ export const PUZZLE_START = Object.freeze({ square: 22, circle: 15 });
 /** 削线分的上界：每格在每个线族里最多属于一条线，一条线的分是它枚数的平方 ≤ 枚数 × Lmax。 */
 const lineCeiling = (b) => b.d * b.N * b.Lmax;
 
-/** 乘步数系数那几档（基础、计时、炸弹、更多布局、每日挑战）的综合分上界 T = (2N + d·N·Lmax) · par²。 */
-export function stepCeiling(board) {
+/**
+ * 乘步数系数那几档（基础、计时、炸弹、更多布局、每日挑战）的综合分上界 T = (2N + d·N·Lmax) · par²。Pro 局用 proPar
+ * （10-31 方案推14 Z-B13）。剩余色块九折只会让分变小，上界不改。
+ */
+export function stepCeiling(board, pro = false) {
   const b = BOARD_LIMITS[board];
-  return b ? (POINTS_PER_FLIP * b.N + lineCeiling(b)) * b.par ** 2 : 0;
+  return b ? (POINTS_PER_FLIP * b.N + lineCeiling(b)) * (pro ? b.proPar : b.par) ** 2 : 0;
 }
 
 /** 老虎机的上界 S = 2N + d·N·Lmax + N·P（这一档不乘步数系数）。 */
@@ -114,8 +123,8 @@ export function flipStepCap(board) {
   const f = FLIP_STEP[board];
   return f ? f.raw * FLIP_MULT_CAP + f.beats / 2 : 0;
 }
-/** 无限反转一局的绝对上界（重建时判旧 best 用）：用满一局的秒数、走满步数。 */
-export const flipCeiling = (board) => flipMoveCap(FLIP_SECONDS + 5) * flipStepCap(board);
+/** 无限反转一局的绝对上界（重建时判旧 best 用）：用满一局的秒数、走满步数，再乘反转系数（榜上那个数是综合分）。 */
+export const flipCeiling = (board) => flipMoveCap(FLIP_SECONDS + 5) * flipStepCap(board) * (FLIP_COEF[board] ?? 1);
 
 /** 步步为营一局的上界：一盘全消掉。 */
 export function puzzleCeiling(board) {
@@ -133,8 +142,27 @@ export function stepCoefOf(par, cleared, tiles, moves) {
   return Math.max(1, x) ** 2;
 }
 
-/** 每一档都要有的那几样（结算页的明细，客户端 RunData 一直带着）。 */
-const REQUIRED = ['flips', 'defused', 'lines', 'linePoints', 'patternPoints', 'comboBonusPoints', 'score', 'totalScore', 'moves', 'cleared', 'boardTiles'];
+/**
+ * 剩余色块九折（站长 10-25，10-31 方案推14 Z-B08）——**和客户端 src/engine/stepCoef.ts 的 LEFTOVER_K / leftoverScale 一字
+ * 不差**：循环连乘，不用 Math.pow（逐位相等才收）。
+ */
+export const LEFTOVER_K = 0.9;
+export function leftoverScale(n) {
+  let f = 1;
+  for (let i = 0; i < n; i++) f *= LEFTOVER_K;
+  return f;
+}
+/**
+ * 打九折的两种结局理由，手抄自客户端：判死 gameController.ts 的 STUCK_REASON（「无法继续匹配」）、手动结束
+ * runRecord.ts 的 MANUAL_END_REASON（「手动结束」）。时间到、炸弹相连不扣。
+ */
+const LEFTOVER_REASONS = ['无法继续匹配', '手动结束'];
+
+/**
+ * 每一档都要有的那几样（结算页的明细，客户端 RunData 一直带着）。neverFlipped 推14 起也要（九折按它算；客户端一直在发，
+ * 旧客户端缺它就落 legacy，不上榜，和现在一样）。
+ */
+const REQUIRED = ['flips', 'defused', 'lines', 'linePoints', 'patternPoints', 'comboBonusPoints', 'score', 'totalScore', 'moves', 'cleared', 'boardTiles', 'neverFlipped'];
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 const isCount = (v) => Number.isInteger(v) && v >= 0;
 
@@ -175,11 +203,18 @@ export function vetRun(board, data) {
   if (data.boardTiles !== b.N || cleared > b.N) return { verdict: 'implausible', why: 'tiles' };
   // ④ 削线：一条线的分是它枚数的平方。
   if (linePoints > lines * b.Lmax ** 2) return { verdict: 'implausible', why: 'lines' };
+  // ⑤ 剩下没翻的色块（推14 Z-B08）：非负整数；不是反转局时，翻过的加没翻的不超过全盘（反转局一枚能来回翻很多次）。
+  if (!isCount(data.neverFlipped) || (!flip && data.neverFlipped + flips > b.N)) return { verdict: 'implausible', why: 'leftover' };
+  // 九折按服务器自己判的口径算，不信客户端报的 unflippedScale：只在判死、手动结束时扣；无限反转、步步为营不扣。
+  const scale = !flip && !puzzle && LEFTOVER_REASONS.includes(data.reason) ? leftoverScale(data.neverFlipped) : 1;
 
   if (flip) {
-    // 无限反转：不乘步数系数、不消线、没有扣分；用时、步数、每一步的分都有天花板（FLIP_STEP 那一段）。
-    if (!FLIP_STEP[board]) return { verdict: 'implausible', why: 'board' };
-    if (data.stepCoef !== 1 || linePoints !== 0 || totalScore !== score) return { verdict: 'implausible', why: 'flipSplit' };
+    // 无限反转：不乘步数系数、不消线、没有扣分，结算乘反转系数（V15，推14 Z-B06——用服务器这一份 FLIP_COEF）；
+    // 用时、步数、每一步的分都有天花板（FLIP_STEP 那一段，比的是拼出分）。
+    if (!FLIP_STEP[board] || !FLIP_COEF[board]) return { verdict: 'implausible', why: 'board' };
+    if (data.stepCoef !== 1 || linePoints !== 0 || totalScore !== Math.round(score * FLIP_COEF[board])) {
+      return { verdict: 'implausible', why: 'flipSplit' };
+    }
     if (data.elapsedSec < 0 || data.elapsedSec > FLIP_SECONDS + 5) return { verdict: 'implausible', why: 'flipTime' };
     if (moves > flipMoveCap(data.elapsedSec)) return { verdict: 'implausible', why: 'flipMoves' };
     if (score > moves * flipStepCap(board)) return { verdict: 'implausible', why: 'flipCap' };
@@ -220,7 +255,8 @@ export function vetRun(board, data) {
   if (slot) {
     // 老虎机：不乘步数系数；图案分里比「每枚 2 分」多出来的是完成奖励，整局不超过 N × P。
     if (!SLOT_P[board]) return { verdict: 'implausible', why: 'board' };
-    if (data.stepCoef !== 1 || comboBonusPoints !== 0 || patternPoints < POINTS_PER_FLIP * flips || totalScore !== score) {
+    // 老虎机也打九折（判死、手动结束；推14 Z-B08）。
+    if (data.stepCoef !== 1 || comboBonusPoints !== 0 || patternPoints < POINTS_PER_FLIP * flips || totalScore !== Math.round(score * scale)) {
       return { verdict: 'implausible', why: 'slotSplit' };
     }
     if (score > slotCeiling(board)) return { verdict: 'implausible', why: 'slotCap' };
@@ -228,10 +264,12 @@ export function vetRun(board, data) {
   }
   // 乘步数系数的那几档：基础、计时、炸弹（三档）、更多布局、每日挑战。
   if (comboBonusPoints !== 0 || patternPoints !== POINTS_PER_FLIP * flips) return { verdict: 'implausible', why: 'pattern' };
-  const coef = stepCoefOf(b.par, cleared, b.N, moves);
+  // Pro 局的基准步数是 proPar（推14 Z-B13）；谎报 Pro 只会进 Pro 榜（Z-B14），按 Pro par 算出来的系数对不上普通 par。
+  const pro = data.pro === true;
+  const coef = stepCoefOf(pro ? b.proPar : b.par, cleared, b.N, moves);
   if (Math.abs(coef - data.stepCoef) > 0.01) return { verdict: 'implausible', why: 'coef' };
   const penalty = data.hazardEnd === true && (modeKey === 'bomb' || modeKey === 'bombTimed') ? BOMB_HAZARD_PENALTY : 0;
-  if (totalScore !== Math.max(0, Math.round(score * coef) - penalty)) return { verdict: 'implausible', why: 'total' };
-  if (totalScore > stepCeiling(board)) return { verdict: 'implausible', why: 'cap' };
+  if (totalScore !== Math.max(0, Math.round(score * scale * coef) - penalty)) return { verdict: 'implausible', why: 'total' };
+  if (totalScore > stepCeiling(board, pro)) return { verdict: 'implausible', why: 'cap' };
   return { verdict: 'ok' };
 }

@@ -16,12 +16,13 @@
  *   · `hdl:` 那一串虽然还原不出第一串，可它是**一把能直接用在别处的钥匙**（`identify`
  *     认的就是它）：知道它等于知道「这个账号在系统里叫什么」。
  *
- * 回包里本来就只有 rank / score / name / avatar / me / mode——`name` 是玩家自己填的昵称，
- * 和 id 是两件事。这道门把「只有这几样」钉住：以后谁在那个 map 里顺手多带一个
+ * 回包里本来就只有 rank / score / left / name / me / board / kind / pro（今日榜没有后三样）——`name` 是玩家自己填的
+ * 昵称，和 id 是两件事。这道门把「只有这几样」钉住：以后谁在那个 map 里顺手多带一个
  * `member`（最省事的调试办法就是加它），这儿当场红。
  *
- * 两种回包都要量：母榜（`g:` 开头，几块棋盘混在一起）和单局榜 / 总榜。它们是**两段不同
- * 的代码**（scores.js 里两个 map），所以必须各量一次——只量一种等于只守一半。
+ * 两种回包都要量：三行筛选出来的榜（一张或几张合并，10-31 方案推14 Z-B15 起原先的单局榜 / 总榜 / 母榜并成这一段）
+ * 和今日榜（`mode: 'daily'`）。它们是**两段不同的代码**（scores.js 的 board() 里两个 map），所以必须各量一次——只量
+ * 一种等于只守一半。
  *
  * ── 第二件事：**名字那一格里也不许躺着身份**（#2，2026-10-02）───
  *
@@ -37,7 +38,7 @@
  * 五种改坏法都真的试过一遍，每一条都如期红：写的时候不判（⑴）、读的时候不过滤（⑶）、
  * `leakShaped` 少认一种形状（⑴ 或 ⑶）、`leaderboardName` 又去读第一串（⑷）。
  */
-import { fillRun } from './lib/fakeRun.mjs';
+import { fillRun, SCORING_RULES } from './lib/fakeRun.mjs';
 process.env.ALLOW_MEMORY_STORE = '1';
 
 let fail = 0;
@@ -53,7 +54,7 @@ async function call(body) {
   // 交卷那一路把 `data.totalScore` / `data.shapeId` 对齐到顶层那两个字段：真客户端报的
   // 就是这样（顶层那两个本来就是从 `data` 算出来的，见 engine/cloudScores.ts），而服务端
   // 2026-10-03 起要求两处说同一件事（对不上 400 mismatch，门是 check-scores-guard）。这
-  // 台门的夹具只写了 `data: { rules: 'ero1' }`，不补的话每一条交卷都 400，而它要量的是榜
+  // 台门的夹具只写了 `data: { rules }`，不补的话每一条交卷都 400，而它要量的是榜
   // 上那一行印了什么——和两处对不对得上没有关系。
   //
   // 10-11 方案 A-3 起服务器还对每一局对一遍账（api/_maxscore.js 的 vetRun），缺明细的一局不上榜——明细
@@ -90,7 +91,9 @@ async function player(id, name, { register = true } = {}) {
 const MAIL = await player('boardgate@example.com', '小明');
 const HANDLE = await player(pairKey('BoardGate1'), '阿花');
 
-const ALLOWED = ['rank', 'score', 'name', 'avatar', 'me', 'mode'];
+// 推14 Z-B15 起一行是 { rank, score, left?, name, me, board, kind, pro }（今日榜 { rank, score, left?, name, me }）；avatar、mode
+// 两样早不发了，留在白名单里不放宽什么（它们本来就不是身份）。
+const ALLOWED = ['rank', 'score', 'left', 'name', 'avatar', 'me', 'mode', 'board', 'kind', 'pro'];
 const FORBIDDEN = ['member', 'id', 'email', 'handle', 'token'];
 
 /**
@@ -99,7 +102,7 @@ const FORBIDDEN = ['member', 'id', 'email', 'handle', 'token'];
  * ⚠️ 四个坑，第一版全踩了：动作叫 `push` 不叫 `report`（`scores.js` 的 switch）；要带
  * `runId`，否则 400 run；上报的 `mode` **只能是棋盘名、不许带冒号**（`MODE_RE`——那一局
  * 是哪个玩法由存档里的 `data` 说，不由客户端报的字符串说）；而且 `data.rules` 必须等于
- * 现行那一版的记号（`ero1`），不然服务端答 `200 { stored: false }`——分一个字都没入榜，
+ * 现行那一版的记号（SCORING_RULES_VERSION，现读），不然服务端答 `200 { stored: false }`——分一个字都没入榜，
  * **而回包是 200**。
  *
  * 不盯住下面那条「榜上真有行」的尺子，这道门就会在一张空榜上全绿——第一版正是这样，
@@ -114,7 +117,7 @@ const post = (who, mode, score) =>
     mode,
     score,
     name: who.name,
-    data: { rules: 'ero1' },
+    data: { rules: SCORING_RULES },
   });
 
 for (const who of [MAIL, HANDLE]) {
@@ -124,14 +127,40 @@ for (const who of [MAIL, HANDLE]) {
     `${r.status} ${JSON.stringify(r.body).slice(0, 100)}`);
 }
 
-/** 查一张榜，把每一行的字段名收上来。 */
-async function board(mode) {
-  const got = await call({ action: 'board', email: MAIL.id, token: MAIL.token, mode });
+/**
+ * 查一张榜。推14 Z-B15 起请求是三行筛选（families / tiers / modes，空 = 全部），今日榜照旧 `mode: 'daily'`。
+ * `q` 直接摊进请求里。
+ */
+async function board(q) {
+  const got = await call({ action: 'board', email: MAIL.id, token: MAIL.token, ...q });
   return got;
 }
+/** 方块 · 基础那一张（⑶ 和反向对照用它）。 */
+const SQUARE_BASE = { families: ['square'], modes: ['base'] };
 
-for (const [label, mode] of [['单局榜', 'square:base'], ['总榜', ''], ['母榜', 'g:base']]) {
-  const got = await board(mode);
+// 今日榜要有行：两个人各交一局今天的每日挑战（今天那串码、那个玩法；明细由夹具拼齐，见 check-daily-push）。
+{
+  const SC = await import('../api/_seedcode.js');
+  const today = SC.dayIndexOf(Date.now());
+  const v = SC.VARIANTS[SC.dailyVariant(today)];
+  const MODE_KEY = { base: 'base', timed: 'timed', bomb: 'bomb', bombTimed: 'bombTimed', bombAdv: 'bomb', slot: 'base', flip: 'flip', puzzle: 'puzzle' };
+  const extra = {
+    modeKey: MODE_KEY[v.mode],
+    ...(v.mode === 'slot' ? { slot: true } : {}),
+    ...(v.mode === 'puzzle' ? { puzzleRules: 3 } : {}),
+    ...(v.mode === 'flip' ? { flipRules: 2 } : {}),
+    ...(v.mode.startsWith('bomb') ? { bombRules: 3 } : {}),
+  };
+  for (const who of [MAIL, HANDLE]) {
+    // 120：反转两个系数（6、2.5）都除得尽，fakeRun 不抛错。
+    const data = { ...fillRun(v.board, 120, extra), rules: SCORING_RULES, seed: SC.dailySeed(today), seedSource: 'daily', daily: SC.dayKey(today) };
+    const r = await call({ action: 'push', email: who.id, token: who.token, runId: `daily-${who.name}`, mode: v.board, score: 120, data });
+    check(`（前提）${who.name} 交了一局今天的每日挑战，今日榜收下`, r.status === 200 && r.body?.daily === 'stored', `${r.status} ${JSON.stringify(r.body).slice(0, 100)}`);
+  }
+}
+
+for (const [label, q] of [['方块 · 基础一张', SQUARE_BASE], ['全部（36 张合并）', {}], ['方块 · 普通 · 基础和计时两张合并', { families: ['square'], tiers: ['normal'], modes: ['base', 'timed'] }], ['今日榜', { mode: 'daily' }]]) {
+  const got = await board(q);
   const rows = got.body?.rows;
   check(`（尺子）${label}：取回来了，而且真有行（不是空榜，空榜什么都量不出来）`,
     got.status === 200 && Array.isArray(rows) && rows.length > 0,
@@ -140,7 +169,7 @@ for (const [label, mode] of [['单局榜', 'square:base'], ['总榜', ''], ['母
 
   const keys = [...new Set(rows.flatMap((r) => Object.keys(r)))];
   const extra = keys.filter((k) => !ALLOWED.includes(k));
-  check(`${label}：每一行只有那六样`, extra.length === 0, `多出来：${extra.join(' ')}（实有：${keys.join(' ')}）`);
+  check(`${label}：每一行只有白名单那几样`, extra.length === 0, `多出来：${extra.join(' ')}（实有：${keys.join(' ')}）`);
 
   const hit = FORBIDDEN.filter((k) => keys.includes(k));
   check(`${label}：没有 member / id / email / handle / token`, hit.length === 0, hit.join(' '));
@@ -168,7 +197,7 @@ for (const [label, mode] of [['单局榜', 'square:base'], ['总榜', ''], ['母
   const H = await player(pairKey('LeakGate1'), 'Abcdefghij', { register: false });   // 10 位字母，正是第一串的形状
   const r1 = await call({
     action: 'push', email: H.id, token: H.token,
-    runId: 'leak-1', mode: 'square', score: 777, name: H.name, data: { rules: 'ero1' },
+    runId: 'leak-1', mode: 'square', score: 777, name: H.name, data: { rules: SCORING_RULES },
   });
   check('（尺子）⑴ 这一局报上去了', r1.status === 200 && r1.body?.stored !== false, JSON.stringify(r1.body));
   const after1 = await hgetall(NAMES);
@@ -181,7 +210,7 @@ for (const [label, mode] of [['单局榜', 'square:base'], ['总榜', ''], ['母
   //    台装着旧包的手机打完一局，就把他在别处刚改好的名字盖回去了。
   const r2 = await call({
     action: 'push', email: H.id, token: H.token,
-    runId: 'leak-2', mode: 'square', score: 778, name: H.name, nameV: 2, data: { rules: 'ero1' },
+    runId: 'leak-2', mode: 'square', score: 778, name: H.name, nameV: 2, data: { rules: SCORING_RULES },
   });
   check('（尺子）⑵ 这一局也报上去了', r2.status === 200 && r2.body?.stored !== false, JSON.stringify(r2.body));
   const after2 = await hgetall(NAMES);
@@ -194,11 +223,13 @@ for (const [label, mode] of [['单局榜', 'square:base'], ['总榜', ''], ['母
   const M = await player('leakmail@example.com', 'ignored', { register: false });
   await call({
     action: 'push', email: M.id, token: M.token,
-    runId: 'leak-3', mode: 'square', score: 779, name: '', data: { rules: 'ero1' },
+    runId: 'leak-3', mode: 'square', score: 779, name: '', data: { rules: SCORING_RULES },
   });
   // 'leakmail' = 邮箱 @ 前面那一截，正是旧客户端会印上去的那个。
   await hset(NAMES, M.id, { name: 'leakmail', avatar: null });
-  const got = await board('square:base');
+  // 合并榜在服务端缓存 15 秒（lbq:，推14 Z-B15），上面已经取过 SQUARE_BASE 那一份——换一个还没取过的选择（同一张方块 · 基础，
+  // 只是第二行点了「普通」），读到的才是 779 交上去之后的榜。
+  const got = await board({ families: ['square'], tiers: ['normal'], modes: ['base'] });
   const row = got.body.rows.find((x) => x.score === 779);
   check('（尺子）⑶ 那一行在榜上', Boolean(row), JSON.stringify(got.body.rows).slice(0, 120));
   check('⑶ 库里那条旧的「像邮箱」的名字，榜上显示成空', row?.name === '', JSON.stringify(row));
@@ -243,7 +274,7 @@ for (const [label, mode] of [['单局榜', 'square:base'], ['总榜', ''], ['母
 // 上面那几条全绿，可它们绿得太顺了——值得确认那套判定真的会红。拿一行真实的回包，手动
 // 塞一个 member 进去再判一遍。
 {
-  const got = await board('square:base');
+  const got = await board(SQUARE_BASE);
   const tampered = got.body.rows.map((r) => ({ ...r, member: MAIL.id }));
   const keys = [...new Set(tampered.flatMap((r) => Object.keys(r)))];
   const extra = keys.filter((k) => !ALLOWED.includes(k));

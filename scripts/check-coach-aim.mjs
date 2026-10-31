@@ -920,6 +920,28 @@ for (const [idx, shape, name] of want(2) ? [[1, 'circle', '小球'], [0, 'square
   let eLeft = 6;
   for (let step = 0; step < 60; step++) {
     o = await waitLit(page, shape, o, memo);
+    // 这一局已经收场了就停（10-31 方案推14 起散边、收尾逐一把盘清得更快，60 轮之内可能就打完了）。原先没有这一句：读到一副
+    // 空盘就在下面随手滑那一句取不到线、整道门抛错；更常见的是这一局已经「死了」——死后散边一枚一枚削剩下的星星、削完才收场，
+    // 前后好几秒，这段时间灯本来就熄着、盘面还在自己变，读屏那一刻对照却还看得见「一步就能填满一条外边」，判成「该亮没亮」。
+    // 所以：结算页出来了、盘上一枚都没了就停；该亮没亮的话隔 1.5 秒再读一次——这中间亮了就拿亮的那一副判，盘面没人动却
+    // 自己变了就等它收场（最多 20 秒），盘面一动不动才照常判。
+    const sigOf = (x) => JSON.stringify(x.at.map(([k, v]) => [k, v.face, v.color]));
+    const ending = async () => {
+      if (await page.$('#endOverlay.show')) return true;
+      if (litOf(o).length) return false;
+      await page.waitForTimeout(1500);
+      const o2 = await page.evaluate(ORACLE, { shape });
+      if (litOf(o2).length) {
+        o = o2;
+        return false;
+      }
+      if (sigOf(o2) === sigOf(o)) return !!(await page.$('#endOverlay.show'));
+      return page.waitForSelector('#endOverlay.show', { timeout: 20000 }).then(() => true).catch(() => false);
+    };
+    if (!o.slide.length || (await ending())) {
+      console.log(`      ${name}：第 ${step} 步这一局已经收场，停在这儿`);
+      break;
+    }
     const rule = ruleOf(o, shape);
     seen.add(rule);
     // C 在两次读屏之间整个过去了：拿读到过的那一副补量图案块（见 seenC）。

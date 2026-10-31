@@ -116,7 +116,12 @@ export async function bundleEndDetect(root, { mutate } = {}) {
     import { setPro } from './src/engine/proMode';
     import { slideLine } from './src/engine/slideLine';
     import { outerEdges, liveOn, EDGE_MIN, EDGE_MIN_ENDGAME } from './src/engine/outerEdge';
-    export { ALL_FLIPPED_REASON, PUZZLE_STEPS_OUT_REASON, setPro, slideLine, outerEdges, liveOn, EDGE_MIN, EDGE_MIN_ENDGAME };
+    // 拉杆（推14 Z-B09 D29：收尾那几拍跟着拉杆快慢）：check-endgame-oneby 拿它量 2× / 0.5× 两档。
+    import { setFlipStep, FLIP_STEPS, FLIP_DEFAULT_STEP, flipRate } from './src/engine/flipSpeed';
+    // 色盲友好配色（check-cascade-order 量淡出替身的纹理）。
+    import { setColorblind } from './src/engine/palettePref';
+    export { setColorblind };
+    export { ALL_FLIPPED_REASON, PUZZLE_STEPS_OUT_REASON, setPro, slideLine, outerEdges, liveOn, EDGE_MIN, EDGE_MIN_ENDGAME, setFlipStep, FLIP_STEPS, FLIP_DEFAULT_STEP, flipRate };
   `;
   const srcDir = join(root, 'src');
   let sawController = false;

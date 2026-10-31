@@ -97,7 +97,7 @@ const runs = (n) => Array.from({ length: n }, (_, i) => ({
  * 只在这台设备头一回开页时写（sessionStorage 记一笔）：之后这一页里打的局、记的那一天都是被测的东西，
  * 不能被再写一遍盖掉。
  */
-async function device({ w = 390, h = 844, ua, standalone, lang = 'zhHans', localRuns = 0, signedIn = false, taught = true }) {
+async function device({ w = 390, h = 844, ua, standalone, lang = 'zhHans', localRuns = 0, signedIn = false, taught = true, clock = false }) {
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, reducedMotion: 'reduce', ...(ua ? { userAgent: ua } : {}) });
   if (standalone === 'navigator') await ctx.addInitScript(viaNavigator);
   if (standalone === 'media') await ctx.addInitScript(viaMediaQuery);
@@ -121,6 +121,8 @@ async function device({ w = 390, h = 844, ua, standalone, lang = 'zhHans', local
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e).slice(0, 160)));
+  // 计时那一局要快进过 100 秒（③ 头一局）：假钟要在进页面之前装上。
+  if (clock) await page.clock.install();
   await page.goto(BASE, { waitUntil: 'load' });
   await page.waitForSelector('.home-icon-btn', { timeout: 25000 });
   return { ctx, page, errors };
@@ -229,6 +231,22 @@ async function finish(page) {
   await page.waitForFunction(() => { const i = document.getElementById('endShareImg'); return !!i && i.complete && i.naturalHeight > 0; }, null, { timeout: 15000 }).catch(() => {});
   await page.waitForTimeout(300);
 }
+/**
+ * 计时方块打到钟响（时间到不打九折，明细里没有那一行）：③ 要一张「综合得分是怎么来的」那一句真的在的结算页。推14 起开局就
+ * 《结束游戏》的那一局剩着色块、有九折那一行，那一句留到下一局（站长 10-31），所以头一局改打这一种。要 device({ clock: true })。
+ */
+async function timedToBell(page) {
+  await page.$$eval('.home-icon-btn--timed', (els) => els[0]?.click());
+  await page.waitForSelector('.timed-page #timedShapes', { timeout: 15000 });
+  await page.$eval('#timedShapes .slot-pick-opt[data-family="square"]', (e) => e.click());
+  await page.waitForSelector('#startBtn', { state: 'attached', timeout: 15000 });
+  await page.$eval('#startBtn', (e) => e.click());
+  await page.waitForFunction(() => document.querySelectorAll('#boardWrap .tile').length > 0, null, { timeout: 25000 });
+  await page.clock.fastForward(101_000);
+  await page.waitForSelector('#endOverlay.show', { timeout: 15000 });
+  await page.waitForFunction(() => { const i = document.getElementById('endShareImg'); return !!i && i.complete && i.naturalHeight > 0; }, null, { timeout: 15000 }).catch(() => {});
+  await page.waitForTimeout(300);
+}
 async function again(page) {
   await page.$eval('#restartBtn', (e) => e.click());
   await page.waitForFunction(() => !document.getElementById('endOverlay')?.classList.contains('show'), null, { timeout: 10000 });
@@ -249,9 +267,8 @@ const endHint = (page) => page.evaluate((key) => {
 
 console.log('③ 结算页：一天一次');
 {
-  const { ctx, page, errors } = await device({ ua: IPHONE, standalone: 'navigator', taught: false });
-  await startSquare(page);
-  await finish(page);
+  const { ctx, page, errors } = await device({ ua: IPHONE, standalone: 'navigator', taught: false, clock: true });
+  await timedToBell(page);
   const t = await endHint(page);
   const tip = await page.evaluate(() => !!document.querySelector('#endBreakdown .end-row--tip'));
   check('头一回结算在讲「综合分是怎么来的」：不说登录提示（两句一次性的话不挤一窗）', tip && !t.shown, JSON.stringify({ tip, ...t }));

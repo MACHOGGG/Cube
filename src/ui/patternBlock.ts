@@ -237,8 +237,9 @@ export function mountPatternBlock(
     dim.setAttribute('stroke-dasharray', tickDash(total, total));
     lit.setAttribute('pathLength', String(total));
     lit.setAttribute('stroke-dasharray', tickDash(total, left));
-    // 到 1 枚之后没有下一级了，段数环整圈熄掉——再翻也不会更小（§2）。
-    dim.style.opacity = view.level <= 1 ? '0.25' : '';
+    // 到了这一局的最低级（基础局 2 枚、老虎机 1 枚）没有下一级了，段数环整圈熄掉——再翻也不会更小（§2）。按
+    // segTotal === 0 判（erosion.ts 到最低级回 0），不按 level <= 1：ero2 基础局封底 2，那样 1×2 时不变暗（推14 Z-B02）。
+    dim.style.opacity = view.segTotal === 0 ? '0.25' : '';
     paintIcon(view.level);
     if (view.level !== shownLevel) {
       if (shownLevel !== -1) flash(view.level);

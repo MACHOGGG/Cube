@@ -84,7 +84,13 @@ async function makePlayer(email) {
 /** 编号表那一行（玩法）→ 存档里的 modeKey 和老虎机标记。和客户端 modeKeyOf 同一张对照。 */
 const MODE_KEY = { base: 'base', timed: 'timed', bomb: 'bomb', bombTimed: 'bombTimed', bombAdv: 'bomb', slot: 'base', flip: 'flip', puzzle: 'puzzle' };
 
-/** 一局像样的存档：那一天、那一串码、那一个玩法（`over` 拿来改坏其中一样）。 */
+/**
+ * 一局像样的存档：那一天、那一串码、那一个玩法（`over` 拿来改坏其中一样）。
+ *
+ * 分数一律挑 30 的倍数（推14 Z-B06）：「今天」那个玩法按日子轮换，轮到无限反转的那几天，综合分 = 拼出分 × 反转系数（方块 6、
+ * 小球 2.5），夹具（fakeRun）要它是系数的整数倍，不是就抛错、这一局缺明细不上榜——原先的 130 / 140 / 190 / 275 在反转日红。
+ * 30 的倍数两个系数都除得尽，也是 5 的倍数（步步为营）。
+ */
 function dailyData(day, score, over = {}) {
   const v = SC.VARIANTS[SC.dailyVariant(day)];
   const shown = {
@@ -206,15 +212,15 @@ const D = await makePlayer('daily-d@example.com');
   const midnight = SC.dayStartOf(today);
   const yKey = SC.dayKey(today - 1);
   setNow(midnight + GRACE);
-  const r1 = await push(D, dailyData(today - 1, 130));
+  const r1 = await push(D, dailyData(today - 1, 150));
   check(`① 零点后 ${GRACE / 60000} 分钟整：昨天那一局还收（stored）`, r1.payload?.daily === 'stored', JSON.stringify(r1.payload?.daily));
   setNow(midnight + GRACE + 1);
-  const r2 = await push(D, dailyData(today - 1, 140));
+  const r2 = await push(D, dailyData(today - 1, 180));
   check('① 再晚一毫秒：late', r2.payload?.daily === 'late', JSON.stringify(r2.payload?.daily));
   // 收下的那一局进的是**昨天**那一张，不是今天：拨回昨天中午去看那一天的「今日」榜。
   setNow(midnight - 12 * 3600e3);
   const b = await todayBoard(D);
-  check(`① 宽限里收下的那一局进的是 ${yKey} 那一张`, b.payload?.day === yKey && b.payload.rows.some((r) => r.me && r.score === 130),
+  check(`① 宽限里收下的那一局进的是 ${yKey} 那一张`, b.payload?.day === yKey && b.payload.rows.some((r) => r.me && r.score === 150),
     JSON.stringify(b.payload));
   setNow(NOON);
   const t = await todayBoard(D);
@@ -243,7 +249,7 @@ const D = await makePlayer('daily-d@example.com');
 // ── ⑦ 不是每日挑战的局不碰今日榜 ─────────────────────────────────────────────
 const E = await makePlayer('daily-e@example.com');
 {
-  const plain = dailyData(today, 190, { seedSource: 'entered', daily: undefined });
+  const plain = dailyData(today, 180, { seedSource: 'entered', daily: undefined });
   const r = await push(E, plain);
   check('⑦ 输进来的码（不带 daily）：回包里没有 daily 那一项', r.status === 200 && r.payload?.daily === undefined, JSON.stringify(r.payload));
   const b = await todayBoard(E);
@@ -268,10 +274,11 @@ const E = await makePlayer('daily-e@example.com');
   setNow(NOON);
   const { del } = await import('../api/_store.js');
   const E = await makePlayer('daily-retry@example.com');
-  // 275 而不是一个更显眼的数：「今天」那个玩法是按日子轮换的，轮到步步为营的那两天（二十天里两天），
+  // 270 而不是一个更显眼的数：「今天」那个玩法是按日子轮换的，轮到步步为营的那两天（二十天里两天），
   // 一局的分只能是 5 的倍数、不超过全盘 × 10（小球 280）。原先这儿是 777，那两天它在「枚数 × 10」那
-  // 道闸上就被 400 拦了，整道门跟着红——CI 每二十天红两天。这道门里别处的分也都照这个挑。
-  const data = dailyData(today, 275);
+  // 道闸上就被 400 拦了，整道门跟着红——CI 每二十天红两天。推14 起反转日还要它是 30 的倍数（见 dailyData），
+  // 原先的 275 改成 270。这道门里别处的分也都照这个挑。
+  const data = dailyData(today, 270);
   const body = { action: 'push', ...E, runId: 'daily-retry-1', mode: data.shapeId, score: data.totalScore, data };
   const first = await call(body);
   check('⑧ 量程：头一次交卷收下了（stored）', first.payload?.daily === 'stored', JSON.stringify(first.payload?.daily));
@@ -284,19 +291,19 @@ const E = await makePlayer('daily-e@example.com');
   check('⑧ 重报的回包照样带 daily', again.payload?.daily === 'stored', JSON.stringify(again.payload?.daily));
   const b = await todayBoard(E);
   const mine = (b.payload?.rows || []).find((r) => r.me);
-  check('⑧ 重报之后今日榜上有这一局', mine && mine.score === 275, JSON.stringify(mine));
+  check('⑧ 重报之后今日榜上有这一局', mine && mine.score === 270, JSON.stringify(mine));
   const mineStats = await call({ action: 'mine', ...E });
   const archived = (mineStats.payload?.archive || []).filter((r) => r.runId === 'daily-retry-1');
   check('⑧ 存档里这一局还是只有一条、总分只算一遍',
-    archived.length === 1 && mineStats.payload?.runs === 1 && mineStats.payload?.total === 275,
+    archived.length === 1 && mineStats.payload?.runs === 1 && mineStats.payload?.total === 270,
     `存档 ${archived.length} 条 / runs ${mineStats.payload?.runs} / total ${mineStats.payload?.total}`);
 }
 
 // ── ⑩ 步步为营那一天只收现行规则的局（10-15 补充 S9）──────────────────────────────────────────
 //
 // 原先今日榜不分规则版本：还开着旧页面的人打的第 2 版局会和第 3 版混排。现在回 'stale'（不是 'rejected'——后者让
-// 结算页说「看看设备的日期和时间」，可他的钟没错），不上今日榜；这一局照样进存档、进它自己那张归档榜。钟拨到最近的
-// 一个步步为营挑战日（北京）。
+// 结算页说「看看设备的日期和时间」，可他的钟没错），不上今日榜；这一局照样进存档（推14 Z-B14 起旧版本的局不上任何常规榜，
+// 原先还进它自己那张归档榜）。钟拨到最近的一个步步为营挑战日（北京）。
 {
   let day = today;
   while (SC.VARIANTS[SC.dailyVariant(day)].mode !== 'puzzle' && day < today + 400) day++;
@@ -314,9 +321,39 @@ const E = await makePlayer('daily-e@example.com');
   const rows = b.payload?.rows || [];
   check('⑩ 今日榜上只有第 3 版那一局', rows.length === 1 && rows[0].me === true, JSON.stringify(rows));
   const mineF = await call({ action: 'mine', ...F });
-  check('⑩ 第 2 版那一局照样进了存档、记在它自己那张归档榜上',
-    mineF.payload?.runs === 1 && mineF.payload?.best?.[`${v.board}:puzzle2`] === 150, JSON.stringify(mineF.payload?.best));
+  check('⑩ 第 2 版那一局照样进了存档，不进 best、不上任何常规榜（推14 Z-B14）',
+    mineF.payload?.runs === 1 && mineF.payload?.archive?.length === 1 && Object.keys(mineF.payload?.best || {}).length === 0,
+    JSON.stringify(mineF.payload?.best));
   setNow(NOON);
+}
+
+// ── ⑪ Pro 局不进今日榜（推14 Z-B14：每日挑战一律照普通规则，Pro 局本来只有随手抽种子的那种）──────────────────────
+{
+  setNow(NOON);
+  const P = await makePlayer('daily-pro@example.com');
+  const r = await push(P, dailyData(today, 120, { pro: true }));
+  check('⑪ 带 pro: true 的每日局：rejected', r.payload?.daily === 'rejected', `${r.status} ${JSON.stringify(r.payload?.daily)}`);
+  const b = await todayBoard(P);
+  check('⑪ 今日榜上没有它', !(b.payload?.rows || []).some((x) => x.me), JSON.stringify(b.payload?.rows));
+}
+
+// ── ⑫ 今日榜同分同名次（推14 Z-B16，站长 D38 甲）：1、1、3；「我的名次」= 严格大于我的人数 + 1 ──────────────────
+{
+  setNow(NOON);
+  const { del } = await import('../api/_store.js');
+  await del('lb:daily:' + todayKey);
+  const T1 = await makePlayer('daily-tie1@example.com');
+  const T2 = await makePlayer('daily-tie2@example.com');
+  const T3 = await makePlayer('daily-tie3@example.com');
+  await push(T1, dailyData(today, 240));
+  await push(T2, dailyData(today, 240));
+  await push(T3, dailyData(today, 210));
+  const b = await todayBoard(T3);
+  const ranks = (b.payload?.rows || []).map((r) => `${r.score}#${r.rank}`).join(' ');
+  check('⑫ 今日榜同分同名次：240、240、210 → 第 1、第 1、第 3', ranks === '240#1 240#1 210#3', ranks);
+  check('⑫ 「我的名次」：210 那个人第 3', b.payload?.me?.rank === 3, JSON.stringify(b.payload?.me));
+  const b2 = await todayBoard(T2);
+  check('⑫ 「我的名次」：并列的那个人第 1', b2.payload?.me?.rank === 1, JSON.stringify(b2.payload?.me));
 }
 
 Date.now = realNow;

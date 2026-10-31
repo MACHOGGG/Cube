@@ -21,7 +21,8 @@
  *
  * ── 要守的 ────────────────────────────────────────────────────
  *
- *   ① 六句模板在英法文 n = 0 / 1 / 2 时念对（逐字比对），中文两份没有 `|`、占位符都填上了。
+ *   ① 七句模板在英法文 n = 0 / 1 / 2 时念对（逐字比对），中文两份没有 `|`、占位符都填上了。第七句是推14 Z-B08 的
+ *      「剩余色块 n 枚」（leftoverLabel，结算页九折那一行）：判死剩 1 枚孤儿色块是最常见的那一种，念成复数一眼就看得出。
  *   ② 结算页真的走了 countPhrase：runBreakdown 喂 1 和 2 两份，那一行分别是单数和复数；步数系数那一行
  *      英法是半角括号、中文是全角括号。
  *   ③ HUD 那三处（patternBlock.ts）都走 countPhrase，不再有人直接 replace('{n}')；runRecord 里步数系数
@@ -75,6 +76,9 @@ const WANT = {
     ['lineRowLabel', 0, undefined, '0 lines cleared (stars²)'],
     ['stepCoefDetail', 1, 28, ' (1 move · par 28)'],
     ['stepCoefDetail', 19, 28, ' (19 moves · par 28)'],
+    ['leftoverLabel', 0, undefined, '0 coloured tiles left'],
+    ['leftoverLabel', 1, undefined, '1 coloured tile left'],
+    ['leftoverLabel', 2, undefined, '2 coloured tiles left'],
   ],
   fr: [
     ['puzzleStepsLabel', 1, 1, '1 coup (1 avec points)'],
@@ -91,9 +95,12 @@ const WANT = {
     ['stepCoefDetail', 0, 28, ' (0 coup · référence 28)'],
     ['stepCoefDetail', 1, 28, ' (1 coup · référence 28)'],
     ['stepCoefDetail', 19, 28, ' (19 coups · référence 28)'],
+    ['leftoverLabel', 0, undefined, '0 pièce colorée restante'],
+    ['leftoverLabel', 1, undefined, '1 pièce colorée restante'],
+    ['leftoverLabel', 2, undefined, '2 pièces colorées restantes'],
   ],
 };
-const KEYS = ['puzzleStepsLabel', 'patternNowLabel', 'flipRowLabel', 'flipRowDefused', 'lineRowLabel', 'stepCoefDetail'];
+const KEYS = ['puzzleStepsLabel', 'patternNowLabel', 'flipRowLabel', 'flipRowDefused', 'lineRowLabel', 'stepCoefDetail', 'leftoverLabel'];
 
 /**
  * 原先那几份模板（第 14 推之前），只给尺子用。步数系数那一句写的是原先 runRecord.ts 真摆出来的样子：
@@ -107,6 +114,7 @@ const OLD = {
     flipRowDefused: '(incl. {k} defused)',
     lineRowLabel: 'Lines cleared {m} (stars²)',
     stepCoefDetail: '（{n} moves · par {k}）',
+    leftoverLabel: '{n} coloured tiles left',
   },
   fr: {
     puzzleStepsLabel: '{n} coups ({k} ont marqué)',
@@ -115,6 +123,7 @@ const OLD = {
     flipRowDefused: '(dont {k} désamorcées)',
     lineRowLabel: '{m} lignes effacées (étoiles²)',
     stepCoefDetail: '（{n} coups · référence {k}）',
+    leftoverLabel: '{n} pièces colorées restantes',
   },
 };
 
@@ -150,7 +159,7 @@ for (const lang of ['zhHans', 'zhHant']) {
     const out = say(s[key], 2, lang, 1);
     if (/[{}]/.test(out)) leftover.push(`${key} → 「${out}」`);
   }
-  check(`① ${lang}：六句都没有 |、占位符都填上了`, leftover.length === 0, leftover.join(' · '));
+  check(`① ${lang}：七句都没有 |、占位符都填上了`, leftover.length === 0, leftover.join(' · '));
 }
 // 四种语言，每一句的占位符名对得上调用处（countPhrase 只认 {n}；原先削线那句是 {m}）。
 {
@@ -163,7 +172,7 @@ for (const lang of ['zhHans', 'zhHant']) {
       }
     }
   }
-  check('① 四种语言 × 六句 × n=0/1/2/7：数填进去了，没剩 { } |', bad.length === 0, bad.slice(0, 3).join(' · '));
+  check('① 四种语言 × 七句 × n=0/1/2/7：数填进去了，没剩 { } |', bad.length === 0, bad.slice(0, 3).join(' · '));
   const oldLine = OLD.fr.lineRowLabel;
   check('① （尺子）原先削线那句的 {m} 走 countPhrase 会原样剩下来（上面那条抓得住）',
     /\{m\}/.test(countPhrase(oldLine, 2, 'fr')), countPhrase(oldLine, 2, 'fr'));
@@ -223,11 +232,18 @@ const labels = (d, lang) => runBreakdown(d, lang).map(([l]) => l);
     ['fr', erosion(2, 2, 2), ['Coefficient de coups (20 coups · référence 30)']],
     ['zhHans', erosion(1, 1, 1), ['步数系数（20步，基准30）']],
     ['zhHant', erosion(1, 1, 1), ['步數係數（20步，基準30）']],
+    // 剩余色块那一行（推14 Z-B08）：判死剩 1 枚 ×0.9、剩 2 枚 ×0.81。
+    ['en', { ...erosion(2, 0, 0), neverFlipped: 1, unflippedScale: 0.9 }, ['1 coloured tile left']],
+    ['en', { ...erosion(2, 0, 0), neverFlipped: 2, unflippedScale: 0.81 }, ['2 coloured tiles left']],
+    ['fr', { ...erosion(2, 0, 0), neverFlipped: 1, unflippedScale: 0.9 }, ['1 pièce colorée restante']],
+    ['fr', { ...erosion(2, 0, 0), neverFlipped: 2, unflippedScale: 0.81 }, ['2 pièces colorées restantes']],
+    ['zhHans', { ...erosion(2, 0, 0), neverFlipped: 1, unflippedScale: 0.9 }, ['剩余色块 1 枚']],
+    ['zhHant', { ...erosion(2, 0, 0), neverFlipped: 2, unflippedScale: 0.81 }, ['剩餘色塊 2 枚']],
   ];
   for (const [lang, d, want] of rows) {
     const got = labels(d, lang);
     const miss = want.filter((w) => !got.includes(w));
-    const what = d.puzzle ? `步步为营走了 ${d.puzzle.spent} 步` : `翻 ${d.flips} 拆 ${d.defused} 削 ${d.lines}、走 ${d.moves} 步`;
+    const what = d.puzzle ? `步步为营走了 ${d.puzzle.spent} 步` : `翻 ${d.flips} 拆 ${d.defused} 削 ${d.lines}、走 ${d.moves} 步${d.neverFlipped ? `、剩 ${d.neverFlipped} 枚` : ''}`;
     check(`② ${lang}：${what}，结算页那几行念对`, miss.length === 0, miss.length ? `缺 ${miss.join(' / ')}；实际 ${got.join(' | ')}` : want.join(' | '));
   }
   // 数字抹掉之后，1 和 2 那两行仍然不一样——单复数真的分开了，不是同一句换了个数。

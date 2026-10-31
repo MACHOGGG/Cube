@@ -50,8 +50,10 @@ const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromi
 /** 本推上线那一刻（engine/menuStage.ts 的 MENU_STAGE_SINCE）。 */
 const SINCE = Date.UTC(2026, 9, 31, 16, 0, 0);
 /** 老虎机那一本存档的键（square 的 bestKey + suffixFor('base', { slot: true })，engine/runKey.ts）。 */
-const SLOT_BOOK = 'sugarcube_best_slot_ero1';
-const ROOM_BOOK = 'sugarcube_best_ero1';
+// 存档本子的键带现行计分规则版本（现读，10-31 方案推14 Z-B01）：写死 _ero1 的话，ero2 上线之后开机清档先把夹具删了。
+import { SCORING_RULES } from './lib/fakeRun.mjs';
+const SLOT_BOOK = `sugarcube_best_slot_${SCORING_RULES}`;
+const ROOM_BOOK = `sugarcube_best_${SCORING_RULES}`;
 /** 第 3 步的老玩家（迁移过、小球方块都打过）。 */
 const STAGE3 = { slides_played_migrated_v1: '1', slides_played_stage: '3', slides_played_stage_shown: '3', slides_played_circle: '1', slides_played_square: '1', slides_played_finished: '1', slides_cvd_offer: '1' };
 
@@ -410,7 +412,7 @@ if (want(7)) {
 
 // ── 8. 老玩家迁移 ─────────────────────────────────────────────────────────────────
 if (want(8)) {
-  const slotRun = { at: SINCE - 864e5, data: { at: SINCE - 864e5, shapeId: 'square', modeKey: 'base', slot: true, totalScore: 10, rules: 'ero1' }, start: null, end: null };
+  const slotRun = { at: SINCE - 864e5, data: { at: SINCE - 864e5, shapeId: 'square', modeKey: 'base', slot: true, totalScore: 10, rules: SCORING_RULES }, start: null, end: null };
   const cases = [
     ['只有 slides_tutorial_seen_circle → 2', { slides_tutorial_seen_circle: '1' }, '2'],
     ['slides_played_bomb → 4', { slides_played_bomb: '1' }, '4'],
@@ -446,7 +448,7 @@ if (want(9)) {
   }
   {
     const late = SINCE + 864e5;
-    const roomRun = { at: late, data: { at: late, shapeId: 'square', modeKey: 'base', room: true, totalScore: 10, rules: 'ero1' }, start: null, end: null };
+    const roomRun = { at: late, data: { at: late, shapeId: 'square', modeKey: 'base', room: true, totalScore: 10, rules: SCORING_RULES }, start: null, end: null };
     const { ctx, p } = await device([390, 844], { [ROOM_BOOK + '::runs']: JSON.stringify([roomRun]) });
     const m = await p.evaluate(() => ({ stage: localStorage.getItem('slides_played_stage'), t3: localStorage.getItem('slides_played_tier3') }));
     check('9 本机一局上线以后的小屋局（新人）：只多一把 tier3，步数不跳', m.stage === '1' && m.t3 === '1', JSON.stringify(m));

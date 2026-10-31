@@ -6,7 +6,8 @@
  * 读的是**源码**，不打包也不开浏览器——这四件事全都没有可以从外面量的症状：
  * 不崩、不白屏、不报错，只是下一局的规则悄悄变了，或者结算页干脆不弹。
  *
- *   ① 收尾放开不跨局（`endgameOpen` 要在 `resetBoard` 里放平）
+ *   ① 收尾放开不跨局（`endgameOpen` 要在 `resetBoard` 里放平；推14 起散边队列 `loose.reset()` 也在那儿清、
+ *      收尾定格 `finaleFrozen` 在 `newGame` 里放平）
  *   ② 这一局结束要**撤掉**排着的那一拍，不是把引用置空
  *   ③ `persistence.ts` 里每一个碰 localStorage 的导出函数都要包 try/catch
  *   ④ 付款后设密码那一屏，前置校验要和服务端同一条规矩
@@ -31,18 +32,27 @@ const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
 {
   const 有这个变量 = [];
   const 没放平 = [];
+  const 没清散边 = [];
   for (const f of ['circle', 'circleHex', 'circleSeven', 'squareDiamond', 'triangle', 'square']) {
     const src = read(`src/shapes/${f}.ts`);
     if (!/let endgameOpen\b/.test(src)) continue;
     有这个变量.push(f);
     const m = src.match(/function resetBoard\((?:deal\?: \{ pro: boolean \})?\)\s*\{[\s\S]*?\n      \}/);
     if (!m || !/endgameOpen\s*=\s*false/.test(m[0])) 没放平.push(f);
+    // 死后散边（10-31 方案推14 Z-B04）：队列里排着的那几枚不许带进下一局——不清的话新一局第一拍就削掉一枚刚发的牌。
+    if (!m || !/\bloose\.reset\(\)/.test(m[0])) 没清散边.push(f);
   }
   // 尺子：这一条认的是「哪几副有收尾放开」。一副都认不出就是正则过期了，
   // 而那时下面那一条会空绿。
   check('认得出哪几副棋盘有收尾放开（尺子）', 有这个变量.length === 5,
     `${有这个变量.length} 副：${有这个变量.join(' ')}`);
   check('这几副的 resetBoard 都把 endgameOpen 放平了', 没放平.length === 0, 没放平.join(' '));
+  check('这几副的 resetBoard 都清了散边队列（loose.reset()，推14 Z-B04）', 没清散边.length === 0, 没清散边.join(' '));
+  // 收尾定格（推14 Z-B09）：定格那 1.4 秒里钟是冻着的；上一局定格还没走完就按《再来一局》，新一局的钟不许跟着冻住。
+  const ctl = read('src/engine/gameController.ts');
+  const ng = ctl.match(/function newGame\(\) \{[\s\S]*?\n    plantSeed\(\);/);
+  check('读得到 newGame 开头到 plantSeed 那一段（尺子）', Boolean(ng));
+  check('newGame 把 finaleFrozen 放平了（推14 Z-B09）', Boolean(ng) && /finaleFrozen = false;/.test(ng[0]));
   // 方块是整行整列族，本来就没有这个变量——反面尺子，防止上面那条正则宽到见谁都算。
   check('方块那一副本来就没有这个变量（反面尺子）', !有这个变量.includes('square'));
 }

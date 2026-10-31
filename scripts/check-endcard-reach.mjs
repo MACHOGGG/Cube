@@ -157,6 +157,10 @@ for (const [w, h] of [[320, 568], [360, 640], [375, 667], [390, 844]]) {
 //     中间那一块里按比例缩，不再要求宽度贴满内容区」缩到 365 高（1440×900 上 40.6%）——42% 量的正是
 //     那条被作废的「贴满」，所以电脑这一档也回到 40%；
 //   · 图在窗里居中，宽不超过窗宽减去左右各 27.5（设计图那张 279 宽的卡）。
+//   · 10-31 方案推14 Z-B08 起，没清盘就结束（判死、手动结束）的局明细里多一行「剩余色块 n 枚 ×…」（九折）。这道门开局
+//     就按《结束游戏》，于是多了这一行，中间那一块矮 21px，卡跟着缩到 344 高（1440×900 上 38.2%）。真打完的局结束时几乎
+//     不剩色块（方案模拟：基础局 3,600 局里 6 局），平常那一页没有这一行——所以量图之前把这一行摘掉，量平常那一页（和上面
+//     预设「那句讲过了」是同一个意思）；提前结束那一页的占比照实打一行出来，不挡（电脑那一档低于 40%，交站长定）。
 // 横屏那一档另一条：窗还是宽的两栏（图在右边吃满高），不是被竖屏那一档压窄。
 // ---------------------------------------------------------------------------
 for (const [w, h, 下限] of [[390, 844, 40], [1440, 900, 40]]) {
@@ -174,6 +178,19 @@ for (const [w, h, 下限] of [[390, 844, 40], [1440, 900, 40]]) {
   await p.click('#pauseFinishBtn');
   await p.waitForSelector('#endOverlay.show', { timeout: 8000 });
   await p.waitForTimeout(900);
+  // 提前结束那一页（带九折那一行）照实量一次，只打出来；再摘掉那一行，量平常那一页。
+  const early = await p.evaluate(() => {
+    const rr = document.querySelector('#endShareImg')?.getBoundingClientRect();
+    return rr ? +((rr.height / innerHeight) * 100).toFixed(1) : 0;
+  });
+  const dropped = await p.evaluate(() => {
+    const it = document.querySelector('#endBreakdown .end-row--leftover');
+    it?.remove();
+    return !!it;
+  });
+  check(`${w}×${h}：（尺子）开局就结束的那一页真有「剩余色块」那一行（推14 九折）`, dropped);
+  console.log(`      ${w}×${h}：提前结束那一页（多一行九折）战绩图占屏高 ${early}%（只报不判）`);
+  await p.waitForTimeout(300);
   const r = await p.evaluate(() => {
     const img = document.querySelector('#endShareImg');
     const m = document.querySelector('#endOverlay .modal');

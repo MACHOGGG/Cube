@@ -406,24 +406,29 @@ const tally = (arr) => {
   check('KINDS 里没有老版本那两档', kinds.length > 0 && !/'bomb'/.test(kinds) && !/'bomb2'/.test(kinds), kinds);
   check('KINDS 里走的是版本化的那一档', kinds.includes('BOMB_KIND'));
 
-  const board = read('src/ui/leaderboard.ts');
-  // 这一处最容易漏：改了服务端的 KIND 却没改客户端，玩家点开的是归档榜，新分一个都
-  // 看不见。反转那一版（flip → flip2）第一遍就漏了，是这条的姊妹检查逮到的。
-  // BASE_TWO：基础只剩方块和小球（《侵蚀阶梯》v1.2 PR-6 删了三角那一副），
-  // leaderboard.ts 里那个常量跟着从 BASE_THREE 改名了。
-  check('客户端点开的也是新榜', board.includes("named(BASE_TWO, 'bomb3')"));
-  check('客户端的无限反转也点在新榜上', board.includes("named(['square', 'circle'], 'flip2')"));
   /*
-   * 步步为营的子榜也用新榜（第 14 推）。服务端 2026-10-02 开了 'puzzle2'，客户端这一处却
-   * 一直写着 'puzzle'——新局全记在新榜上，玩家点开的是归档的老榜。
+   * 客户端点开的是不是新榜（10-31 方案推14 Z-B15 改写）。
    *
-   * 这一条**不抄字面量**：值从服务端那个常量里读出来，再去客户端找。下回 PUZZLE_KIND 再升
-   * 一版（puzzle3），只改了一头这一条就红，不用有人记得回来改门。
+   * 原先这儿抠 leaderboard.ts 里 `named(BASE_TWO, 'bomb3')` 这种字面量：那时候客户端自己拼榜键，改了服务端的 KIND
+   * 没改客户端，玩家点开的就是归档榜（反转那一版 flip → flip2 第一遍就漏过）。推14 起榜单是三行筛选：客户端只报
+   * 「族 / 普通·Pro / 玩法」（玩法是 bomb、flip、puzzle 这种**不带版本号**的名字），榜键由服务端 LB_KIND 一处拼。
+   * 所以现在要钉的是两头：
+   *   · 服务端 LB_KIND 里炸弹 / 反转 / 步步为营指的就是 BOMB_KIND / FLIP_KIND / PUZZLE_KIND（不是抄的字面量）；
+   *   · 客户端（榜单页、筛选规则、取榜那一层）一个带版本号的榜键都不写——写了就又是两头各记一份、只改一头。
    */
+  const lbKind = (scores.match(/const LB_KIND = Object\.freeze\(\{([^}]*)\}\)/) || [, ''])[1];
+  check('（尺子）服务端 LB_KIND 读得出来', lbKind.length > 0, lbKind);
+  check('客户端点开的也是新榜：LB_KIND 的炸弹指 BOMB_KIND', /\bbomb: BOMB_KIND\b/.test(lbKind), lbKind);
+  check('客户端的无限反转也点在新榜上：LB_KIND 的反转指 FLIP_KIND', /\bflip: FLIP_KIND\b/.test(lbKind), lbKind);
   const puzzleKind = (scores.match(/const PUZZLE_KIND = '([^']+)'/) || [])[1];
   check('（尺子）服务端的步步为营榜键读得出来', Boolean(puzzleKind), String(puzzleKind));
-  check('步步为营的子榜也用新榜（和服务端的 PUZZLE_KIND 是同一个）',
-    Boolean(puzzleKind) && board.includes(`named(BASE_TWO, '${puzzleKind}')`), String(puzzleKind));
+  check('步步为营的子榜也用新榜：LB_KIND 的步步为营指 PUZZLE_KIND', /\bpuzzle: PUZZLE_KIND\b/.test(lbKind), lbKind);
+  const clientFiles = ['src/ui/leaderboard.ts', 'src/engine/lbCells.ts', 'src/engine/cloudScores.ts'];
+  const versioned = /['"`](?:bomb|flip|puzzle)\d+['"`]|:(?:bomb|flip|puzzle)\d+\b/;
+  const hits = clientFiles.filter((f) => versioned.test(read(f)));
+  check('客户端（榜单页、筛选规则、取榜）不写带版本号的榜键', hits.length === 0, hits.join(' ') || clientFiles.join(' '));
+  // 反面尺子：上面那条正则真的认得出旧写法。
+  check('（尺子）带版本号的旧写法认得出', versioned.test("named(BASE_TWO, 'bomb3')") && versioned.test('`${b}:puzzle3`') && !versioned.test("'bomb'"));
 
   check('版本号本身是 3', BOMB_RULES_VERSION === 3, String(BOMB_RULES_VERSION));
 }

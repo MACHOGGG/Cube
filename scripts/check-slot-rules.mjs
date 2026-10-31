@@ -215,7 +215,9 @@ const check = (n, ok, extra = '') => {
       const slot = R.runBadges({ unlockedOne: true, slot: true }, lang);
       const base = R.runBadges({ unlockedOne: true }, lang);
       check(`⑤ ${lang}：老虎机局到过第 1 级发「${BOTTOM[lang]}」、不发「${UNLOCK[lang]}」`, slot.join('|') === BOTTOM[lang], slot.join(' / '));
-      check(`⑤ ${lang}：基础局照旧发「${UNLOCK[lang]}」`, base.join('|') === UNLOCK[lang], base.join(' / '));
+      // 推14 Z-B03（F5）：基础局的图案降到 2 枚为止、再也到不了 1 枚——「解锁 1 枚」那枚徽章（badgeUnlockedOne）随之删了。
+      // 原先这一条量「基础局照旧发」；现在量它不再发（就算有一份旧存档带着 unlockedOne 也不发）。
+      check(`⑤ ${lang}：基础局不再发「${UNLOCK[lang]}」（那枚徽章推14 删了）`, !base.includes(UNLOCK[lang]) && base.length === 0, base.join(' / '));
     }
     check('⑤ 没到第 1 级：两种局都不发', R.runBadges({ slot: true }, 'zhHans').length === 0 && R.runBadges({}, 'zhHans').length === 0);
   }

@@ -90,6 +90,10 @@ export interface RunData {
    */
   flipRules?: number;
   /**
+   * 无限反转这一局乘的反转系数（V15，10-31 方案推14 Z-B06：方块 6、小球 2.5）。只有反转局写；老档没有就不摆那一行。
+   */
+  flipCoef?: number;
+  /**
    * 这一局的步步为营按第几版规则打的（见 puzzleScore.ts 的 `PUZZLE_RULES_VERSION`）。
    *   · 第 1 版（老档没有这一项，读出来是 undefined）：起手 8 步，扣 1，得分退 1、连着得分多退 1、消线多退 1；
    *   · 第 2 版（2026-10-02）：同上，只是消线多退 2；
@@ -126,7 +130,10 @@ export interface RunData {
   boardTiles?: number;
   /** 清盘了（一枚不剩）。 */
   swept?: boolean;
-  /** 这一局到过 1 枚图案（「解锁 1 枚」徽章，§2）。 */
+  /**
+   * 这一局到过 1 枚图案（§2）。ero2 起只有老虎机走得到（「降到底」徽章）；基础局封底 2，没有这一枚徽章（10-31 方案推14
+   * Z-B03）。字段保留：老虎机还在用。
+   */
   unlockedOne?: boolean;
   /**
    * 《真正解密 · 步步为营》这一局的账（见 engine/puzzleScore.ts）。老档没有这
@@ -261,7 +268,7 @@ export function isSumRow(label: string, lang: Lang): boolean {
 }
 
 /**
- * 这一局拿到的徽章（《侵蚀阶梯》v1.2 §5 的排法：清盘、解锁 1 枚）。
+ * 这一局拿到的徽章（《侵蚀阶梯》v1.2 §5 的排法：清盘；老虎机多一枚「降到底」）。
  *
  * 没有就是空数组——结算页那一行整条不摆，而不是摆一行空的。
  */
@@ -269,11 +276,21 @@ export function runBadges(d: RunData, lang: Lang): string[] {
   const s = STRINGS[lang];
   const out: string[] = [];
   if (d.swept) out.push(s.badgeSwept);
-  // 到过第 1 级（存档里那一位就叫 unlockedOne，engine/erosion.ts）：基础局是「解锁 1 枚」；老虎机局是「降到底」
-  // （10-11 方案 B-6）——5、6 枚的目标到了第 1 级也还剩 2、3 枚，「解锁 1 枚」对它是假话。不新增存档字段：那一位
-  // 记的本来就是「到过第 1 级」，旧存档翻开自动按新规矩显示。
-  if (d.unlockedOne) out.push(d.slot ? s.badgeBottomOut : s.badgeUnlockedOne);
+  // 到过第 1 级（存档里那一位就叫 unlockedOne，engine/erosion.ts）：基础局封底 2，没有这枚徽章（ero2，10-31 方案推14
+  // Z-B03：F5 下到 1×2 的局 100%，人人都有的徽章没有信息量）；老虎机到过第 1 级是「降到底」（10-11 方案 B-6）。旧 ero1
+  // 存档开机就清掉了，不会再有要显示《解锁 1 枚》的局。
+  if (d.unlockedOne && d.slot) out.push(s.badgeBottomOut);
   return out;
+}
+
+/**
+ * 结算明细里「×数」那一栏（站长 10-30 第二轮追答，10-31 方案推14 Z-B08）：两位小数；法文用小数逗号（×0,81、×6,00），
+ * 简繁英用点。明细里**每一行**系数都走它（剩余色块、步数系数、反转系数、旧局的表现加成与时间系数）；分享卡、记录页、
+ * 小红书都复用 runBreakdown，一处改全跟。局中加分气泡（×7.6 一类）不是结算页系数行，不走它。
+ */
+export function fmtCoef(x: number, lang: Lang): string {
+  const t = x.toFixed(2);
+  return '×' + (lang === 'fr' ? t.replace('.', ',') : t);
 }
 
 /** The score breakdown rows, in the reader's language. */
@@ -364,6 +381,8 @@ export function runBreakdown(d: RunData, lang: Lang): [label: string, value: str
       if (d.comboBonusPoints > 0) flipOut.push([s.comboBonusLabel, '+' + Math.round(d.comboBonusPoints)]);
       if (lines > 0) flipOut.push(lineRow());
       flipOut.push([s.builtScoreLabel, String(d.score)]);
+      // 反转系数（V15，推14 Z-B06）：拼出得分 × 它 = 综合得分。老档没有 flipCoef 就不摆。
+      if (d.flipCoef !== undefined) flipOut.push([s.flipCoefLabel, fmtCoef(d.flipCoef, lang)]);
       flipOut.push([s.compositeLabel, String(d.totalScore)]);
       return flipOut;
     }
@@ -388,13 +407,16 @@ export function runBreakdown(d: RunData, lang: Lang): [label: string, value: str
       if (bonus > 0) out.push([s.slotBonusLabel, '+' + bonus]);
     }
     out.push([s.builtScoreLabel, String(d.score)]);
+    // 剩余色块九折（站长 10-25，推14 Z-B08）：只在真的打了折（系数 < 1）时摆，在拼出得分和步数系数之间（老虎机没有
+    // 步数系数行，就在综合得分之前）。lastRun.unflippedScale 存的是真乘进去的那个数（不扣时 1）。
+    if (d.unflippedScale < 1) out.push([countPhrase(s.leftoverLabel, d.neverFlipped, lang), fmtCoef(d.unflippedScale, lang)]);
     // 步数系数那一行只在真的乘了它的那几档摆。不乘的那三档（老虎机、步步为营、
     // 无限反转）结算时干脆不写 par，所以这儿按「par 在不在」判——摆一行「×1.00」
     // 又是在讲一件没发生的事。
     if (d.par !== undefined) {
       out.push([
         s.stepCoefLabel + countPhrase(s.stepCoefDetail, d.moves, lang).replace('{par}', String(d.par)),
-        '×' + (d.stepCoef ?? 1).toFixed(2),
+        fmtCoef(d.stepCoef ?? 1, lang),
       ]);
     }
     if (d.extraPenalty > 0) {
@@ -408,9 +430,9 @@ export function runBreakdown(d: RunData, lang: Lang): [label: string, value: str
   if (d.comboBonusPoints > 0) rows.push([s.comboBonusLabel, '+' + Math.round(d.comboBonusPoints)]);
   if (d.linePoints > 0) rows.push([s.linePointsLabel, '+' + Math.round(d.linePoints)]);
   rows.push([s.scoreLabel, String(d.score)]);
-  rows.push([`${s.perfBonusLabel} (${d.ratePercent}%)`, '×' + d.bonusMult.toFixed(2)]);
+  rows.push([`${s.perfBonusLabel} (${d.ratePercent}%)`, fmtCoef(d.bonusMult, lang)]);
   // 无限反转没有用时系数，这一行不摆——摆一行「×1.00」等于告诉人有这回事。
-  if (d.modeKey !== 'flip') rows.push([s.timeMultLabel, '×' + d.timeMult.toFixed(2)]);
+  if (d.modeKey !== 'flip') rows.push([s.timeMultLabel, fmtCoef(d.timeMult, lang)]);
   if (d.neverFlipped > 0) {
     rows.push([`${s.neverFlippedLabel} × ${d.neverFlipped}`, Math.round(d.unflippedScale * 100) + '%']);
   }

@@ -37,6 +37,9 @@ export const UNLOCK_ALL = Object.freeze({
   slides_played_stage_shown: '5',
   slides_played_migrated_v1: '1',
   slides_cvd_offer: '1',
+  // 无限反转结算页那一句头一回才摆（推14 Z-B07）：不预设的话，所有打反转的门头一局多一行字。要量「头一回」的门
+  // （推15 的 check-flip-batch）在 unlockAll 之后自己删掉这一把。
+  slides_played_fliptip: '1',
   ...Object.fromEntries(BULB_KEYS.map((k) => [`slides_bulb_${k}`, '2'])),
 });
 

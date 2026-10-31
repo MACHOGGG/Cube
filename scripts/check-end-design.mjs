@@ -90,14 +90,16 @@ const STAMP_SVG =
   '<svg viewBox="0 0 40 40" aria-hidden="true"><circle class="end-stamp-ring" cx="20" cy="20" r="17" fill="none" stroke="var(--end-ok)" stroke-width="5.9"/>' +
   `<path class="end-stamp-tick" d="${CHECK_PATH.replace(/\d+(?:\.\d+)?/g, (n) => String(Math.round(Number(n) * 0.4 * 100) / 100))}" fill="none" stroke="var(--end-ok)" stroke-width="6.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 /**
- * 两枚徽章四种语言的字，从 i18n.ts 现读：⑤ 摆「有勾」那一种要用当地的字。基础局是「清盘 / 解锁 1 枚」，老虎机局是
- * 「清盘 / 降到底」（10-11 方案 B-6：「降到底」四语都要放得下，法语那一句最长）。
+ * 徽章四种语言的字，从 i18n.ts 现读：⑤ 摆「有勾」那一种要用当地的字。基础局只有「清盘」一枚（ero2 封底 2，没有
+ * 《解锁 1 枚》，10-31 方案推14 Z-B03），老虎机局是「清盘 / 降到底」两枚（10-11 方案 B-6：「降到底」四语都要放得下，
+ * 法语那一句最长）。
  */
 const I18N = readFileSync(new URL('../src/i18n.ts', import.meta.url), 'utf8');
 const badgeText = (lang) => {
   const i = I18N.indexOf(`\n  ${lang}: {`);
   const pick = (k) => (I18N.slice(i).match(new RegExp(`\\n\\s+${k}: '([^']+)'`)) || [, ''])[1];
-  return { base: [pick('badgeSwept'), pick('badgeUnlockedOne')], slot: [pick('badgeSwept'), pick('badgeBottomOut')] };
+  // tip：「综合得分是怎么来的」那一句（⑤「头一局」照 gameController 拼的样子摆上去，见下面）。
+  return { base: [pick('badgeSwept')], slot: [pick('badgeSwept'), pick('badgeBottomOut')], tip: pick('endTipComposite') };
 };
 
 /**
@@ -409,7 +411,8 @@ const cards = [await cardUrl(false), await cardUrl(true)];
     check(`${tag}：分数 63px、#943D40，墨宽不超过 108（分数不动）`, dom.score.fs === '63px' && dom.score.color === 'rgb(148, 61, 64)' && !!sc && sc.x1 - sc.x0 + 1 <= 108,
       `${JSON.stringify(dom.score)} 墨 ${fmt(sc)}`);
     check(`${tag}：标题在分数上面，不相交`, !!sc && dom.title.b <= sc.y0 + 0.5, `标题底 ${dom.title.b.toFixed(1)} / 分数墨顶 ${sc ? sc.y0 : '—'}`);
-    const wantN = stamp ? 2 : 1;
+    // 设计图那一局是炸弹局（不是老虎机）：ero2 起基础局没有《解锁 1 枚》（推14 Z-B03），清盘那一种 1 枚、没清盘 0 枚。
+    const wantN = stamp ? 1 : 0;
     check(`${tag}：徽章 ${wantN} 枚，至少 78 宽、30 高、圆角 8（6-7：70×28 放大一档）`,
       dom.badges.length === wantN && dom.badges.every((b) => b.w >= 78 - 0.5 && near(b.h, 30, 0.5) && b.rad === '8px'),
       dom.badges.map((b) => `${b.x.toFixed(1)},${b.y.toFixed(1)} ${b.w.toFixed(1)}×${b.h.toFixed(1)} r${b.rad}`).join(' | '));
@@ -600,9 +603,20 @@ for (const lang of Object.keys(L)) {
 // 更小的两档没收：640×360 上法语头一局还差 10px、568×320 上从前（字放大之前）就装不下——都已报给玩家，
 // 等他定。
 //
+// **已知例外（待修，站长 10-31）**：推14 给「综合得分是怎么来的」那一句加了九折那半句，横屏「头一局」多折一行。站长定了
+// 先让剩色块的那一局不讲那一句（留到下一局，见 ⑦），量完还有 8 组装不下：812×375 英法、740×360 四种语言、667×375 英法
+// （差 8–27px：抬头 313 / 301、294 / 286、313 / 286）。站长定了这 8 组先记成已知例外、推14 照常上线，另记一条待修（CLAUDE.md
+// 《检查门》那一节）。门照量、照印差多少，只是不判红；哪一组装得下了会提醒从 KNOWN_SQUEEZE 里拿掉。
+//
 // 图不再要求多宽（方案作废了「宽度贴满内容区」，字放大让出去的高度就是从图那儿来的）；每一档量到的图宽
 // 照样印在后面，给人看。
 // ---------------------------------------------------------------------------
+/** ⑤ 的已知例外（见上面那段）：这几组横屏「头一局」装不下，只报不判。修好了就从这儿拿掉。 */
+const KNOWN_SQUEEZE = new Set([
+  '812×375 en 头一局', '812×375 fr 头一局',
+  '740×360 zhHans 头一局', '740×360 zhHant 头一局', '740×360 en 头一局', '740×360 fr 头一局',
+  '667×375 en 头一局', '667×375 fr 头一局',
+]);
 const SIZES = [
   [402, 875, true], [390, 844, true], [360, 740, true], [320, 568, true], [1440, 900, false],
   [844, 390, true], [812, 375, true], [740, 360, true], [667, 375, true],
@@ -614,8 +628,12 @@ for (const [w, h, touch] of SIZES) {
     await ctx.addInitScript(SEED, lang);
     const page = await ctx.newPage();
     await endARun(page);
-    const hasTip = await page.evaluate(() => !!document.querySelector('#endBreakdown .end-row--tip'));
-    check(`⑤ ${w}×${h} ${lang}：（尺子）真打的这一局是头一回出综合得分，说明那一句在`, hasTip);
+    // 真打的这一局开局就按《结束游戏》：明细里有九折那一行，「综合得分是怎么来的」那一句留到下一局（站长 10-31，推14）。
+    const real = await page.evaluate(() => ({
+      tip: !!document.querySelector('#endBreakdown .end-row--tip'),
+      leftover: !!document.querySelector('#endBreakdown .end-row--leftover'),
+    }));
+    check(`⑤ ${w}×${h} ${lang}：（尺子）真打的这一局开局就结束，明细有九折那一行，那一句留到下一局（这一窗不讲）`, real.leftover && !real.tip, JSON.stringify(real));
     for (const variant of ['头一局', '没勾', '有勾', '有勾·四位数', '有勾·老虎机', '设计图那一局', '设计图那一局·有勾']) {
       const bad = await page.evaluate(async ([variant, landscape, stampSvg, badges, design]) => {
         const ov = document.getElementById('endOverlay');
@@ -640,8 +658,31 @@ for (const [w, h, touch] of SIZES) {
             host.appendChild(box);
           }
         };
-        if (variant !== '头一局') document.querySelector('#endBreakdown .end-row--tip')?.remove();
+        // 「头一局」= 头一回出综合得分、没剩色块的那一页（推14 起剩色块的那一局不讲那一句，见上面尺子）：九折那一行先收起来
+        // （摆回去给「没勾」用——没勾就是后来哪一局开局就结束，那一行在），照 gameController 的写法在明细最后摆那一句。
+        const bd = document.getElementById('endBreakdown');
+        if (variant === '头一局') {
+          const row = bd.querySelector('.end-row--leftover');
+          if (row) {
+            window.__gateLeftover = { row, next: row.nextSibling };
+            row.remove();
+          }
+          const tip = document.createElement('div');
+          tip.className = 'end-row end-row--tip';
+          tip.innerHTML = '<span></span>';
+          tip.firstChild.textContent = badges.tip;
+          bd.appendChild(tip);
+        } else {
+          bd.querySelector('.end-row--tip')?.remove();
+          if (window.__gateLeftover) {
+            bd.insertBefore(window.__gateLeftover.row, window.__gateLeftover.next);
+            window.__gateLeftover = null;
+          }
+        }
         if (variant.startsWith('有勾')) {
+          // 有勾 = 盘清空了：不会还剩色块，明细里没有九折那一行（推14 Z-B08）。真打的这一局是开局就按《结束游戏》的，
+          // 那一行在——有勾那几种先把它摘掉，不然量的是一副不可能出现的结算页（通关勾 ＋ 剩 36 枚色块）。
+          document.querySelector('#endBreakdown .end-row--leftover')?.remove();
           // gameController 的 stampEndCheck 挂的就是这两个类：有勾、四位数以上的综合分。
           ov.classList.add('end--stamp');
           const four = variant === '有勾·四位数';
@@ -725,9 +766,16 @@ for (const [w, h, touch] of SIZES) {
       const zh = lang === 'zhHans' || lang === 'zhHant';
       const sumWrapped = zh ? bad.sum.map((t) => '折行：' + t) : [];
       const note = [...(zh ? [] : bad.sum), ...bad.other];
+      const fits = bad.out.length === 0 && sumWrapped.length === 0;
+      const detail = [...bad.out, ...sumWrapped, `图 ${bad.img} 宽`, ...(note.length ? [`另有折行：${note.join(' / ')}`] : [])].join(' | ');
+      if (KNOWN_SQUEEZE.has(`${w}×${h} ${lang} ${variant}`)) {
+        console.log(fits
+          ? `      ⑤ ${w}×${h} ${lang} ${variant}：已知例外这一组现在装得下了——可以从 KNOWN_SQUEEZE 里拿掉`
+          : `      ⑤ ${w}×${h} ${lang} ${variant}：已知例外（待修），只报不判：${detail}`);
+        continue;
+      }
       check(`⑤ ${w}×${h} ${lang} ${variant}：装得下、谁也不压谁、抬头没被裁、三颗键点得到、明细 14px${zh ? '、「拼出得分」「综合得分」不折行' : ''}`,
-        bad.out.length === 0 && sumWrapped.length === 0,
-        [...bad.out, ...sumWrapped, `图 ${bad.img} 宽`, ...(note.length ? [`另有折行：${note.join(' / ')}`] : [])].join(' | '));
+        fits, detail);
     }
     await ctx.close();
   }
@@ -775,6 +823,59 @@ for (const [w, h, touch] of SIZES) {
     r.overflowY === 'auto' && r.touch === 'pan-y' && r.scrolls, JSON.stringify(r));
   check('⑥ 小屋那一份在的时候：这一局的图排在小屋那张榜后面（回到文档流里）', r.figAfterRoom, JSON.stringify(r));
   check('⑥ 小屋那一份在的时候：三颗键不挪、还在窗里', Math.abs(r.btnTop - before) <= 1 && r.btnIn, `${before.toFixed(1)} → ${r.btnTop.toFixed(1)}`);
+  await ctx.close();
+}
+
+// ---------------------------------------------------------------------------
+// ⑦ 「综合得分是怎么来的」那一句：明细里有九折那一行的那一局不讲，留到下一局（站长 10-31，推14）
+//
+// 头一局开局不久就按《结束游戏》，那一句（推14 起多了九折那半句）和九折那一行挤在同一窗里，横屏手机上装不下（⑤ 量出来
+// 差 14–48px）。所以那一局不讲、**也不记账**（gameController 里 `!(unflippedScale < 1)` 写在 shouldTeachTotal() 左边）；
+// 下一局没剩色块地结束，照样是「头一回」。真打三局：开局就结束 → 计时方块打到钟响（时间到不打九折）→ 再一局。
+// ---------------------------------------------------------------------------
+{
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await unlockAll(ctx);
+  await ctx.addInitScript(SEED, 'zhHans');
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', (e) => errs.push(String(e).slice(0, 160)));
+  // 计时那一档 100 秒：假钟装上，开打之后快进过去，不真等（check-pause-freeze 第 5 节同一个办法）。
+  await page.clock.install();
+  await endARun(page);
+  const look = () => page.evaluate(() => ({
+    tip: [...document.querySelectorAll('#endBreakdown .end-row--tip')].map((e) => e.textContent.trim()),
+    leftover: !!document.querySelector('#endBreakdown .end-row--leftover'),
+    claimed: localStorage.getItem('slides_played_totaltip'),
+  }));
+  const a = await look();
+  check('⑦ 头一局开局就结束：明细有九折那一行，那一句不讲', a.leftover && a.tip.length === 0, JSON.stringify(a));
+  check('⑦ 头一局开局就结束：也不记账（slides_played_totaltip 还没写）', a.claimed === null, String(a.claimed));
+  // 下一局：计时方块，打到钟响。
+  const timedRun = async () => {
+    // 结算页《主页》从哪儿来回哪儿：基础方块那一局回主菜单，计时那一局回计时挑图形那一页。
+    await page.$eval('#endBackBtn', (e) => e.click());
+    await page.waitForSelector('.home-icon-btn, .timed-page #timedShapes', { timeout: 15000 });
+    if (!(await page.$('.timed-page #timedShapes'))) {
+      await page.$$eval('.home-icon-btn--timed', (els) => els[0]?.click());
+      await page.waitForSelector('.timed-page #timedShapes', { timeout: 15000 });
+    }
+    await page.$eval('#timedShapes .slot-pick-opt[data-family="square"]', (e) => e.click());
+    await page.waitForSelector('#startBtn', { state: 'attached', timeout: 15000 });
+    await page.$eval('#startBtn', (e) => e.click());
+    await page.waitForFunction(() => document.querySelectorAll('#boardWrap .tile').length > 0, null, { timeout: 15000 });
+    await page.clock.fastForward(101_000);
+    await page.waitForSelector('#endOverlay.show', { timeout: 15000 });
+    await page.waitForTimeout(1300);
+  };
+  await timedRun();
+  const b = await look();
+  check('⑦ 第二局计时方块打到钟响：没有九折那一行，那一句讲了，就是 endTipComposite', !b.leftover && b.tip.length === 1 && b.tip[0] === badgeText('zhHans').tip, JSON.stringify(b));
+  check('⑦ 讲了才记账', b.claimed === '1', String(b.claimed));
+  await timedRun();
+  const c = await look();
+  check('⑦ 第三局：只讲一次，不再讲', c.tip.length === 0, JSON.stringify(c));
+  check('⑦ 一路零报错', errs.length === 0, errs.slice(0, 2).join(' | '));
   await ctx.close();
 }
 

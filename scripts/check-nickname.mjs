@@ -35,7 +35,7 @@ process.env.ADMIN_TOKEN = 'n'.repeat(32);
 import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fillRun } from './lib/fakeRun.mjs';
+import { fillRun, SCORING_RULES } from './lib/fakeRun.mjs';
 
 let fail = 0;
 const check = (n, ok, extra = '') => {
@@ -55,7 +55,7 @@ async function call(body) {
   // 明细由夹具拼齐（10-11 方案 A-3，scripts/lib/fakeRun.mjs）：服务器从那以后对每一局对一遍账，缺明细的
   // 一局不上榜，而这道门量的是榜上那一行的名字。门自己写的那几位盖在上面。
   if (body?.action === 'push') {
-    body = { ...body, data: fillRun(body.mode, body.score, { rules: 'ero1', ...(body.data || {}) }) };
+    body = { ...body, data: fillRun(body.mode, body.score, { rules: SCORING_RULES, ...(body.data || {}) }) };
   }
   const out = { code: 0, payload: null };
   await scores(
@@ -78,7 +78,11 @@ let runSeq = 0;
 const push = (who, score, extra = {}) =>
   call({ action: 'push', email: who.id, token: who.token, runId: `nick-${runSeq++}`, mode: 'square', score, ...extra });
 const boardRow = async (viewer, score) => {
-  const got = await call({ action: 'board', email: viewer.id, token: viewer.token, mode: 'square:base' });
+  // 推14 Z-B15 起看榜是三行筛选（方块 · 基础那一张 = families [square]、modes [base]）。合并榜在服务端缓存 15 秒（lbq:）；
+  // 名字不进缓存（每次现查 lbnames），可这道门还要看**刚交的分**上没上榜——每次取榜之前把那几格缓存删掉（门量的是名字，
+  // 不是缓存；缓存另有 check-lb-merge 量）。
+  for (const k of await store.scanKeys('lbq:*')) await store.del(k);
+  const got = await call({ action: 'board', email: viewer.id, token: viewer.token, families: ['square'], modes: ['base'] });
   return { got, row: got.body?.rows?.find((r) => r.score === score) };
 };
 const nameRow = async (id) => (await store.hgetall(NAMES))[id];

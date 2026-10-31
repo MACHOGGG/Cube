@@ -56,7 +56,8 @@ check('缩略图上写的是「登录已过期」，不是「这张榜上还没�
 
 // ---- 点开全页：话 + 一条走得通的路 ---------------------------------------
 await page.click('#ranksPanel');
-await page.waitForSelector('.rank-tab', { timeout: 8000 });
+// 推14 Z-B15 起没有 .rank-tab 了（页签 + 三行药丸）。
+await page.waitForSelector('.rank-chip', { timeout: 8000 });
 await page.waitForTimeout(600);
 const big = await page.evaluate(() => {
   const p = document.querySelector('.records-panel--big');
@@ -75,7 +76,7 @@ check('底下还是灰条，不编造名次', big.ghosts > 0, `${big.ghosts} 条
 
 // ---- 那颗键真的走得通 ----------------------------------------------------
 //
-// 要落在「能重新输邮箱密码」的地方，不是个人主页。这台设备本地还以为自己订
+// 要落在「能重新输邮箱」的地方（原先还有密码），不是个人主页。这台设备本地还以为自己订
 // 阅着，个人主页上那颗宽键这时写的是《订阅状态》，点开是看订单的——绕过去
 // 就没路了。这一条是写这个脚本时才发现的，本来的接法正是错的那一种。
 await page.click('#rankReLoginCta');
@@ -90,8 +91,9 @@ const landed = await page.evaluate(() => {
   };
 });
 check('按下去开的是登录那一窗', landed.modal, JSON.stringify(landed));
-check('窗里能重新输邮箱和密码（令牌就是这样换新的）',
-  landed.hasEmail && landed.hasPass, JSON.stringify(landed));
+// 登录早不用密码了（邮箱 + 六位验证码，api/signin.js；免邮箱账号走「不用邮箱」那一档）——原先这一条还要一个密码框，这道门手跑、
+// 从那时起一直红着没人看见（推14 本地跑时发现、改掉）。令牌就是从这一窗重新拿的。
+check('窗里能重新输邮箱（令牌就是这样换新的）', landed.hasEmail && !landed.hasPass, JSON.stringify(landed));
 
 await browser.close();
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);

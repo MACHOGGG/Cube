@@ -2,11 +2,12 @@ import type { ShellRefs } from '../ui/gameShell';
 import { clearRoomLeftover, mountRoomLeftover as mountRoomLeftover0 } from '../ui/roomLeftover';
 import { contestants } from '../ui/roomCard';
 import { snapFlipFaces as snapFlipFaces0, plankFlipCells as plankFlipCells0, flipMs, flipStaggerMs } from './plankFlip';
+import { flipRate, setBeatScale } from './flipSpeed';
 import { watchFrames } from './frameTier';
 import { createTimer, formatClock } from './timer';
-import { createErosion, tableFor, type Erosion } from './erosion';
+import { createErosion, tableFor, slotTableFor, proParOf, type Erosion } from './erosion';
 import { devErosionFor } from './devDeal';
-import { POINTS_PER_FLIP, createCascadeStepper, createToggleLedger, flipStreakDelta, flipStreakMult, FLIP_RULES_VERSION, SCORING_RULES_VERSION, type CascadeConfig } from './scoring';
+import { POINTS_PER_FLIP, createCascadeStepper, createToggleLedger, flipStreakDelta, flipStreakMult, flipCoefFor, FLIP_RULES_VERSION, SCORING_RULES_VERSION, type CascadeConfig } from './scoring';
 import { createScoreReel as createScoreReel0, syncGainState } from './scoreReel';
 import { ALL_FLIPPED_REASON, endCheckEligible } from './kinetics';
 import { rollDuration, rollOdometer as rollOdometer0 } from './odometer';
@@ -30,15 +31,15 @@ import { endHintShownToday, markEndHintShown } from './signInHint';
 import { confirmRestart } from '../ui/confirmRestart';
 import { confirmFinish } from '../ui/roomNotices';
 import { setScreenBack } from './backNav';
-import { playScore as playScore0, playFlip as playFlip0, playClear as playClear0, playError as playError0, playFinish as playFinish0, playSettle as playSettle0, reducedMotion, screenShake as screenShake0, spawnParticles as spawnParticles0, punch as punch0 } from './juice';
+import { playScore as playScore0, playFlip as playFlip0, playClear as playClear0, playLineClear as playLineClear0, playError as playError0, playFinish as playFinish0, playSettle as playSettle0, reducedMotion, screenShake as screenShake0, spawnParticles as spawnParticles0, punch as punch0 } from './juice';
 import { BOMB_HAZARD_REASON, BOMB_RULES_VERSION } from './bomb';
 import {
   createStepBank, puzzleComposite, puzzleStartSteps, stepLedgerText,
   PUZZLE_RULES_VERSION, PUZZLE_STEPS_OUT_REASON,
 } from './puzzleScore';
 import { claimFirstHowToHint, markFinishedAGame } from './firstPlay';
-import { STRINGS, type Lang } from '../i18n';
-import { stepCoefFor } from './stepCoef';
+import { STRINGS, countPhrase, type Lang } from '../i18n';
+import { stepCoefFor, leftoverScale } from './stepCoef';
 import type { Cell } from './types';
 
 export interface CascadeStepGroups {
@@ -46,8 +47,10 @@ export interface CascadeStepGroups {
   lineBonusGroups: Cell[][];
 }
 
-/** Each tile left un-flipped when the run ends scales the composite by this. */
-const UNFLIPPED_SCALE = 0.95;
+/**
+ * 基础局图案的最低级（F5：4 → 3 → 2，到 2 为止；10-31 方案推14 Z-B02）。老虎机最低到 1 枚，不读它。Pro 的松级、门都读它。
+ */
+export const EROSION_FLOOR = 2;
 
 import { mountCoachBar, mountCoachTip, type CoachBar, type CoachPlan, type CoachShape } from '../ui/coachBar';
 import type { CoachHint } from './coachHint';
@@ -195,6 +198,11 @@ export interface GameControllerHooks {
    */
   shouldTeachTotal?: () => boolean;
   /**
+   * 无限反转结算页那一句（推14 Z-B07）：头一回打完反转才摆，问一次记一次（engine/firstPlay.ts 的 claimFirstFlipTip）。
+   * 只在 hooks.flip 时问（写在 && 右边），不让别的局白白烧掉这一次。
+   */
+  shouldTeachFlip?: () => boolean;
+  /**
    * 这一局用哪一串种子码发牌（第 19 推，ShapeGameOpts.seed）。不给就由控制器随手抽一串
    * ——每一局单人游戏都用种子发牌，见 newGame。
    */
@@ -215,6 +223,12 @@ export interface GameControllerHooks {
   render(): void;
   /** True the instant the current state should end the run. */
   isGameOver(): boolean;
+  /**
+   * 下一拍会不会把盘上剩下的一次消光（10-31 方案推14 Z-B09 第 4 条）——**只问、不改状态**。是的话控制器在那一拍之前
+   * 定格 1.4 秒（冻钟）。外边族：活格（不含活炸弹）非空且全是星星；散边队列非空时只在「只剩一枚」才算；否则够格的
+   * 整线里有一组长度等于活格数。方块：同样，用 fullDotLines。无限反转回 false。抛错按 false（判定类钩子不许打断连锁）。
+   */
+  finalGroupNext?(): boolean;
   /** Builds the cascade config for resolving one confirmed move. */
   buildCascadeConfig(): CascadeConfig;
   /**
@@ -343,6 +357,8 @@ export interface GameController {
    * 每次都现问——图案会在一步之内变小，把它缓存下来就会慢一拍。
    */
   matchLen(): number;
+  /** Pro 局卡死时松一级再问（推14 Z-B13）；不是 Pro 局原样回 check()。棋盘把自己的卡死判定包在这里。 */
+  relaxIfStuck(check: () => Cell[][]): Cell[][];
   /** 这一级还剩几段 / 一共几段 / 到过 1 枚没有：HUD 的《得分图案》块要它们。 */
   erosionView(): { level: number; segLeft: number; segTotal: number; unlocked: boolean; par: number };
   /** Ends the run immediately with a custom reason and an optional flat score penalty (e.g. a bomb-mode hazard cluster) — shown as its own breakdown row, subtracted the same way as the other end-of-run penalties. */
@@ -388,6 +404,7 @@ const vibrate = guardFn('vibrate', vibrate0, nop);
 const playScore = guardFn('playScore', playScore0, nop);
 const playFlip = guardFn('playFlip', playFlip0, nop);
 const playClear = guardFn('playClear', playClear0, nop);
+const playLineClear = guardFn('playLineClear', playLineClear0, nop);
 const playError = guardFn('playError', playError0, nop);
 const playFinish = guardFn('playFinish', playFinish0, nop);
 const playSettle = guardFn('playSettle', playSettle0, nop);
@@ -411,7 +428,7 @@ function guardHooks(h: GameControllerHooks): GameControllerHooks {
     const f = h[k] as ((...a: unknown[]) => void) | undefined;
     if (f) (g as any)[k] = guardFn(k, (...a: unknown[]) => f.apply(h, a), nop);
   }
-  for (const k of ['shouldLeadOut', 'shouldTeachTotal', 'signInHint', 'coachStarsReachEdge'] as const) {
+  for (const k of ['shouldLeadOut', 'shouldTeachTotal', 'shouldTeachFlip', 'signInHint', 'coachStarsReachEdge', 'finalGroupNext'] as const) {
     const f = h[k] as (() => boolean) | undefined;
     if (f) (g as any)[k] = guardFn(k, () => f.apply(h), () => false);
   }
@@ -451,13 +468,13 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   const s = STRINGS[hooks.lang];
 
   /**
-   * 侵蚀阶梯（《侵蚀阶梯》v1.2 §2）。无限反转传 frozen：那一局段照扣，图案不降级
-   * （玩家 2026-09-27 拍板）。
+   * 侵蚀阶梯（《侵蚀阶梯》v1.2 §2，ero2 起 F5）。无限反转传 frozen：那一局段照扣，图案不降级
+   * （玩家 2026-09-27 拍板）。老虎机走 ero1 那张三段表、最低到 1 枚；基础局 F5 两段表、最低到 2 枚
+   * （EROSION_FLOOR，10-31 方案推14 Z-B02）。
    */
-  const erosion: Erosion = createErosion(
-    tableFor(hooks.shapeId, hooks.boardTiles, hooks.boardColors),
-    !!hooks.flip,
-  );
+  const erosion: Erosion = hooks.slot
+    ? createErosion(slotTableFor(hooks.shapeId, hooks.boardTiles, hooks.boardColors), !!hooks.flip, 1)
+    : createErosion(tableFor(hooks.shapeId, hooks.boardTiles, hooks.boardColors), !!hooks.flip, EROSION_FLOOR);
 
   const scoreReel = createScoreReel(refs.scoreReelEl, refs.gainBadgeEl);
   /**
@@ -686,7 +703,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   let flipsTotal = 0;
   let defusedTotal = 0;
   let lineCount = 0;
-  /** 这一局到过 1 枚图案没有（「解锁 1 枚」徽章，§2）。 */
+  /** 这一局到过 1 枚图案没有（§2；ero2 起只有老虎机走得到，「降到底」徽章——基础局封底 2，没有徽章）。 */
   let unlockedOne = false;
   /**
    * 这一局的「大时刻」（bigMoment：震屏、粒子、那一声）该在哪一下响、响过没有（10-11 方案 B-6，规矩见 engine/targets.ts
@@ -746,6 +763,29 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
    */
   let stuckHeldMs: number | null = null;
   const STUCK_END_MS = 1400;
+  /**
+   * 收尾定格（10-31 方案推14 Z-B09，站长 D03 甲、D25）：下一拍要把盘上剩下的一次消光时，先停 FINALE_HOLD_MS（= 判死那
+   * 1.4 秒，不随拉杆），让最后一组放大、停一下再消。**定格中钟是停着的**（计时局不吃这 1.4 秒、用时不含它）；定格中暂停
+   * 再继续，钟照旧停着直到定格走完（doResume、小屋那一问放表之前都看 finaleFrozen）。新开一局、结算时放平。
+   */
+  const FINALE_HOLD_MS = STUCK_END_MS;
+  let finaleFrozen = false;
+  function freezeClock(): void {
+    finaleFrozen = true;
+    timer.pause();
+  }
+  function thawClock(): void {
+    finaleFrozen = false;
+    if (!paused && !gameOver) timer.resume();
+  }
+  /** finalGroupNext 抛错按 false（推01 的守望要求判定类钩子不许打断连锁）。 */
+  function safeFinalGroupNext(): boolean {
+    try {
+      return !!hooks.finalGroupNext?.();
+    } catch {
+      return false;
+    }
+  }
   /**
    * 守望（watch）补结算时用的理由，和 armStuckEnd 里那一句 `endGame('无法继续匹配')` 一字不差。那一句留着字面值，
    * 是因为 check-residue-wiring 按字面值钉着它；守望又必须不靠 armStuckEnd（那个定时器被撤掉时正要它兜，
@@ -890,6 +930,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   }
 
   function newGame() {
+    // 上一局收尾定格的那一拍（若还挂着）不许把这一局的钟冻住（推14 Z-B09）。
+    finaleFrozen = false;
     // 上一局「全死」排下的收尾不许落到这一局头上（见 stuckTimer）——暂停时记下的那一截也一样。
     window.clearTimeout(stuckTimer);
     stuckTimer = 0;
@@ -906,8 +948,11 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     plantSeed();
     dealt++;
     // Pro：开局这一刻定（局中开关是锁着的）。第二道闸：种子必须是随手抽的——输进来的、每日的、小屋的码一律照普通
-    // 规则发牌（散场转单人之后的《再来一局》用的仍是 'room' 那串，也挡在这儿）。
-    runPro = !!hooks.proAllowed && proOn() && !hooks.practice && (!seedRun || seedRun.source === 'random');
+    // 规则发牌（散场转单人之后的《再来一局》用的仍是 'room' 那串，也挡在这儿）。第三道：**教学局一律按普通打**（站长
+    // 10-30，10-31 方案推14 Z-B13），像每日挑战——教学局 = 这一次挂载带教学条的头一局（coachDealt 还没立起来）；教学局
+    // 之后的《再来一局》照常可开 Pro。教学局发牌不按 Pro 翻色、图案照常变小（教学条 B「图案第一次降级」等得到）、
+    // lastRun.pro 不写、只进普通榜。
+    runPro = !!hooks.proAllowed && proOn() && !hooks.practice && !(hooks.coach && !coachDealt) && (!seedRun || seedRun.source === 'random');
     const appEl = refs.root.querySelector('.app--game');
     // 教学只活在一局里（站长 10-22）：这一次挂载的第二局起（两颗《再来一局》都走这儿），教学条、一句话提示、
     // 呼吸灯、has-coach 排版一起撤掉。原先教学条在这儿 reset() 回到第 1 条、一句话提示一直摆到离开。
@@ -955,8 +1000,9 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     lineCount = 0;
     unlockedOne = false;
     celebrate = newCelebration();
-    erosion.reset();
-    // 开发时可以让这一局一开局就扣掉几段（engine/devDeal.ts 的 devErosionFor）：走到「解锁 1 枚」
+    // Pro 局冻结在开局那一级（站长 10-21/22，推14 Z-B13）：只在卡死时松一级（relaxIfStuck）。无限反转本来就冻结。
+    erosion.reset({ frozen: !!hooks.flip || runPro });
+    // 开发时可以让这一局一开局就扣掉几段（engine/devDeal.ts 的 devErosionFor）：走到最低一级
     // 要翻三十来枚，门（check-erosion-live）靠它直接从那儿开始。正式包里这一行整段被摇掉。
     const devSpent = devErosionFor();
     if (devSpent > 0) erosion.spend(devSpent);
@@ -1124,6 +1170,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     gameOver = true;
     resolving = false;
     heldMove = null;
+    finaleFrozen = false;
     // 连锁的下一拍要**撤掉**，不是置空（见 cancelBeat 那段）。从前这儿一句都没有，
     // 排着的那一拍会在结算页盖上之后照样落下来。
     cancelBeat();
@@ -1156,40 +1203,48 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
      * 不适用：老虎机、步步为营、无限反转」）。
      */
     const usesStepCoef = !hooks.flip && !hooks.puzzle && !hooks.slot;
-    // Leaving tiles face-up costs the same either way — walking away early
-    // and running the board into a genuine dead end are charged alike, so
-    // "stop now" is never a way to dodge the cost of an unfinished board.
-    // It is a *scale*, not a flat subtraction: an earlier flat per-tile
-    // penalty could wipe out real scoring outright (verified case: 8 raw
-    // points against 29 never-flipped tiles → −870, clamped to a flat 0),
-    // which read as "you scored nothing" on the results modal and on the
-    // share card. Scaling always leaves a good run's score visible.
+    // 剩余色块九折（站长 10-25，10-31 方案推14 Z-B08）：没清盘就结束时，盘上每剩一枚没翻的色块（不含活炸弹），
+    // 拼出分乘一次 0.9（engine/stepCoef.ts 的 leftoverScale，循环连乘，服务端逐位相等）。
+    // 走开和走死同样计价：判死「无法继续匹配」和玩家手动结束都扣，所以「现在就停」躲不掉没翻完的那几枚。
+    // 计时到点不扣（钟响不是玩家的选择），炸弹相连不扣（已经有那一刀），无限反转、步步为营不扣（各有各的公式）。
+    // 是乘一个比例，不是减一个定数：早先那版每枚减定分的，能把真打出来的分整个抹掉（8 分对 29 枚 → −870，夹成
+    // 0），结算页和分享卡上读起来就是「你一分没得」。
     const remaining = hooks.countRemainingTiles?.() ?? { neverFlipped: 0, flippedButRemaining: 0 };
     /**
      * 步步为营这三项一律 1 / 1 / 0，另走一条公式（见 engine/puzzleScore.ts）。
      *
      * 不是「顺手简化」，是那条四项连乘里有两项在这一局是**坏的**：
      *   · 时间系数——没有钟，快慢不再是本事（上面那一行已经按下去了）；
-     *   · 0.95^未翻面——步数耗尽是这一局的常态，盘上必然剩一堆没碰过的，剩 29
-     *     枚就把系数压到两成，等于把所有人一起砸到底，罚的不是失误而是规则。
+     *   · 剩余色块打折——步数耗尽是这一局的常态，盘上必然剩一堆没碰过的，按枚
+     *     打折就等于把所有人一起砸到底，罚的不是失误而是规则。
      * 惩罚那一项这一局没有任何路径会传进来（没有炸弹），写成 0 是把这件事钉住，
      * 而不是靠「反正没人传」。
      *
      * 写成定值、而不是留着算出一个 1.00，是为了让 runBreakdown 的 puzzle 分支
      * 干脆不摆那几行——摆一行「×1.00」等于告诉玩家有这回事。
      */
-    const unflippedScale = hooks.puzzle ? 1 : UNFLIPPED_SCALE ** remaining.neverFlipped;
+    const leftoverApplies = !hooks.puzzle && !hooks.flip && (reason === STUCK_REASON || reason === MANUAL_END_REASON);
+    /** 真乘进去的那个数（不扣时 1）；lastRun 存的就是它，结算明细只在它 < 1 时摆那一行。 */
+    const unflippedScale = leftoverApplies ? leftoverScale(remaining.neverFlipped) : 1;
     const penalty = hooks.puzzle ? 0 : extraPenalty;
     /** 这一局的终局盘面（每副棋盘自己数，见 hooks.puzzleTally）。 */
     const tally = hooks.puzzle ? (hooks.puzzleTally?.() ?? { cleared: 0, stars: 0 }) : null;
     /** 已清格数：开局有几枚，现在还剩几枚，差就是清掉的（§5）。 */
     const cleared = Math.max(0, hooks.boardTiles - hooks.tilesLeft());
     const swept = cleared >= hooks.boardTiles;
-    const par = erosion.par();
+    // D36 甲（站长 10-29，推14 Z-B20）：只剩拆不掉的炸弹——给勾（打通了），不给《清盘》（盘上还有东西）；结算页说一句为什么。
+    // 不写进 lastRun（存档、分享卡不需要它；旧档没有它）。
+    const onlyBombsLeft = reason === ALL_FLIPPED_REASON && !swept
+      && (hooks.modeKey === 'bomb' || hooks.modeKey === 'bombTimed');
+    // Pro 局的基准步数 = 普通 par × 1.5（站长 D05 甲，10-31 方案推14 Z-B13）；lastRun.par 存的就是这个数。
+    const par = runPro ? proParOf(erosion.par()) : erosion.par();
     const stepCoef = stepCoefFor({ par, cleared, tiles: hooks.boardTiles, moves, apply: usesStepCoef });
+    // 无限反转：结算再乘反转系数（V15，Z-B06）；步数系数在这一档恒 1（usesStepCoef 为假）、剩余色块不扣（unflippedScale
+    // 恒 1）。乘 1 在 IEEE 下逐位不变，所以非反转局的数和服务端 score × scale × coef 逐位相同。
+    const flipCoef = hooks.flip ? flipCoefFor(hooks.shapeId) : 1;
     const total = tally
       ? puzzleComposite({ cleared: tally.cleared, stars: tally.stars, ratePercent: statusPercent })
-      : Math.max(0, Math.round(score * stepCoef) - penalty);
+      : Math.max(0, Math.round(score * unflippedScale * stepCoef * flipCoef) - penalty);
 
     const best = saveBestIfHigher(hooks.bestKey, total);
 
@@ -1250,6 +1305,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       // 无限反转同理（见 scoring.ts 的 FLIP_RULES_VERSION）：连击封顶前后的分不是
       // 一把尺子量的。非反转局不写。
       flipRules: hooks.modeKey === 'flip' ? FLIP_RULES_VERSION : undefined,
+      flipCoef: hooks.flip ? flipCoef : undefined,
       // 步步为营同理（见 puzzleScore.ts 的 PUZZLE_RULES_VERSION）：2026-10-02 消线奖励
       // 从退一步改成退两步（第 2 版）；2026-10-14 撤掉所有退步、起手按棋盘（第 3 版）——一局能
       // 走多久、终局盘面长什么样整条都变了。非这一档不写。
@@ -1304,7 +1360,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     refs.endSignHintEl.hidden = true;
     refs.endSignHintEl.textContent = '';
     /**
-     * 徽章那一排（《侵蚀阶梯》v1.2 §5：清盘、解锁 1 枚）。
+     * 徽章那一排（《侵蚀阶梯》v1.2 §5：清盘；老虎机多一枚降到底）。
      *
      * 一个都没有就整条不摆——摆一行空的等于告诉玩家「这儿本来该有东西」。
      */
@@ -1318,13 +1374,28 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // `usesStepCoef` 写在 `&&` 左边是要紧的：`shouldTeachTotal()` 一问就**记账**
     // （firstPlay 的 claimFirstTotalTip 调 markOpened），右边先跑的话这一次性的教学
     // 会白白烧在一局根本不显示它的反转局上，他从此再也看不到这句话。
-    const teachTotal = usesStepCoef && !!hooks.shouldTeachTotal?.();
+    //
+    // 明细里已经有九折那一行（没清盘就结束，unflippedScale < 1）的这一局也不讲，**留到下一局**（站长 10-31，推14）：
+    // 头一局开局不久就按《结束游戏》的话，这句注解（推14 起多了九折那半句）和九折那一行挤在同一窗里，横屏手机上装不下
+    // （check-end-design ⑤ 量出来差 14–48px）。同样写在 `&&` 左边、先于 shouldTeachTotal()：这一局不问就不记账，下一局照样
+    // 是「头一回」。
+    const teachTotal = usesStepCoef && !(unflippedScale < 1) && !!hooks.shouldTeachTotal?.();
+    // 无限反转那一句（推14 Z-B07，站长 D37 甲）：hooks.flip 写在左边，理由同上。
+    const teachFlip = !!hooks.flip && !!hooks.shouldTeachFlip?.();
+    // 九折那一行的叫法（runBreakdown 照同一句 countPhrase 拼）：那一行另挂 end-row--leftover，只是个记号、不带样式——门按它认
+    // 这一行（四种语言的叫法各不一样，按字认太脆）。
+    const leftoverRowLabel = unflippedScale < 1 ? countPhrase(s.leftoverLabel, remaining.neverFlipped, hooks.lang) : null;
     refs.endBreakdownEl.innerHTML =
       runBreakdown(lastRun, hooks.lang)
         .map(([label, value]) =>
           // 设计图上只有「综合分」那一行是粗的（拼出分和别的行一样细），所以那一行另挂一个类。
-          `<div class="end-row${isSumRow(label, hooks.lang) ? (label === s.compositeLabel ? ' end-row--sum end-row--total' : ' end-row--sum') : ''}">` +
-          `<span>${label}</span><span>${value}</span></div>`)
+          `<div class="end-row${isSumRow(label, hooks.lang) ? (label === s.compositeLabel ? ' end-row--sum end-row--total' : ' end-row--sum') : ''}${label === leftoverRowLabel ? ' end-row--leftover' : ''}">` +
+          `<span>${label}</span><span>${value}</span></div>` +
+          // 只剩拆不掉的炸弹：「拼出得分」那一行正下方一行小字（D36 甲）。用 .end-row--note，不是 --tip：--tip 是一次性的
+          // 教学（门按它摘行），这一句每次这种局都说。不进 runBreakdown（分享卡、记录页不摆它）。
+          (onlyBombsLeft && label === s.builtScoreLabel
+            ? '<div class="end-row end-row--note"><span><span>' + escHtml(s.endOnlyBombsLeft) + '</span></span></div>'
+            : ''))
         .join('') +
       // 「该玩法您的均分」：设计图上是明细的最后一行（从前是分数底下单独一行大字，#endAvg）。
       // 整句一个格子，横跨两栏。
@@ -1345,7 +1416,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       // 行『×1.00』等于告诉玩家有这回事」）。注解比那一行更糟：那一行只是摆出一个不
       // 起作用的数，这一句是**讲一件这一局没发生的事**，而且就讲在「指着实物讲」的位
       // 置上——他照着往上看，明细里找不到那个系数（问不问见上面 teachTotal）。
-      (teachTotal ? `<div class="end-row end-row--tip"><span>${escHtml(s.endTipComposite)}</span></div>` : '');
+      (teachTotal ? `<div class="end-row end-row--tip"><span>${escHtml(s.endTipComposite)}</span></div>` : '') +
+      (teachFlip ? `<div class="end-row end-row--tip"><span>${escHtml(s.endTipFlip)}</span></div>` : '');
     // 从前这儿写一行字（结束方式 · 共 N 步 · 用时 · 本机最佳）。现在那一行印
     // 在战绩图上，图本身摆到了它的位置——见 gameShell 的 #endShare。
     // 单局最快 on a room's closing card is read from here, the same way the
@@ -1549,14 +1621,16 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   // DOM element (every shape already tags its tiles with data-r/data-c) —
   // gameController has no idea how any particular shape maps (r, c) to
   // pixels, but it doesn't need to: the element that's already on screen
-  // knows. Returns board-local center coordinates, or null if the cell
-  // isn't currently rendered (e.g. a shape that hides removed cells).
-  function cellCenterPx([r, c]: Cell): [number, number] | null {
+  // knows. Returns center coordinates relative to `host`, or null if the
+  // cell isn't currently rendered (e.g. a shape that hides removed cells).
+  // 原先叫 cellCenterPx、减的是 boardEl 的框；推14 Z-B11 把粒子挂到 boardWrap 上（重画不清它），坐标跟着相对 boardWrap。
+  // 那一格的 DOM 在本拍 hooks.render() 之前还在，量得到。
+  function cellCenterIn(host: HTMLElement, [r, c]: Cell): [number, number] | null {
     const el = refs.boardEl.querySelector<HTMLElement>(`[data-r="${r}"][data-c="${c}"]`);
     if (!el) return null;
-    const board = refs.boardEl.getBoundingClientRect();
+    const frame = host.getBoundingClientRect();
     const box = el.getBoundingClientRect();
-    return [box.left - board.left + box.width / 2, box.top - board.top + box.height / 2];
+    return [box.left - frame.left + box.width / 2, box.top - frame.top + box.height / 2];
   }
 
   /**
@@ -1584,21 +1658,28 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   const accent2Color = () => getComputedStyle(document.documentElement).getPropertyValue('--accent-2').trim() || '#4A6E5B';
 
   /**
-   * 「大时刻」那一套：两下震动、滴落声、重震、一大把二号强调色的粒子。
+   * 「大时刻」那一套：两下震动、一声、重震、一大把二号强调色的粒子。`kind`：'line' 是整线消除（含收尾每一拍、散边每一颗），
+   * 那一声是 cuelume 0.2.8 的 ready（playLineClear，站长 10-29 晚，推14 Z-B26）；'celebrate' 是老虎机「降到底」那一下，照旧
+   * 0.2.2 的滴落声（playClear）——那一下不是整线消除。
+   *
+   * 粒子挂在 boardWrap 上（推14 Z-B11，站长 D31 甲）：原先塞进 boardEl，同一拍紧接着的 hooks.render() 第一件事就是
+   * boardEl.innerHTML = ''——粒子从来没画出来过（finale-zoom §1.4 实测：render 前 16 颗、render 后 0 颗）。boardWrap 是
+   * position: relative、不剪裁，重画不清它。
    *
    * 整线消除那一拍一直是这么庆祝的；1×1 解锁那一下也走它（10-08 方案 3-A：「复用现有星星
    * 结算庆祝通道，不新开动画所有权」）。两处说的是同一种分量的事——一条线整个化掉、图案
    * 缩到只剩一枚——长得就该一样；各写一份的话，下回调其中一处，另一处就悄悄走样。
    * 粒子从 `originCell` 那一格冒出来，那一格不在屏幕上就只有声、震、晃。
    */
-  function bigMoment(originCell: Cell | undefined): void {
+  function bigMoment(originCell: Cell | undefined, kind: 'line' | 'celebrate'): void {
     // 装饰件：抛错只记一笔，不拦连锁（10-31 方案推01 Z-A01 ②）。原地包一层，不改名——check-erosion 按名字切这一段。
     try {
       vibrate([25, 40, 25]);
-      playClear();
+      if (kind === 'line') playLineClear();
+      else playClear();
       screenShake(refs.boardWrap, 'heavy');
-      const pos = originCell ? cellCenterPx(originCell) : null;
-      if (pos) spawnParticles(refs.boardEl, pos[0], pos[1], { color: accent2Color(), count: 16, spread: 64 });
+      const pos = originCell ? cellCenterIn(refs.boardWrap, originCell) : null;
+      if (pos) spawnParticles(refs.boardWrap, pos[0], pos[1], { color: accent2Color(), count: 16, spread: 64 });
     } catch (e) {
       guardLog('bigMoment', e);
     }
@@ -1666,8 +1747,17 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     let totalRaw = 0;
     let moveWeight = 0;
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const HIGHLIGHT_LEAD_MS = reduceMotion ? 0 : 550;
-    const STEP_GAP_MS = reduceMotion ? 0 : 350;
+    /**
+     * 收尾节拍（10-31 方案推14 Z-B09，endgame-seq 第 4 节，站长已批）。r = flipRate()（拉杆，0.5–2）：
+     *   · 图案拍也跟拉杆（D29 乙）：高亮 550/r、间隔 350/r（原先只有翻面那一截跟拉杆）；
+     *   · 消线拍 1250/r；同一步里第 2 拍起的消线拍（自动）再乘 0.4（D02）；减弱动态时消线拍照停（D26，静止画面）；
+     *   · 清光那一拍之后只等淡出：min(上一行, 820/r)（D25）；
+     *   · 定格 1.4 秒、判死 1.4 秒不随拉杆（D03）。
+     * 推荐档 r = 1 时图案拍和旧表一样（n=4：1250 ms）。
+     */
+    const pace = 1 / flipRate();
+    const HIGHLIGHT_LEAD_MS = reduceMotion ? 0 : Math.round(550 * pace);
+    const STEP_GAP_MS = reduceMotion ? 0 : Math.round(350 * pace);
     // A bonus step's own removal/fade animation (square's collapse, or
     // triangle's fade-to-hole) runs well past this gap on its own timeline —
     // if a further chained step fires while it's still mid-flight, that
@@ -1675,7 +1765,14 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // data, since the removal itself already landed, but visibly abrupt).
     // A longer pause specifically after a bonus step gives it room to
     // finish before the next step's render() could touch it.
-    const BONUS_GAP_MS = reduceMotion ? 0 : 1250;
+    // D26：减弱动态时也照停（静止画面），不再是 0——每一下消线都看得到。
+    const BONUS_GAP_MS = Math.round(1250 * pace);
+    /** D02：同一步里第 2 拍起的消线拍（自动）只停 0.4 倍。 */
+    const AUTO_LINE_F = 0.4;
+    /** D25：清光之后只等淡出。 */
+    const CLEAR_TAIL_MS = Math.round(820 * pace);
+    /** 这一步走到第几拍了（第 0 拍是玩家亲手那一下）。 */
+    let beatNo = 0;
 
     const finish = () => {
       settleMove = null;
@@ -1786,7 +1883,7 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       // draining off the board, so it gets the falling droplet rather than
       // the scoring bell. That whole package lives in bigMoment (the 1×1
       // unlock uses it too).
-      if (isBonus) bigMoment(s.lineBonusGroups[0]?.[0]);
+      if (isBonus) bigMoment(s.lineBonusGroups[0]?.[0], 'line');
       else {
         vibrate(15);
         // An ordinary match only gets a tone — shake and particles are
@@ -1796,6 +1893,10 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
         playScore(1);
       }
 
+      // 这一拍的动画倍数（engine/flipSpeed.ts 的 beatScale）：放大、淡出、收拢都乘它。消线拍第 0 拍 1 倍，之后 0.4 倍。
+      const lineK = isBonus ? (beatNo === 0 ? 1 : AUTO_LINE_F) : 1;
+      setBeatScale((isBonus ? lineK : 1) * pace);
+      beatNo++;
       hooks.onCascadeStep?.(groups);
       hooks.render();
       syncProWheel();
@@ -1840,20 +1941,20 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
           const step = erosion.spend(committed);
           if (step.dropped > 0) {
             /*
-             * 降级了：下一拍**全盘**按新图案重找（10-09 补充方案 6-3）。盘上可能早就摆着一组现成的
-             * 新图案（比如一组 1×3），它不在这一步动过的格子上，照遮罩找不到——从前它得等哪天谁碰
-             * 巧滑到它才给分。降到 1 枚时，场上剩下的每一枚色块单独就是一组，这一拍把它们全部翻掉。
-             * 都算这一步的连锁拍：分数、连锁、步步为营「这一步得没得分」一概照连锁算。
+             * 降级了。**基础局不重扫**（ero2，10-31 方案推14 Z-B02，站长 F5）：新图案从玩家接下来动到的地方算，
+             * 盘上现成摆着的一组新图案（比如一组 1×3）不会自己翻。**老虎机照旧全盘重找**（10-09 补充方案 6-3）：
+             * 那一组不在这一步动过的格子上，照遮罩找不到；降到 1 枚时场上剩下的每一枚色块单独就是一组，这一拍把
+             * 它们全部翻掉。都算这一步的连锁拍。
              */
-            stepper.rescanAll();
+            if (hooks.slot) stepper.rescanAll();
             hooks.onErosion?.(step.level);
             // 教学 B 那一条等的是图案**第一次真的降级**（10-11 方案 D-1）：降级这一下单报一声，结算完再换到 C，
             // C 按新的 N 亮一组。
             coach?.signal('erosion');
-            // 1×1 解锁的那一下：主动说一声（10-08 方案 3-A）。二版里 1×1 是真打的一段，到
-            // 这儿不再意味着盘已翻完——这一下得让人知道「现在一枚就够了」，不能只靠右上角
-            // 那一块闪两下。只响一次（见 celebrate）；老虎机局图案第一次变成 1 枚也算（10-11 方案 B-6）。
-            if (celebrate(step.level)) bigMoment(s.matchGroups[0]?.[0]);
+            // 老虎机：图案第一次变成 1 枚 / 降到底那一下，主动说一声（10-08 方案 3-A、10-11 方案 B-6）——得让人知道
+            // 「现在一枚就够了」，不能只靠右上角那一块闪两下。只响一次（见 celebrate）。基础局封底 2，永远走不到这里
+            // （targets.ts 的 celebrationGate 基础局只认 level === 1）。
+            if (celebrate(step.level)) bigMoment(s.matchGroups[0]?.[0], 'celebrate');
           }
           if (step.unlocked) unlockedOne = true;
           // 每翻一枚都要重画：段熄一格、末位那枚跟着再淡一点。降级那一下由
@@ -1918,7 +2019,25 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
         const flipRoomMs = faceSnaps?.size
           ? (flipCells.length - 1) * flipStaggerMs() + flipMs() + 80
           : 0;
-        beat(step, Math.max(s.lineBonusGroups.length ? BONUS_GAP_MS : STEP_GAP_MS, flipRoomMs) + hitStopMs);
+        const lineGap = s.lineBonusGroups.length
+          ? (hooks.isGameOver() ? Math.min(CLEAR_TAIL_MS, Math.round(BONUS_GAP_MS * lineK)) : Math.round(BONUS_GAP_MS * lineK))
+          : STEP_GAP_MS;
+        const gap = Math.max(lineGap, flipRoomMs) + hitStopMs;
+        // 下一拍会把盘上剩下的一次消光：先定格 1.4 秒（冻钟），最后一组放大、停一下再消（推14 Z-B09，D03 甲）。嵌套的
+        // 那一拍也走同一个拍子执行器（armBeat → runBeat，带 catch 和守望）；thawClock 写在 try 里、step 在 finally 里——
+        // 那一拍抛错钟也不会一直停着。玩家亲手一下清光（第 0 拍）不走这里，不定格（D24）。
+        if (!hooks.flip && safeFinalGroupNext()) {
+          beat(() => {
+            freezeClock();
+            beat(() => {
+              try {
+                thawClock();
+              } finally {
+                step();
+              }
+            }, FINALE_HOLD_MS);
+          }, gap);
+        } else beat(step, gap);
       };
       if (s.matchGroups.length) beat(proceed, HIGHLIGHT_LEAD_MS + hitStopMs);
       else proceed();
@@ -2011,7 +2130,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
   function doResume() {
     if (!paused) return;
     paused = false;
-    timer.resume();
+    // 定格中暂停再继续：钟照旧停着，等定格那一拍走完（thawClock）再走（推14 Z-B09 第 6 条）。
+    if (!finaleFrozen) timer.resume();
     coach?.resume();
     refs.pauseOverlay.classList.remove('show');
     // 停下时还剩多少毫秒，就接着数多少——连锁从他离开的那一拍往下走。
@@ -2130,14 +2250,14 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       onResume: () => {
         if (!paused) return;
         paused = false;
-        timer.resume();
+        if (!finaleFrozen) timer.resume();
         const move = heldMove;
         heldMove = null;
         if (move && !gameOver) move();
       },
       onFinish: () => {
         paused = false;
-        timer.resume();
+        if (!finaleFrozen) timer.resume();
         doFinish();
       },
     });
@@ -2244,6 +2364,23 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
       heldMove = apply;
     },
     matchLen: () => erosion.level(),
+    /**
+     * Pro 局卡死时松一级（10-31 方案推14 Z-B13，站长 10-21/22、rerun-f5 定案 2、10-30）。棋盘把自己的卡死判定包在这里
+     * （五副外边族的 stuckAt、方块的 findStuckGroups）。只在 **Pro 局、盘上还有正面色块、判死、还没到这一局的最低级**
+     * 时松：色块全翻完以后再降级没有意义（pro-score §7.3）。最低级：普通棋盘 EROSION_FLOOR（1×2），老虎机 1 枚（站长
+     * 10-30，同普通老虎机）。松级不响庆祝、不发徽章、不重扫。
+     */
+    relaxIfStuck(check: () => Cell[][]): Cell[][] {
+      let g = check();
+      while (g.length && runPro && erosion.level() > (hooks.slot ? 1 : EROSION_FLOOR)
+             && (hooks.countRemainingTiles?.().neverFlipped ?? 0) > 0) {
+        erosion.release();
+        paintPattern();
+        hooks.onErosion?.(erosion.level());
+        g = check();
+      }
+      return g;
+    },
     erosionView: () => ({
       level: erosion.level(),
       segLeft: erosion.segLeft(),

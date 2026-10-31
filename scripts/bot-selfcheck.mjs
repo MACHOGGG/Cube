@@ -48,14 +48,14 @@
  * H2 **不该卡死。** 盘清空了必须在宽限期内结算；预算用完、而且最后那些步棋连
  *    盘面 id 布局都一模一样、局还活着，就是卡住了。
  * H3 **阶梯要推得动。** 一局里 HUD 那一块的枚数必须真的降过；每副棋盘至少有一局降
- *    到 1 枚或者把盘清空。
+ *    到这一局的最低级（基础局 2 枚，F5，10-31 方案推14 Z-B02；老虎机 1 枚）或者把盘清空。
  * H4 **炸弹局拆一枚就要熄一段。** 拆掉的那一步，分数至少 +2，而且亮着的段数比上一
  *    步少（拆除＝翻面，见 engine/bomb.ts）；这一步冒出来的「+N」加起来等于分数涨的数——
  *    拆弹那几颗的 +2 原先只进分数、不进气泡（10-11 方案 B-13.5）。
  * （H5–H7 见 playOne 里各自那一段。）
  * H8 **图案到了 1 枚，盘上一枚色块都不剩**（10-09 补充方案 6-3）：解锁 1×1 的那一下，场上
- *    剩下的色块当场全部翻掉。六副棋盘的认组在图案 1 枚时认不认得出每一枚，只有真打到那
- *    一步才看得见（方块那一副另有 check-erosion-live 手摆盘面量）。
+ *    剩下的色块当场全部翻掉。推14（F5）起基础局到 2 枚为止、到不了 1 枚——这一条只剩老虎机局问；基础局改成报告项
+ *    「到 1×2 之后结束时盘上还剩几枚色块」（不挡合并）。
  *
  * ── 报告项（不挡合并）──────────────────────────────────────
  *
@@ -122,7 +122,9 @@ const check = (n, ok, extra = '') => {
 };
 const note = (t) => console.log(`      ${t}`);
 
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+// 有开发容器里那一份就用它，没有就用 Playwright 自带的（本地也跑得起来，10-31 方案推14 Z-B24）。
+const { existsSync } = await import('node:fs');
+const browser = await chromium.launch(existsSync('/opt/pw-browsers/chromium') ? { executablePath: '/opt/pw-browsers/chromium' } : {});
 
 /**
  * 页面里那一套「只看屏幕」的探针。
@@ -387,24 +389,28 @@ function resolveSim(snap, lines, need) {
  * 抄一份而不是 import：H5 要问的正是「屏幕上那一块画的级数对不对」，读同一个常量就成了
  * 「它说它是对的」。键是主菜单上那张卡的名字——这个机器人认的就是那个名字。
  */
+// 10-31 方案推14 Z-B02（F5）：基础局两段、到 2 枚为止。
 const LADDER_BY_BOARD = {
-  经典方块: [15, 11, 6],
-  菱形方块: [15, 11, 6],
-  经典小球: [12, 8, 5],
-  六边形小球: [15, 11, 6],
-  菱形小球: [18, 14, 10],
-  六边形三角: [20, 15, 11],
+  经典方块: [22, 12],
+  菱形方块: [22, 12],
+  经典小球: [17, 9],
+  六边形小球: [22, 12],
+  菱形小球: [27, 17],
+  六边形三角: [30, 20],
   // 基础炸弹那一档开的是方块或小球（BOMB_SHAPES），开哪一副由那一屏第一个 chip 定。
   // 两副的第一级不一样（15 vs 12），推错了会冤枉游戏，所以**炸弹局不做 H5**。
 };
 
-/** 翻了 n 枚之后，按 §2 那张表该是第几枚级。 */
+/** 翻了 n 枚之后，按 §2 那张表该是第几枚级。两段表封底 2（基础局，F5）；三段表封底 1（老虎机那一套）。 */
 function levelFromFlips(seg, n) {
-  const [s4, s3, s2] = seg;
-  if (n < s4) return 4;
-  if (n < s4 + s3) return 3;
-  if (n < s4 + s3 + s2) return 2;
-  return 1;
+  let level = 4;
+  let used = 0;
+  for (const k of seg) {
+    if (n < used + k) return level;
+    used += k;
+    level -= 1;
+  }
+  return level;
 }
 
 /** 方案里那个局面分：已消格×1000 + 星星×20 + 聚边度×300 + 得分×0.01。 */
@@ -1002,6 +1008,8 @@ async function playOne(page, label, opts) {
     moves,
     startTiles,
     aliveLeft: alive.length,
+    // H8 报告项（推14）：结束时盘上还剩几枚色块（翻过面的是星星，不算）。
+    frontsAtEnd: alive.filter((p) => p.face === 'flavor').length,
     swept: alive.length === 0,
     levelLow,
     ladderMoved,
@@ -1100,7 +1108,7 @@ const ctx = await browser.newContext({
   // 消行照旧一拍一拍走完（settle 等的就是它们）。
   reducedMotion: 'reduce',
 });
-await unlockAll(ctx);
+await unlockAll(ctx, { signedIn: true });
 await ctx.addInitScript((harvest) => {
   localStorage.setItem('slides_lang', 'zhHans');
   localStorage.setItem('slides_intro_seen', '1');
@@ -1113,12 +1121,8 @@ await ctx.addInitScript((harvest) => {
   if (harvest) {
     for (const k of ['finished', 'bomb', 'slot', 'flip', 'puzzle', 'timed', 'layout']) localStorage.setItem(`slides_played_${k}`, '1');
   }
-  // 天才特供那几副（七色圆球、六边三角）要开通才进得去。照「兑过一张长期内部码的
-  // 玩家」原样摆一份：channel 必须是 'code'（别的柜台会被 read() 丢成 NOBODY），
-  // 而内部码没过期时 refreshEntitlement 原地掉头，一个请求都不发。
-  localStorage.setItem('slides_genius', JSON.stringify({
-    active: true, channel: 'code', code: 'GATEUNLOCK', until: Date.now() + 365 * 864e5,
-  }));
+  // 四副布局要登着才进得去（推12 起没有「天才」层，只问登没登录）：登录缓存由上面的 unlockAll(ctx, { signedIn: true }) 铺，
+  // 这儿不再手写一份 slides_genius（推12 换掉了 75 个文件里手写的那一份，这一个当时漏了）。
 }, Boolean(HARVEST_OUT));
 await ctx.addInitScript(installProbe);
 const page = await ctx.newPage();
@@ -1131,6 +1135,7 @@ const jobs = HARVEST_OUT
   ? HARVEST_VARIANTS.flatMap((v) => Array.from({ length: RUNS }, () => ({
       board: `代号 ${SC.VARIANTS[v].mode}/${SC.VARIANTS[v].board}`,
       bomb: /bomb/.test(SC.VARIANTS[v].mode),
+      slot: SC.VARIANTS[v].mode === 'slot',
       variant: v,
       code: SC.encodeSeed(SC.DEAL_VERSION, v, Math.floor(Math.random() * 2 ** 27)),
     })))
@@ -1226,12 +1231,14 @@ for (const [i, job] of jobs.entries()) {
   } else {
     note(`${label} · H7：这一局没走满 8 手，这两条无从判断（不假装查过）`);
   }
-  // ── H8：到了 1 枚，盘上一枚色块都不剩（10-09 补充方案 6-3）──────────
-  if (r.oneChecks > 0) {
+  // ── H8：到了 1 枚，盘上一枚色块都不剩（10-09 补充方案 6-3）——推14 起只在老虎机局问（基础局封底 2，到不了 1 枚）──
+  if (job.slot && r.oneChecks > 0) {
     check(`${label} · H8：图案到了 1 枚之后，盘上一枚色块都不剩（量了 ${r.oneChecks} 次）`, r.frontsAfterOne === 0,
       r.frontsAfterOneNote || '干净');
+  } else if (!job.slot && r.levelLow <= 2) {
+    note(`${label} · H8（报告项）：到 1×2 之后结束，盘上还剩 ${r.frontsAtEnd ?? '?'} 枚色块`);
   } else {
-    note(`${label} · H8：这一局没打到 1 枚，这一条无从判断（不假装查过）`);
+    note(`${label} · H8：这一局没打到最低级，这一条无从判断（不假装查过）`);
   }
   // ── H4：炸弹 ────────────────────────────────────────────
   if (job.bomb && r.bombDefuseChecked) {
@@ -1269,8 +1276,8 @@ for (const b of [...BOARDS, ...(BOMB_RUNS ? ['基础炸弹'] : [])]) {
   //    而且在 CI 里。这道门该管的是「段真的会随着翻面熄下去」（① 和 ②），那是只有
   //    真打一局才看得见的。
   if (SOAK) {
-    check(`${b} · H3：至少有一局降到 1 枚或者把盘清空`,
-      mine.some((r) => r.levelLow <= 1 || r.swept),
+    check(`${b} · H3：至少有一局降到这一局的最低级（基础局 2 枚）或者把盘清空`,
+      mine.some((r) => r.levelLow <= 2 || r.swept),
       mine.map((r) => `${r.levelLow}枚/剩${r.aliveLeft}`).join(' '));
   } else {
     note(`${b} · H3：图案最低降到 ${Math.min(...mine.map((r) => r.levelLow))} 枚（「推到底」这一条留给 --soak）`);

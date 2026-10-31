@@ -14,6 +14,7 @@
  * 在说「这里有新东西」，正好说反了。
  */
 import { MODE_TIPS, type Lang } from '../i18n';
+import { timedSecondsFor } from '../engine/modeClock';
 import { bombTipArt, flipTipArt } from './ruleArt';
 import { renderPatternHintIcons } from '../engine/patternIcon';
 import { targetPatternDefs } from '../engine/targetIcon';
@@ -54,9 +55,17 @@ export function slotTip(lang: Lang, target: TargetPattern): ModeTip {
   };
 }
 
+/**
+ * 计时那一句，按棋盘把 `{s}` 换成这副棋盘的秒数（ero2：小球 60、方块 100，engine/modeClock.ts 的 timedSecondsFor；10-31
+ * 方案推14 Z-B05）。凡读 MODE_TIPS[lang].timed 的地方都走它：头一局那句提示、暂停《怎么玩》那一条。
+ */
+export function timedTipText(lang: Lang, shapeId: string): string {
+  return MODE_TIPS[lang].timed.split('{s}').join(String(timedSecondsFor(shapeId)));
+}
+
 /** 计时：头上那个数字是唯一的新东西，一句话说完。 */
-export function timedTip(lang: Lang): ModeTip {
-  return { text: MODE_TIPS[lang].timed, art: '' };
+export function timedTip(lang: Lang, shapeId: string): ModeTip {
+  return { text: timedTipText(lang, shapeId), art: '' };
 }
 
 /** 特殊布局：规矩一条没变，变的只是格子怎么摆。 */

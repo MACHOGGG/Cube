@@ -161,7 +161,8 @@ async function backToProfile(before, label, backSel = '#backBtn') {
   await page.waitForTimeout(1500);
   const r = await page.evaluate(() => ({
     view: Boolean(document.querySelector('.rank-page .rank-view')),
-    tabs: document.querySelectorAll('.rank-page .rank-tab').length,
+    // 推14 Z-B15 起是页签 + 三行药丸（.rank-chip），原先那一排 .rank-tab 没了。
+    tabs: document.querySelectorAll('.rank-page .rank-chip').length,
     body: (document.querySelector('.rank-page .rank-body')?.textContent || '').trim().length > 0,
     total: Boolean(document.querySelector('.total-card')),
     records: Boolean(document.querySelector('.records-panel--records')),

@@ -14,7 +14,8 @@
  *   · 乘步数系数那几档（基础、计时、炸弹、更多布局）：系数取 1（清掉 0 枚），拼出分 = 综合分；
  *     先用翻面（每枚 2 分、不超过全盘），剩下的算成削线分（每条线不超过 Lmax²）。
  *   · 老虎机：同上，只是剩下的那一截算成完成奖励（图案分里多出来的那部分）。
- *   · 无限反转：用时 100 秒、走 100 步，拼出分 = 综合分（一部分是连击多出来的）。
+ *   · 无限反转：用时 100 秒、走 100 步，综合分 = 拼出分 × 反转系数（ero2，api/_maxscore.js 的 FLIP_COEF：方块 6、小球
+ *     2.5）——所以综合分得是系数的整数倍（方块 6 的倍数、小球 5 的倍数），不是就抛错。拼出分一部分是连击多出来的。
  *   · 步步为营：综合分 = 被消除 × 10 + 星星 × 5，所以它得是 5 的倍数、不超过全盘 × 10。
  *
  * 规则版本（`rules`）现读 src/engine/scoring.ts 的 SCORING_RULES_VERSION——服务端只收现行那一版。
@@ -22,12 +23,14 @@
  * 门里那个 `call()` 多半用下面的 fillRun：门自己写的那几位盖在夹具上，门写什么算什么。
  */
 import { readFileSync } from 'node:fs';
-import { BOARD_LIMITS, POINTS_PER_FLIP, PUZZLE_CLEARED_POINTS, PUZZLE_STAR_POINTS, PUZZLE_START } from '../../api/_maxscore.js';
+import { BOARD_LIMITS, FLIP_COEF, POINTS_PER_FLIP, PUZZLE_CLEARED_POINTS, PUZZLE_STAR_POINTS, PUZZLE_START } from '../../api/_maxscore.js';
 
 const SCORING_V = (/export const SCORING_RULES_VERSION = '([^']+)'/.exec(
   readFileSync(new URL('../../src/engine/scoring.ts', import.meta.url), 'utf8'),
 ) || [])[1];
 if (!SCORING_V) throw new Error('fakeRun：读不到 src/engine/scoring.ts 的 SCORING_RULES_VERSION');
+/** 现行计分规则版本（现读，10-31 方案推14 Z-B01）：门里要手写 `rules` 的照用它，不再写死 'ero1'。 */
+export const SCORING_RULES = SCORING_V;
 
 /** 每一档带的那几个「第几版规则」（服务端照它们分榜，见 api/scores.js 的 kindOf）。 */
 const RULE_TAGS = {
@@ -43,8 +46,9 @@ const RULE_TAGS = {
  * @param {string} [o.modeKey] base / timed / bomb / bombTimed / flip / puzzle（老虎机是 base ＋ slot）
  * @param {boolean} [o.slot]
  * @param {number} o.total   想要的综合分（非负整数）
+ * @param {boolean} [o.pro]  Pro 局（推14 Z-B13）：带 `pro: true`，乘步数系数那几档的 par 写 proPar（服务端按它算系数）
  */
-export function fakeRun({ board, modeKey = 'base', slot = false, total }) {
+export function fakeRun({ board, modeKey = 'base', slot = false, total, pro = false }) {
   const b = BOARD_LIMITS[board];
   if (!b) throw new Error(`fakeRun：不认识的棋盘 ${board}`);
   const T = Math.max(0, Math.round(Number(total) || 0));
@@ -57,8 +61,11 @@ export function fakeRun({ board, modeKey = 'base', slot = false, total }) {
     defused: 0,
     hazardEnd: false,
     elapsedSec: 60,
+    // 剩下没翻的色块（推14 Z-B08 起服务端要这一位）：夹具的局都当清盘或计时收场，0 枚、不打折。
+    neverFlipped: 0,
     ...(RULE_TAGS[modeKey] || {}),
     ...(slot ? { slot: true } : {}),
+    ...(pro ? { pro: true } : {}),
   };
 
   if (modeKey === 'puzzle') {
@@ -77,11 +84,16 @@ export function fakeRun({ board, modeKey = 'base', slot = false, total }) {
     };
   }
   if (modeKey === 'flip') {
-    const patternPoints = Math.min(T, 4 * 100);
+    const coef = FLIP_COEF[board];
+    const score = coef ? T / coef : NaN;
+    if (!Number.isInteger(score)) {
+      throw new Error(`fakeRun：无限反转的总分要是系数的整数倍：方块 6 的倍数、小球 5 的倍数（${board} 要的是 ${T}）`);
+    }
+    const patternPoints = Math.min(score, 4 * 100);
     return {
       ...base,
-      score: T, patternPoints, linePoints: 0, comboBonusPoints: T - patternPoints,
-      flips: patternPoints, lines: 0, moves: 100, cleared: 0, stepCoef: 1, elapsedSec: 100,
+      score, patternPoints, linePoints: 0, comboBonusPoints: score - patternPoints,
+      flips: patternPoints, lines: 0, moves: 100, cleared: 0, stepCoef: 1, elapsedSec: 100, flipCoef: coef,
     };
   }
   // 乘步数系数的那几档和老虎机：先用翻面，剩下的给削线分（老虎机给完成奖励）。
@@ -98,7 +110,7 @@ export function fakeRun({ board, modeKey = 'base', slot = false, total }) {
   return {
     ...base,
     score: T, patternPoints: POINTS_PER_FLIP * flips, linePoints: rest, comboBonusPoints: 0,
-    flips, lines, moves: 30, cleared: 0, stepCoef: 1, par: b.par,
+    flips, lines, moves: 30, cleared: 0, stepCoef: 1, par: pro ? b.proPar : b.par,
   };
 }
 
@@ -115,7 +127,7 @@ export function fillRun(mode, score, given = {}) {
   let filled = {};
   try {
     if (BOARD_LIMITS[mode]) {
-      filled = fakeRun({ board: mode, modeKey: given.modeKey || 'base', slot: Boolean(given.slot), total: score });
+      filled = fakeRun({ board: mode, modeKey: given.modeKey || 'base', slot: Boolean(given.slot), total: score, pro: given.pro === true });
     }
   } catch {
     filled = {};

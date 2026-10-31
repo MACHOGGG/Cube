@@ -11,7 +11,7 @@
  *   基础小球   createCircleGame().mount(root, back, {})
  *   炸弹       { bomb: true }
  *   老虎机     { target: 转出来的那个图案 }
- *   无限反转   { flip: true, timeLimitSec: MODE_SECONDS }  // 100 秒
+ *   无限反转   { flip: true, timeLimitSec: FLIP_SECONDS }  // 100 秒
  *
  * 棋盘、滑动手感、得分判定、连锁节拍、翻面动画、结算、战绩图——一律走网页
  * 版那一份，这里一个字都不改。玩家定的：选出来的玩法要「完全复刻一样」。
@@ -51,7 +51,7 @@ import type { Lang } from '../../src/i18n';
 import { suffixFor } from '../../src/engine/runKey';
 import { wipeOldRules } from '../../src/engine/wipeOldRules';
 import { splitSlotRuns } from '../../src/engine/slotSplit';
-import { MODE_SECONDS } from '../../src/engine/modeClock';
+import { FLIP_SECONDS } from '../../src/engine/modeClock';
 import { registerCards } from '../../src/shapes/registry';
 
 import { installOldKernel } from './oldKernel';
@@ -73,12 +73,8 @@ armErrorLog();
 
 /** 小红书是中文平台，这一版固定简体中文——没有语言选择页。 */
 const LANG: Lang = 'zhHans';
-/**
- * 无限反转一局多长。**从前这里手抄网页版那个数**，靠一句注释「和网页版同一个数」
- * 维持同步——注释维持不了任何东西：网页端 120→60 那一次，这一份就落后过一版。
- * 现在两端读同一个常量（src/engine/modeClock.ts），抄不歪。
- */
-const FLIP_SECONDS = MODE_SECONDS;
+// 无限反转一局多长：直接 import src/engine/modeClock.ts 的 FLIP_SECONDS（10-31 方案推14 Z-B05）。**从前这里手抄网页版
+// 那个数**，靠一句注释「和网页版同一个数」维持同步——网页端 120→60 那一次，这一份就落后过一版。两端读同一个常量，抄不歪。
 
 const root = document.getElementById('app') as HTMLElement;
 const squareGame = createSquareGame();
@@ -922,9 +918,11 @@ installBackNav();
  * 在本机上，成绩页的累计得分是两套规则的和，哨兵键 `slides_wipe_ero1` 也永远不写
  * 入。现在它是 `engine/wipeOldRules.ts`，两端各调一次。
  *
- * 传的是这一端有的那两副棋盘——多传几个不存在的键不花什么，少传一个就会漏掉一批局。
+ * 传的是这一端建了的全部棋盘（ALL_GAMES）——多传几个不存在的键不花什么，少传一个就会漏掉一批局。原先只传方块、
+ * 小球两副，可这一端早就建了六副（成绩页 BOOKS 也按六副建）：升 ero2 时菱形、六边圆球、七色、六边三角四副的
+ * `_ero1` 旧局会清不掉（10-31 方案推14 Z-B01）。
  */
-wipeOldRules([squareGame.card.bestKey, circleGame.card.bestKey]);
+wipeOldRules(ALL_GAMES.map((g) => g.card.bestKey));
 // 老虎机的旧局从基础那一本里搬出去（10-11 方案 B-7），网页版同一个函数。
 splitSlotRuns([squareGame.card.bestKey, circleGame.card.bestKey]);
 // 主菜单第几步：老玩家开机就补到第 3 步（10-31 方案推12 Z-J02 D-8），排在挪档之后。

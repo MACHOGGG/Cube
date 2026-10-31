@@ -31,7 +31,7 @@ export interface CascadeLabels {
  */
 export const FLIP_STREAK_BASE = 1.5;
 /**
- * 连击倍率的**封顶**：`chain` 再大也按这个数算（1.5¹⁰ ≈ 57.7 倍）。
+ * 连击倍率的**封顶**：`chain` 再大也按这个数算（ero2 起 1.5⁵ ≈ 7.6 倍；旧值 1.5¹⁰ ≈ 57.7 倍）。
  *
  * 为什么非封不可：这是指数，而排行榜有上限（`api/_maxscore.js` 的 `MAX_SCORE = 1e9`），
  * 超过就一律**截断成十亿**。实算过（node，照下面这个公式逐项算）：4 分的图案大约
@@ -42,10 +42,19 @@ export const FLIP_STREAK_BASE = 1.5;
  * 那个数按这个公式**重现不出来**（第 32 次是 ×2.9×10⁵，要到 1.4×10¹⁵ 得连续约 87
  * 次）。文档里已经改对，别再引那个数。
  *
- * 10 是玩家 2026-09 拍的板（「直接封顶，按 n ≤ 10（约 57.7 倍）」）。封顶是**规则
- * 变更**，所以配了 FLIP_RULES_VERSION，让封顶前后的成绩分开排榜。
+ * 10 是玩家 2026-09 拍的板（「直接封顶，按 n ≤ 10（约 57.7 倍）」，上面「第 49 次」那几句说的是那一版）；ero2（V15，
+ * 站长 10-19 方案乙，10-31 方案推14 Z-B06）改成 5（约 7.6 倍），配合结算乘反转系数（FLIP_COEF）。封顶是**规则变
+ * 更**，所以配了 FLIP_RULES_VERSION，让封顶前后的成绩分开排榜；ero2 这一次跟着全站清榜，榜名 flip2 不动（升 flip3
+ * 反而会把 ero1 的反转分留在一张重建不碰的归档榜上）。
  */
-export const FLIP_STREAK_CAP = 10;
+export const FLIP_STREAK_CAP = 5;
+/**
+ * 无限反转的「反转系数」（站长 V15，方案乙）：结算时 综合得分 = round(拼出得分 × 它)。服务器手抄一份
+ * （api/_maxscore.js 的 FLIP_COEF），check-scores-guard ⑩ 对上。
+ */
+export const FLIP_COEF: Readonly<Record<string, number>> = Object.freeze({ square: 6, circle: 2.5 });
+/** 无限反转只开在方块和小球上（seedCode.ts 的 VARIANTS、api/room.js 的 FLIP_MODES）；认不出的给 1。 */
+export const flipCoefFor = (shapeId: string): number => FLIP_COEF[shapeId] ?? 1;
 /**
  * 无限反转按第几版规则打的。
  *
@@ -81,7 +90,7 @@ export function flipStreakDelta(points: number, chain: number, base = FLIP_STREA
  *
  * ⚠️ **云端榜上没有这一截。** 榜 id 由 `api/scores.js` 的 `boardIdOf` 生成，里头没有版
  * 本段（实际长 `square:base` 这样）。云端是**按 `rules` 字段过滤**的：上报时
- * `rules !== 'ero1'` 回 200 + `stored:false`，重建时跳过——不是另开一张榜。这儿从前写着
+ * `rules !== SCORING_RULES_VERSION` 回 200 + `stored:false`，重建时跳过——不是另开一张榜。这儿从前写着
  * 「云端榜长 `:ero1`」，是假的。
  *
  * 换规则时怎么做：改这个常量 → 本地那一次性清档跟着换钥匙（`engine/wipeOldRules.ts`
@@ -89,8 +98,13 @@ export function flipStreakDelta(points: number, chain: number, base = FLIP_STREA
  * 的 `rebuild` 路由，带 `wipeAll`；**没有清档脚本**，要人手 POST，`ADMIN_TOKEN` 保护）
  * → `api/scores.js` 那一行改成收新的。四样缺一样就会出现「新分进了旧榜」或者「新分谁
  * 也看不见」。
+ *
+ * 版本史：
+ *   · ero1（2026-10，《侵蚀阶梯》v1.2）：三段阶梯 4 → 3 → 2 → 1、降级全盘重找、1×1 当场全翻。
+ *   · ero2（2026-10-29 方案推14）：F5 曲线、降级不重扫、死后散边逐枚、计时 60/100、反转计分乙、剩余色块九折、
+ *     收尾逐一消除、Pro 冻结与分榜、榜单三行筛选。
  */
-export const SCORING_RULES_VERSION = 'ero1';
+export const SCORING_RULES_VERSION = 'ero2';
 
 /**
  * 计分规则用过的每一版，**最后一个就是现行版本**（等于 SCORING_RULES_VERSION）；以后升版本就往末尾加一个
@@ -98,7 +112,7 @@ export const SCORING_RULES_VERSION = 'ero1';
  * 《侵蚀阶梯》之前那一套不带版本号的键，下一次升到 ero2，ero1 那七本存档一本都不会被清，哨兵还会记成「本来就没
  * 东西可清」（门 check-wipe-rules 模拟过）。
  */
-export const SCORING_RULES_HISTORY = ['ero1'] as const;
+export const SCORING_RULES_HISTORY = ['ero1', 'ero2'] as const;
 
 export interface CascadeConfig {
   tileAt(r: number, c: number): Tile;
@@ -305,8 +319,14 @@ function dedupe(matches: Match[]): Match[] {
 }
 
 /**
+ * **拍序：先图案、后星星**（ero2，10-31 方案推14 Z-B09 R1）。站长 10-21 原话：「方块优先结算后翻面，随后是星星结算后消除。
+ * 游戏的结束需要是最后的一个图形或者几个一行/列的同色星星一起消除掉」。所以每一拍先找图案；这一拍一组图案都没有，
+ * 才调 cfg.findLineBonuses() 交整线。原先反过来（先问整线），于是 E7 那一副（小球底边 7 颗红星，左边三枚红色块和
+ * (6,0) 那颗红星成 1×4）先削了底边、断了那组 1×4，+49 之后判死——图案那 6 分和左边那 9 分都没了。整线一拍只交一组
+ * （各棋盘的 collectEdges / findLineBonusGroups 自己挑，engine/linePick.ts）。
+ *
  * Drives one full chain reaction following a confirmed move, one beat at a
- * time: repeatedly finds the next whole-line bonus or match wave, applying a
+ * time: repeatedly finds the next match wave or whole-line bonus, applying a
  * bonus's mutation immediately (its cells are always already dot-faced —
  * see isFullDotMatch — so there's nothing to stage) but holding a match
  * wave's flip back in commit() until the caller calls it. The caller is
@@ -342,27 +362,6 @@ export function createCascadeStepper(
 
   function next(): CascadeStep | null {
     if (terminal) return null;
-
-    const lineBonuses = cfg.findLineBonuses();
-    if (lineBonuses.length) {
-      // A cleared line scores the square of its own tile count, so a longer
-      // line (a new layout's diagonal, say) is worth more than a shorter one
-      // rather than every shape's line being flatly worth the same bonus.
-      const points = lineBonuses.reduce((sum, cells) => sum + cells.length ** 2, 0);
-      cfg.onLineBonus(lineBonuses);
-      if (cfg.resetMaskOnLineBonus) mask = null;
-      if (cfg.isTerminalAfterLineBonus?.()) terminal = true;
-      return {
-        points,
-        matchGroups: [],
-        lineBonusGroups: lineBonuses,
-        weight: 3 * lineBonuses.length,
-        label: labels.line,
-        flips: 0,
-        // 整线消除不翻任何东西（那条线上全是星星），所以不扣段。
-        commit: () => 0,
-      };
-    }
 
     const nextMask = new Set<string>();
     const idsOf = (m: Match) => m.cells.map(([r, c]) => cfg.tileAt(r, c).id);
@@ -434,6 +433,29 @@ export function createCascadeStepper(
           // 「回报数 − flips」把差额补上（见 gameController）。
           return toFlip.size + also.length;
         },
+      };
+    }
+
+    // 这一拍一组图案都没有，才问整线（10-31 方案推14 Z-B09 R1，见上面那段说明）。findLineBonuses 有副作用（记签名、
+    // 置收尾放开、方块记要收拢的行列），所以只能在真要交整线的这一拍问，不能「先看一眼」。
+    const lineBonuses = cfg.findLineBonuses();
+    if (lineBonuses.length) {
+      // A cleared line scores the square of its own tile count, so a longer
+      // line (a new layout's diagonal, say) is worth more than a shorter one
+      // rather than every shape's line being flatly worth the same bonus.
+      const points = lineBonuses.reduce((sum, cells) => sum + cells.length ** 2, 0);
+      cfg.onLineBonus(lineBonuses);
+      if (cfg.resetMaskOnLineBonus) mask = null;
+      if (cfg.isTerminalAfterLineBonus?.()) terminal = true;
+      return {
+        points,
+        matchGroups: [],
+        lineBonusGroups: lineBonuses,
+        weight: 3 * lineBonuses.length,
+        label: labels.line,
+        flips: 0,
+        // 整线消除不翻任何东西（那条线上全是星星），所以不扣段。
+        commit: () => 0,
       };
     }
 

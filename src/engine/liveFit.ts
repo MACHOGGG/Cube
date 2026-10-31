@@ -164,7 +164,8 @@ export function zoomFrom(prev: Fit, next: Fit): { ax: number; ay: number; scale:
  *
  * 两个数加起来必须 ≤ `BONUS_GAP_MS`（1250，见 engine/gameController.ts 的 beat）——那是连锁两拍之间的间
  * 隔。超出去的话下一拍的消除会压在这一拍的放大动画上，而动画一被打断就是「棋子吸附过
- * 去」那种难看的跳。
+ * 去」那种难看的跳。ero2 起两头乘的是同一个倍数（engine/flipSpeed.ts 的 beatScale：拉杆倍率的倒数、自动消线拍再乘
+ * 0.4，10-31 方案推14 Z-B09），乘完之后仍 ≤ 这一拍的间隔，所以这条对每一档、每一拍都成立。
  */
 export const ZOOM_HOLD_MS = 700;
 export const ZOOM_BACK_MS = 480;

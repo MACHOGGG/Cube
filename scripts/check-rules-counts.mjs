@@ -147,15 +147,25 @@ const GONE = {
   zhHant: ['連擊', '時間係數', '0.95', '2×2', '整組都是星星', '天才特供'],
   // 规则书里的名字和界面对齐（10-09 补充方案 7-11）：move factor / shape points / Swept badge 是规则书自己起的
   // 名字，界面上叫 Move multiplier / Build score / Board cleared；法文 facteur de coups / Plateau net 同理。
-  en: ['Streak', 'time factor', '0.95', '2×2', 'made only of stars', 'move factor', 'shape points', 'Swept badge', 'Slides genius only', 'for Slides geniuses'],
+  // 「made only of stars」原先整句禁（退役的那条「整组都是星星的图案」）。推14 Z-B12 起《消除》那一条（附录甲 §3.1，站长 10-30
+  // 已批）要讲「a short outermost edge made only of stars」——那是散边，另一件事，所以只禁退役的那两种说法。
+  en: ['Streak', 'time factor', '0.95', '2×2', 'group made only of stars', 'pattern made only of stars', 'move factor', 'shape points', 'Swept badge', 'Slides genius only', 'for Slides geniuses'],
   fr: ['Série', 'facteur temps', '0,95', '2×2', 'entièrement fait d', 'facteur de coups', 'Plateau net', 'génies de Slides'],
 };
-// 现在这套规则的三件事：每枚 +2、图案一路降到 1、综合分那唯一一个乘数。
+// 现在这套规则的几件事：每枚 +2、图案 4 → 3 → 2（推14 Z-B02 F5：到 2 为止）、步数系数、剩余色块九折（推14 Z-B08）。
 const MUST = {
-  zhHans: ['2 分', '4 → 3 → 2 → 1', '步数系数'],
-  zhHant: ['2 分', '4 → 3 → 2 → 1', '步數係數'],
-  en: ['2 points', '4 → 3 → 2 → 1', 'Move multiplier', 'Build score'],
-  fr: ['2 points', '4 → 3 → 2 → 1', 'Coefficient de coups'],
+  zhHans: ['2 分', '4 → 3 → 2', '步数系数', '九折'],
+  zhHant: ['2 分', '4 → 3 → 2', '步數係數', '九折'],
+  en: ['2 points', '4 → 3 → 2', 'Move multiplier', 'Build score', '×0.9'],
+  fr: ['2 points', '4 → 3 → 2', 'Coefficient de coups', '×0,9'],
+};
+// 推14 起不许再说的：图案降到 1（F5 到 2 为止；MUST 里那个「4 → 3 → 2」是它的前缀，所以另禁整串）、综合分「只此一个乘数」
+// （现在有剩余色块九折，不止一个了）。
+const MUST_NOT = {
+  zhHans: ['4 → 3 → 2 → 1', '只此一个乘数'],
+  zhHant: ['4 → 3 → 2 → 1', '只此一個乘數'],
+  en: ['4 → 3 → 2 → 1', 'only multiplier'],
+  fr: ['4 → 3 → 2 → 1', 'seul multiplicateur'],
 };
 const counts = {};
 for (const lang of LANGS) {
@@ -169,8 +179,13 @@ for (const lang of LANGS) {
   const left = GONE[lang].filter((w) => gen.includes(w));
   check(`${lang}：通用五条里没有退役的说法`, left.length === 0, left.join(' / ') || '干净');
   const missing = MUST[lang].filter((w) => !gen.includes(w));
-  check(`${lang}：通用五条讲到了现在这套的三件事`, missing.length === 0, missing.join(' / ') || '都讲到了');
+  check(`${lang}：通用五条讲到了现在这套的几件事（含九折）`, missing.length === 0, missing.join(' / ') || '都讲到了');
+  const stale = MUST_NOT[lang].filter((w) => gen.includes(w));
+  check(`${lang}：通用五条不再说「降到 1」「只此一个乘数」`, stale.length === 0, stale.join(' / ') || '干净');
 }
+check('（反面尺子）旧的通用那几句喂进 MUST_NOT 认得出',
+  MUST_NOT.zhHans.every((w) => '图案 4 → 3 → 2 → 1 一路变小。步数系数是综合分只此一个乘数。'.includes(w)) &&
+    MUST_NOT.en.every((w) => 'shrinks 4 → 3 → 2 → 1. The Move multiplier is the only multiplier.'.includes(w)));
 // 四种语言条数一致——少译一条是这本书的老毛病，而少的那一条屏幕上只是「短一截」。
 const gs = LANGS.map((l) => counts[l].g).join(',');
 const ms = LANGS.map((l) => counts[l].m).join(',');
@@ -247,7 +262,7 @@ const i18n = read('src/i18n.ts');
 // `codeSentNote`（「已发送，验证码 30 分钟内有效」）2026-10-03 退役：那扇窗的标题已经写着
 // 「已寄到 {email}」，同一拍再说一句「已发送」是把同一件事说两遍；而「30 分钟内有效」是
 // 一个**他做不了任何事**的数——码没过期他看不出区别，过期了服务端会直接说。
-const DEAD_KEYS = ['labelRun4', 'labelBlock22', 'label121', 'labelBigTriangle', 'perfLabel', 'codeSentNote', 'geniusOnly'];
+const DEAD_KEYS = ['labelRun4', 'labelBlock22', 'label121', 'labelBigTriangle', 'perfLabel', 'codeSentNote', 'geniusOnly', 'badgeUnlockedOne', 'rankTotalBoard', 'rankTabLayout', 'rankTabDaily'];
 // 只认**真的声明或读取**，不认注释里提到的名字：i18n.ts 里正写着一段注释解释这
 // 五个为什么删了（「下一个人会拿 labelBlock22 去标一个凑不出来的图案」）。按
 // \bkey\b 去找，那段注释自己就会把门顶红——一条一上来就红的门，最后一定会被人
@@ -408,7 +423,12 @@ check('flipScoringHint 不再讲连击和时间奖励', bad.length === 0, bad.jo
     for (const w of SHORT) if (lits.includes(w) || src.includes(`{ term: '${w}',`)) out.push(`${file}:「${w}」`);
     return out;
   };
-  const SRC = { 'i18n.ts': i18n, 'rules.ts': rules, 'legal.ts': legal };
+  // 排行榜三行筛选的第一行（推14 Z-B15，站长 10-22：「第一栏是 方块、小球、三角」）：rankFamily* 那几颗药丸本来就是**族名**
+  // （方块 / 小球 / 三角，Squares / Balls / Triangles），不是某一副棋盘的旧叫法，不算撤掉的名字。只放过这三个键，别的照查。
+  const FAMILY_KEY = /^[ \t]+rankFamily(Square|Ball|Tri): '[^']*',$/gm;
+  check('⑤c（尺子）排行榜族名药丸四种语言 × 三颗都在（下面放过的就是这十二行）', (i18n.match(FAMILY_KEY) || []).length === 12,
+    String((i18n.match(FAMILY_KEY) || []).length));
+  const SRC = { 'i18n.ts': i18n.replace(FAMILY_KEY, ''), 'rules.ts': rules, 'legal.ts': legal };
   const lits = Object.fromEntries(Object.entries(SRC).map(([f, s]) => [f, literals(s)]));
   check('⑤c（尺子）三个文件的字面量都读到了',
     lits['i18n.ts'].length > 1500 && lits['rules.ts'].length > 100 && lits['legal.ts'].length > 100,
@@ -439,10 +459,21 @@ check('flipScoringHint 不再讲连击和时间奖励', bad.length === 0, bad.jo
   /** 某一条（term）在规则书里的 body。 */
   const body = (term) => (RULES_SRC.match(new RegExp(`term: '${term}', body: '([^']*)'`)) || [, ''])[1];
   const FLIP = { zhHans: '无限反转', zhHant: '無限反轉', en: 'Endless flip', fr: 'Retournement infini' };
+  // 推14 Z-B06：连击封在第 FLIP_STREAK_CAP 次（5）、结算乘反转系数（方块 6、小球 2.5）——两样都从 scoring.ts 现读。
+  const SC = read('src/engine/scoring.ts');
+  const CAP = Number((SC.match(/export const FLIP_STREAK_CAP = (\d+);/) || [])[1]);
+  const COEF = (SC.match(/export const FLIP_COEF[^=]*= Object\.freeze\(\{ square: ([\d.]+), circle: ([\d.]+) \}\)/) || []).slice(1);
+  check('⑥（尺子）从 scoring.ts 现读到 FLIP_STREAK_CAP 和 FLIP_COEF', Number.isInteger(CAP) && COEF.length === 2, `${CAP} / ${COEF.join(', ')}`);
+  const UPTO = { zhHans: `最多乘 ${CAP} 次`, zhHant: `最多乘 ${CAP} 次`, en: `up to ${CAP} times`, fr: `jusqu’à ${CAP} fois` };
+  const COEF_NAME = { zhHans: '反转系数', zhHant: '反轉係數', en: 'Flip multiplier', fr: 'Coefficient de retournement' };
+  const flipOk = (lang, b) => b !== '' && /1[.,]5/.test(b) && b.includes(UPTO[lang]) && b.includes(COEF_NAME[lang]) &&
+    COEF.every((c) => b.includes('×' + (lang === 'fr' ? c.replace('.', ',') : c)));
   for (const [lang, term] of Object.entries(FLIP)) {
     const b = body(term);
-    check(`⑥ ${lang}：「${term}」那一条写着 ×1.5 和最多 10 次`, b !== '' && /1[.,]5/.test(b) && /\b10\b/.test(b), b.slice(0, 40));
+    check(`⑥ ${lang}：「${term}」那一条写着 ×1.5、${UPTO[lang]}、${COEF_NAME[lang]}（×${COEF.join(' / ×')}）`, flipOk(lang, b), b.slice(0, 40));
   }
+  check('⑥（反面尺子）旧那句「最多乘 10 次」喂进来要红',
+    !flipOk('zhHans', '每连续得分一次再 ×1.5，最多乘 10 次（约 57.7 倍）；不乘步数系数。'));
   // 同一组歇几步（10-15 补充 S6，L-10 ①）：engine/scoring.ts 的 TOGGLE_SCORES_PER_GROUP / TOGGLE_COOLDOWN_MOVES——同一组
   // 不满 5 步得了两次分就停下，从最后那次往后数第 5 步起才又算分。原先规则书四语都没写这一条：玩家拼出来了、不翻也
   // 不给分，屏幕上一句话没有，以为是坏了。两个数从源码现读，规则书里写的「两次」「5 步」要和它对得上。
@@ -513,11 +544,89 @@ check('flipScoringHint 不再讲连击和时间奖励', bad.length === 0, bad.jo
   }
   check('⑥（反面尺子）旧的 MODE_TIPS.bomb 里找不到「两下」', !'得分图案旁边的炸弹会被拆掉。'.includes('两下'));
 
+  // ── 《消除》和教学第 4 条不许再说「至少 3 枚」（推14 Z-B12：外边多短都能削，门槛放开那一段另讲）─────────────
+  const CLEAR = { zhHans: '消除', zhHant: '消除', en: 'Clearing', fr: 'Éliminer' };
+  const AT_LEAST_3 = /至少 ?3 ?枚|最少要 ?3 ?枚|不超过 ?3 ?枚|不超過 ?3 ?枚|at least 3|3 stars or fewer|au moins 3|3 étoiles ou moins/;
+  const r4 = (I18N_SRC.match(/export const TUTORIAL_RULE4[\s\S]*?\n\};/) || [''])[0];
+  // 简繁两条的 term 都叫「消除」：body() 只取第一条，所以这儿逐条全取（四条）。
+  const clearBodies = [...new Set(Object.values(CLEAR))].flatMap((t) => [...RULES_SRC.matchAll(new RegExp(`term: '${t}', body: '([^']*)'`, 'g'))].map((m) => m[1]));
+  const clearHits = clearBodies.filter((b) => AT_LEAST_3.test(b)).map((b) => b.slice(0, 12));
+  check('⑥（尺子）读到了 TUTORIAL_RULE4 和四语《消除》（四条）', r4.includes('squareDiamond') && clearBodies.length === 4 && clearBodies.every((b) => b !== ''),
+    clearBodies.map((b) => b.length).join(' '));
+  check('⑥《消除》（四语）不再说「至少 3 枚 / 不超过 3 枚」', clearHits.length === 0, clearHits.join(' ') || '干净');
+  check('⑥ 教学第 4 条（TUTORIAL_RULE4，四语）不再说「最少要 3 枚」', !AT_LEAST_3.test(r4), (r4.match(AT_LEAST_3) || [''])[0] || '干净');
+  check('⑥（反面尺子）旧那几句喂进来认得出',
+    AT_LEAST_3.test('最外面一条至少 3 枚同色星星就消除') && AT_LEAST_3.test('at least 3 same-colour stars') && AT_LEAST_3.test('au moins 3 étoiles'));
+
+  // ── 《Pro》推14 版（附录甲 §17.4，Z-B13）────────────────────────────────────────────────
+  const PRO = [...RULES_SRC.matchAll(/term: 'Pro', body: '([^']*)'/g)].map((m) => m[1]);
+  check('⑥（尺子）四语《Pro》都读到了', PRO.length === 4, String(PRO.length));
+  const PRO_MUST = [
+    ['排行榜上可以单独看 Pro 的成绩', '教学局'], ['排行榜上可以單獨看 Pro 的成績', '教學局'],
+    ['Pro scores on their own', 'tutorial runs'], ['scores Pro à part', 'parties du tutoriel'],
+  ];
+  const PRO_NOT = /成绩照常进同一张排行榜|成績照常進同一張排行榜|same leaderboards as usual|mêmes classements que d’habitude|只能在个人主页|只能在個人主頁|from your profile only|uniquement depuis votre profil|翻面颜色|翻面顏色/;
+  const proOk = (texts) => texts.length === 4 && texts.every((b, i) => PRO_MUST[i].every((w) => b.includes(w)) && !PRO_NOT.test(b));
+  check('⑥《Pro》四语是推14 版：末句「排行榜上可以单独看 Pro 的成绩」、提到教学局，不说「同一张排行榜」「只能在个人主页」「翻面颜色」',
+    proOk(PRO), PRO.map((b) => b.slice(-30)).join(' / '));
+  // 反面尺子：b43f86a 那一版的旧《Pro》（简体那一句）喂进来要红。
+  const OLD_PRO = '只在单人局起作用，每日挑战、代号局和小屋局一律照普通规则。开着它开局：色块翻面颜色固定绕一圈……成绩照常进同一张排行榜。只能在个人主页里开关。';
+  check('⑥（反面尺子）旧的《Pro》喂进来要红', !proOk([OLD_PRO, ...PRO.slice(1)]));
+
   // 规则书删「天才特供」（10-31 方案推04 Z-K02，D33 甲）：规则书只给两个玩法标「天才特供」，实际锁了七个，产品又已是
   // 「注册即天才」。只扫 rules.ts——i18n 的 geniusOnly 是主菜单读屏名，一堆门靠它找卡，推12 再处理。
   const GENIUS = ['天才特供', 'Slides genius only', 'for Slides geniuses', 'génies de Slides'];
   const geniusHits = GENIUS.filter((w) => RULES_SRC.includes(w));
   check('⑥ 规则书（rules.ts 全文，四语）里不再出现「天才特供」', geniusHits.length === 0, geniusHits.join(' / '));
+}
+
+// ── ⑦ MODE_TIPS 四语（推14 Z-B21，verify-XTZ Z10）────────────────────────────────────────────
+//
+// 局中棋盘底下那一句提示原先只有 ⑥ 里零星几条在量。这一节打包读 MODE_TIPS（不是读源码），六个键四语一起量：计时按棋盘
+// 填秒数（{s}，Z-B05）、反转照旧 100 秒、不讲系数；老虎机不再说「最少剩一枚」；炸弹「两下」；步步为营两个起手步数现读。
+{
+  const { build } = await import('esbuild');
+  const { mkdtempSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { pathToFileURL } = await import('node:url');
+  const dir = mkdtempSync(join(tmpdir(), 'rules-counts-'));
+  const out = join(dir, 'i18n.mjs');
+  await build({ entryPoints: [new URL('../src/i18n.ts', import.meta.url).pathname], bundle: true, format: 'esm', outfile: out, logLevel: 'silent' });
+  const { MODE_TIPS } = await import(pathToFileURL(out).href);
+  rmSync(dir, { recursive: true, force: true });
+  const PZ = read('src/engine/puzzleScore.ts');
+  const start = (k) => Number((PZ.match(new RegExp(`${k}: (\\d+)`)) || [])[1]);
+  const pzSq = start('square');
+  const pzCi = start('circle');
+  check('⑦（尺子）从 puzzleScore.ts 现读到两个起手步数', Number.isInteger(pzSq) && Number.isInteger(pzCi), `方块 ${pzSq} / 小球 ${pzCi}`);
+  const KEYS = ['bomb', 'flip', 'slot', 'timed', 'layout', 'puzzle'];
+  const LANGS4 = ['zhHans', 'zhHant', 'en', 'fr'];
+  const TWO = { zhHans: '两下', zhHant: '兩下', en: 'two hits', fr: 'deux coups' };
+  const ONE = /最少剩一枚|down to a single piece|jusqu’à une seule/;
+  const verdict = (T) => {
+    const bad = [];
+    for (const l of LANGS4) {
+      for (const k of KEYS) if (!(typeof T?.[l]?.[k] === 'string' && T[l][k].trim())) bad.push(`${l}.${k} 缺`);
+      const t = T?.[l] ?? {};
+      if (!(t.timed?.includes('{s}') && !/\d/.test(t.timed))) bad.push(`${l}.timed`);
+      if (!(t.flip?.includes('100') && !t.flip.includes('60') && !/×\s?\d|2[.,]5/.test(t.flip))) bad.push(`${l}.flip`);
+      if (!t.slot || ONE.test(t.slot)) bad.push(`${l}.slot`);
+      if (!t.bomb?.includes(TWO[l])) bad.push(`${l}.bomb`);
+      if (!(t.puzzle?.includes(String(pzSq)) && t.puzzle.includes(String(pzCi)))) bad.push(`${l}.puzzle`);
+    }
+    return bad;
+  };
+  const got = verdict(MODE_TIPS);
+  check('⑦ MODE_TIPS：六个键四语都在；计时用 {s} 不写数；反转 100 秒、不讲系数；老虎机不说「最少剩一枚」；炸弹「两下」；步步为营两个起手步数对得上',
+    got.length === 0, got.join(' / ') || '干净');
+  const clone = () => JSON.parse(JSON.stringify(MODE_TIPS));
+  const m1 = clone();
+  m1.en.timed = '100 seconds on the clock — how many points can you get?';
+  check('⑦（反面尺子）计时换回「100 seconds on the clock」那一句要红', verdict(m1).includes('en.timed'));
+  const m2 = clone();
+  m2.zhHans.flip = m2.zhHans.flip.replace('100', '60');
+  check('⑦（反面尺子）反转那一句的 100 换成 60 要红', verdict(m2).includes('zhHans.flip'));
 }
 
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');

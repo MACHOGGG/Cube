@@ -273,8 +273,24 @@ head('【6】时长：停 + 长回去 ≤ 连锁那一拍的间隔（1250）');
     `${ZOOM_HOLD_MS} + ${ZOOM_BACK_MS} = ${ZOOM_HOLD_MS + ZOOM_BACK_MS}`);
   const { readFileSync } = await import('node:fs');
   const gc = readFileSync(new URL('../src/engine/gameController.ts', import.meta.url), 'utf8');
-  check('（尺子）gameController 里那个数还是 1250',
-    /const BONUS_GAP_MS = reduceMotion \? 0 : 1250;/.test(gc));
+  // 推14 Z-B09（D29 乙）：连锁那一拍的间隔跟着拉杆倍率走（pace = 1 / 拉杆倍率），减弱动态时也照停（D26，不再是 0）。
+  // 放大那一下的停、长回去也按同一个倍率伸缩（boardZoom.ts 的 beatScale()）——两边一起伸缩，「停 + 长回去 ≤ 一拍」
+  // 在每一档拉杆上都成立。
+  check('（尺子）gameController 里那个数还是 1250，乘拉杆的 pace',
+    /const BONUS_GAP_MS = Math\.round\(1250 \* pace\);/.test(gc));
+  const zoom = readFileSync(new URL('../src/ui/boardZoom.ts', import.meta.url), 'utf8');
+  check('放大那一下的停、长回去都乘 beatScale()（和连锁那一拍同一个倍率）',
+    /Math\.round\(ZOOM_HOLD_MS \* beatScale\(\)\)/.test(zoom) && (zoom.match(/Math\.round\(ZOOM_BACK_MS \* beatScale\(\)\)/g) || []).length >= 2 &&
+      /import \{ beatScale \} from '\.\.\/engine\/flipSpeed';/.test(zoom));
+  // 收尾最后一组清掉之后，活格框不能变成空的（Z-B09：最后一组也要放大呈现再消除）：五副带 liveBox 的棋盘都记着上一次的
+  // 活格（lastLiveCells），空了就照它算；开新局（resetBoard）清空。
+  const SHAPES = ['circle', 'circleHex', 'circleSeven', 'squareDiamond', 'triangle'];
+  const miss = SHAPES.filter((f) => {
+    const t = readFileSync(new URL(`../src/shapes/${f}.ts`, import.meta.url), 'utf8');
+    return !(/let lastLiveCells: Cell\[\] = \[\];/.test(t) && /if \(cells\.length\) lastLiveCells = cells;/.test(t) &&
+      /boxOf\(cells\.length \? cells : lastLiveCells/.test(t) && /\n\s*lastLiveCells = \[\];/.test(t));
+  });
+  check('五副 liveBox 都有 lastLiveCells 那两句、resetBoard 清空', miss.length === 0, miss.join(' ') || SHAPES.join(' '));
 }
 
 // ══════════════════════════════════════════════════════════════════════════

@@ -52,7 +52,9 @@
  * 400 implausible，而客户端一个字都不说。
  *
  *   6. 基础方块松手后 300 / 500ms、无限反转（方块）松手后 300ms 暂停 → 结束：交上去的那一份过得了 vetRun、服务器
- *      回 200，总分 ＝ 图案分 ＋ 线分 ＋ 连击；尺子：暂停那一下真的撤掉了一个 550ms 的高亮拍子（就是那个窗口）。
+ *      回 200，拼出得分 ＝ 图案分 ＋ 线分 ＋ 连击；尺子：暂停那一下真的撤掉了一个 550ms 的高亮拍子（就是那个窗口）。
+ *      （原先比的是「总分」：10-31 方案推14 Z-B08 起手动结束时剩下的色块每枚九折、反转局乘反转系数，综合分不再是这三样
+ *      之和。要钉的是「那一拍的分没漏记」，比拼出得分；综合分对不对账由上面 vetRun 那一条管，它照服务器那一套连九折一起算。）
  *   7. 交卷回 400 implausible（route 拦下来答）：结算页 #endDailyNote 说「本局未上传到云端，本机记录照常保留」。
  *   8. 暂停面板里的《再来一局》也报一条开局统计（10-15 补充 S8）：用 slides_analytics_games 量，开局 1 → 暂停里再来
  *      一局 2 → 结算页再来一局 3。原先暂停面板那颗直接 newGame，之后还是 1。
@@ -529,10 +531,10 @@ for (const { flip, delayMs, scoreFirst } of [
   const vet = d ? vetRun(r.pushed.mode, d) : null;
   check(`${tag}：交上去的那一份过得了 vetRun`, vet?.verdict === 'ok', JSON.stringify(vet));
   check(`${tag}：服务器收下了（200，不是 400 implausible）`, r.reply?.status === 200, JSON.stringify(r.reply));
-  check(`${tag}：总分 ＝ 图案分 ＋ 线分 ＋ 连击`,
-    !!d && d.totalScore === d.patternPoints + d.linePoints + d.comboBonusPoints,
-    d ? `总分 ${d.totalScore} / 图案 ${d.patternPoints} ＋ 线 ${d.linePoints} ＋ 连击 ${d.comboBonusPoints}` : '没交卷');
-  if (scoreFirst) check(`${tag}（尺子）：第一次得分记上了（总分 > 0）`, (d?.totalScore ?? 0) > 0, String(d?.totalScore));
+  check(`${tag}：拼出得分 ＝ 图案分 ＋ 线分 ＋ 连击`,
+    !!d && d.score === d.patternPoints + d.linePoints + d.comboBonusPoints,
+    d ? `拼出 ${d.score}（综合 ${d.totalScore}）/ 图案 ${d.patternPoints} ＋ 线 ${d.linePoints} ＋ 连击 ${d.comboBonusPoints}` : '没交卷');
+  if (scoreFirst) check(`${tag}（尺子）：第一次得分记上了（拼出得分 > 0）`, (d?.score ?? 0) > 0, String(d?.score));
   check(`${tag}：零报错`, r.errs.length === 0, r.errs.slice(0, 2).join(' | '));
 }
 {

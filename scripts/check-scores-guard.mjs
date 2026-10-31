@@ -104,8 +104,10 @@ const runData = (mode, score, extra = {}) => ({
   bonusMult: 1.8,
   best: score,
   reason: 'cleared',
-  neverFlipped: 3,
-  unflippedScale: 0.95,
+  // 清盘的局：一枚都没剩、不打折（推14 Z-B08）。原先写着 3 / 0.95——这份夹具是 flips = N 的满盘局，新加的「neverFlipped +
+  // flips ≤ N」那道上界会把它判成 implausible。
+  neverFlipped: 0,
+  unflippedScale: 1,
   timeMult: 1.2,
   extraPenalty: 0,
   extraPenaltyReason: '',
@@ -283,7 +285,15 @@ const sortKeys = (o) => Object.fromEntries(Object.entries(o || {}).sort(([a], [b
 // 不出来。所以每一条只改坏一样，量日志里那个 `why`（api/_maxscore.js 的 vetRun 回的那个短词）。
 {
   const G = await makePlayer('guard-g@example.com');
+  const MS = await import('../api/_maxscore.js');
+  const SQ = MS.BOARD_LIMITS.square;
+  // 清 36 枚、走 30 步的系数（按服务器那一份现算——par 推14 起是 65，原先这儿手写 3.24）。
+  const coef30 = MS.stepCoefOf(SQ.par, 36, SQ.N, 30);
+  // 步数 1、全清：系数 = par²（推14：65² = 4225）。上界 T = (2N + d·N·Lmax)·par²。
+  const P2 = SQ.par ** 2;
+  const capT = MS.stepCeiling('square');
   const sq = (over) => vetData('square', 300, {}, over); // 翻 36 枚（72）＋ 削 7 条线（228），系数 1
+  // 无限反转：综合分 = 拼出分 × 6（方块，推14 Z-B06），夹具要它是 6 的倍数——原先的 1000 / 50000 改成 1200 / 60000。
   const fl = (score, over) => vetData('square', score, { modeKey: 'flip', flipRules: 2 }, over);
   const sl = (score, over) => vetData('square', score, { slot: true }, over);
   const pz = (score, puzzle) => {
@@ -304,16 +314,20 @@ const sortKeys = (o) => Object.fromEntries(Object.entries(o || {}).sort(([a], [b
     ['乘系数那几档带着连击分', sq({ comboBonusPoints: 10, linePoints: 218 }), 'pattern'],
     ['图案分不等于「每枚 2 分」', sq({ patternPoints: 70, linePoints: 230 }), 'pattern'],
     ['步数系数和服务器自己算的对不上', sq({ stepCoef: 2 }), 'coef'],
-    ['综合分不等于「拼出分 × 系数」', sq({ cleared: 36, moves: 30, stepCoef: 3.24 }), 'total'],
+    ['综合分不等于「拼出分 × 系数」', sq({ cleared: 36, moves: 30, stepCoef: coef30 }), 'total'],
     ['不是炸弹那几档，却按「炸弹相连」扣了 100', sq({ hazardEnd: true, totalScore: 200 }), 'total'],
-    // 自洽的假分：步数 1、全清、每条线都削满，方块到顶是 (2N + d·N·Lmax)·par² = 1,469,664。多一条线的分就过界。
-    ['超出方块的上界 1,469,664（自己对得上账的假分）',
-      vetData('square', 505 * 2916, {}, { flips: 36, patternPoints: 72, linePoints: 433, lines: 13, score: 505, cleared: 36, moves: 1, stepCoef: 2916 }), 'cap'],
-    ['无限反转带着削线分（这一档不消线）', fl(1000, { linePoints: 10, patternPoints: 390, lines: 1 }), 'flipSplit'],
-    ['无限反转乘了步数系数', fl(1000, { stepCoef: 2 }), 'flipSplit'],
-    ['无限反转用时超过 100 + 5 秒', fl(1000, { elapsedSec: 106 }), 'flipTime'],
-    ['无限反转一秒走了四步多', fl(1000, { moves: 401 }), 'flipMoves'],
-    ['无限反转一步的分超过上界（每一拍都按封顶倍率算也到不了）', fl(50000, { moves: 1, elapsedSec: 1 }), 'flipCap'],
+    // 自洽的假分：步数 1、全清、每条线都削满，方块到顶是 (2N + d·N·Lmax)·par² = 504 × 4225 = 2,129,400（推14 par 65）。
+    // 多一条线的分就过界。
+    [`超出方块的上界 ${capT.toLocaleString('en')}（自己对得上账的假分）`,
+      vetData('square', 505 * P2, {}, { flips: 36, patternPoints: 72, linePoints: 433, lines: 13, score: 505, cleared: 36, moves: 1, stepCoef: P2 }), 'cap'],
+    // 拼出分 200（× 6 = 1200）：图案 190 + 削线 10，账拆得开，拦在「这一档不消线」。
+    ['无限反转带着削线分（这一档不消线）', fl(1200, { linePoints: 10, patternPoints: 190, lines: 1 }), 'flipSplit'],
+    ['无限反转乘了步数系数', fl(1200, { stepCoef: 2 }), 'flipSplit'],
+    ['无限反转的综合分不等于「拼出分 × 反转系数」（报成拼出分本身）', fl(1200, { totalScore: 200 }), 'flipSplit'],
+    ['无限反转用时超过 100 + 5 秒', fl(1200, { elapsedSec: 106 }), 'flipTime'],
+    ['无限反转一秒走了四步多', fl(1200, { moves: 401 }), 'flipMoves'],
+    // 拼出分 10000 > 一步上界 5175（4 × 1.5⁵ 封顶，FLIP_STEP），照样判 flipCap。
+    ['无限反转一步的分超过上界（每一拍都按封顶倍率算也到不了）', fl(60000, { moves: 1, elapsedSec: 1 }), 'flipCap'],
     ['老虎机带着连击分', sl(5000, { comboBonusPoints: 10, patternPoints: 4990 }), 'slotSplit'],
     ['老虎机的图案分比「每枚 2 分」还少', sl(5000, { patternPoints: 60, linePoints: 4940, lines: 200 }), 'slotSplit'],
     ['老虎机超出方块的上界 29,304', sl(29305), 'slotCap'],
@@ -334,14 +348,14 @@ const sortKeys = (o) => Object.fromEntries(Object.entries(o || {}).sort(([a], [b
     mine.payload?.runs === 0 && mine.payload?.archive?.length === 0 && mine.payload?.total === 0 &&
       Object.keys(mine.payload?.best || {}).length === 0,
     `runs=${mine.payload?.runs} 存档=${mine.payload?.archive?.length} total=${mine.payload?.total} best=${JSON.stringify(mine.payload?.best)}`);
-  check('⑥ 榜上也没有他（总榜、方块基础榜）',
+  check('⑥ 榜上也没有他（方块基础榜；旧总榜 lb:total 推14 起不再写）',
     (await store.zscore('lb:total', G.email)) === null && (await store.zscore('lb:square:base', G.email)) === null);
 
   // 尺子：上面那几道上界是「到顶」，不是「差一点」——正好压在线上的照收，不然真打满的那一局会被拒。
   const G2 = await makePlayer('guard-g2@example.com');
   const edge = [
-    ['方块：正好 1,469,664（步数 1、全清、每条线都削满）',
-      vetData('square', 504 * 2916, {}, { flips: 36, patternPoints: 72, linePoints: 432, lines: 12, score: 504, cleared: 36, moves: 1, stepCoef: 2916 })],
+    [`方块：正好 ${capT.toLocaleString('en')}（步数 1、全清、每条线都削满）`,
+      vetData('square', 504 * P2, {}, { flips: 36, patternPoints: 72, linePoints: 432, lines: 12, score: 504, cleared: 36, moves: 1, stepCoef: P2 })],
     ['老虎机（方块）：正好 29,304', sl(29304)],
     ['老虎机（小球）：正好 11,564', vetData('circle', 11564, { slot: true })],
     ['对得上账的一局（量程：不改坏就照收）', sq({})],
@@ -369,20 +383,24 @@ const sortKeys = (o) => Object.fromEntries(Object.entries(o || {}).sort(([a], [b
       vetData('circle', 20, { modeKey: 'bombTimed', bombRules: 3 }, { flips: 28, patternPoints: 56, linePoints: 64, lines: 2, score: 120, hazardEnd: true }), 20],
     ['六颗炸弹全拆掉的一局（拆除算在翻面里）', 'square:bomb3',
       vetData('square', 180, bomb, { flips: 36, defused: 6, patternPoints: 72, linePoints: 108, lines: 3, score: 180, cleared: 12, moves: 40 }), 180],
-    ['进阶炸弹（菱形方块）', 'squareDiamond', vetData('squareDiamond', 400, bomb), 400],
+    // 推14 Z-B14 起菱形方块也分玩法记榜（squareDiamond:bomb3），原先四副布局各只有一张光名榜。
+    ['进阶炸弹（菱形方块）', 'squareDiamond:bomb3', vetData('squareDiamond', 400, bomb), 400],
+    // 拼出分 4 × 反转系数 6 = 综合分 24（推14 Z-B06）。
     ['无限反转：一组 4 枚、一拍', 'square:flip2',
-      vetData('square', 4, { modeKey: 'flip', flipRules: 2 }, { flips: 4, patternPoints: 4, comboBonusPoints: 0, score: 4, moves: 1, elapsedSec: 3 }), 4],
-    ['无限反转（小球）：连击把分抬得很高', 'circle:flip2', vetData('circle', 120000, { modeKey: 'flip', flipRules: 2 }), 120000],
+      vetData('square', 24, { modeKey: 'flip', flipRules: 2 }, { flips: 4, patternPoints: 4, comboBonusPoints: 0, score: 4, moves: 1, elapsedSec: 3 }), 24],
+    ['无限反转（小球）：连击把分抬得很高（拼出分 48000 × 2.5）', 'circle:flip2', vetData('circle', 120000, { modeKey: 'flip', flipRules: 2 }), 120000],
     ['步步为营：消除 20、星星 8', 'square:puzzle3', pz2('square', 240, { cleared: 20, stars: 8 }), 240],
     // 「一步没空走」：走的每一步都得分（spent = scoredMoves），剩的正是起手那 15 步。原先夹具只改了 left，spent / scoredMoves
     // 还是 fakeRun 默认的「起手 + 10 步、得分 10 步」——三个数对不上账，推09 加了账核对之后要照这一局真实的样子写全。
     ['步步为营（小球）：一盘全消掉、起手 15 步一步没空走', 'circle:puzzle3',
       { ...pz2('circle', 280, { cleared: 28, stars: 0, left: 15, spent: 10, scoredMoves: 10 }), moves: 10 }, 280],
-    // 还开着旧页面的人交的第 2 版局：那一版有退步，剩多少都可能——照收，落归档榜 puzzle2（10-15 补充 S9）。
-    ['步步为营第 2 版（旧页面）：剩 50 步照收、落归档榜', 'square:puzzle2', pz2('square', 240, { cleared: 20, stars: 8, left: 50 }, 2), 240],
-    ['计时（步数系数抬到 4 倍）', 'square:timed',
-      vetData('square', 300 * 4, { modeKey: 'timed' }, { flips: 36, patternPoints: 72, linePoints: 228, lines: 7, score: 300, cleared: 36, moves: 27, stepCoef: 4 }), 1200],
-    ['三角 54：系数 1 的一局', 'triangleBig', vetData('triangleBig', 2000), 2000],
+    // 还开着旧页面的人交的第 2 版局：那一版有退步，剩多少都可能——照收（不误拒）。推14 Z-B14 起旧版本的局只进存档、
+    // 不上任何榜（原先落归档榜 puzzle2）。
+    ['步步为营第 2 版（旧页面）：剩 50 步照收', 'square:puzzle2', pz2('square', 240, { cleared: 20, stars: 8, left: 50 }, 2), 0],
+    // 走 26 步、全清：系数 (65 / 26)² = 6.25（推14 par 65；原先 par 54、走 27 步是 4 倍）。
+    ['计时（步数系数抬到 6.25 倍）', 'square:timed',
+      vetData('square', 1875, { modeKey: 'timed' }, { flips: 36, patternPoints: 72, linePoints: 228, lines: 7, score: 300, cleared: 36, moves: 26, stepCoef: 6.25 }), 1875],
+    ['三角 54：系数 1 的一局', 'triangleBig:base', vetData('triangleBig', 2000), 2000],
   ];
   let n = 0;
   for (const [name, boardId, data, onBoard] of fine) {
@@ -391,7 +409,7 @@ const sortKeys = (o) => Object.fromEntries(Object.entries(o || {}).sort(([a], [b
       `${r.status} ${JSON.stringify(r.payload)} why=${r.why}`);
     const z = await store.zscore('lb:' + boardId, H.email);
     const shown = /:puzzle\d*$/.test(boardId) && z !== null ? Math.floor(z / 1000) : z;
-    check(`⑦ ${name}：${onBoard > 0 ? `榜上是 ${onBoard}` : '0 分不上榜（存档里有）'}`,
+    check(`⑦ ${name}：${onBoard > 0 ? `榜上是 ${onBoard}` : '不上榜（存档里有）'}`,
       onBoard > 0 ? shown === onBoard : z === null, `${boardId} → ${z}`);
   }
 }
@@ -474,9 +492,26 @@ const sortKeys = (o) => Object.fromEntries(Object.entries(o || {}).sort(([a], [b
     `服务器 ${JSON.stringify(MS.FLIP_STEP)} · 源码 ${JSON.stringify(facts.flipStep)}`);
   check('⑩ 无限反转的图案真的冻结在 4 枚（扣一千段也不降级——上面那个上界就是照 1×4 推的）', facts.consts.flipFrozenAt === 4,
     String(facts.consts.flipFrozenAt));
+  // 反转系数（推14 Z-B06）：服务器那一份和源码一字不差，而且编号表里开了反转的每一副棋盘都有系数（少一副，那副的反转局一律
+  // 回 board，玩家的局一局都上不了榜）。
+  check('⑩ 反转系数 FLIP_COEF 和源码一样（方块 6、小球 2.5）',
+    JSON.stringify(sortKeys(MS.FLIP_COEF)) === JSON.stringify(sortKeys(facts.consts.FLIP_COEF)),
+    `服务器 ${JSON.stringify(MS.FLIP_COEF)} · 源码 ${JSON.stringify(facts.consts.FLIP_COEF)}`);
+  {
+    const { VARIANTS } = await import('../api/_seedcode.js');
+    const flipBoards = [...new Set(VARIANTS.filter((v) => v.mode === 'flip').map((v) => v.board))];
+    check('⑩ 编号表里开了反转的每一副棋盘都有反转系数', flipBoards.length > 0 && flipBoards.every((b) => MS.FLIP_COEF[b] > 0),
+      `开了反转的：${flipBoards.join(' ')} · 系数：${JSON.stringify(MS.FLIP_COEF)}`);
+  }
+  // Pro 的基准步数（推14 Z-B13）：proPar = ⌈par × 1.5⌉，和源码 engine/erosion.ts 的 proParOf 推出来的一样。
+  for (const [id, lim] of Object.entries(MS.BOARD_LIMITS)) {
+    const f = facts.boards[id];
+    check(`⑩ ${id}：Pro 的基准步数 ${lim.proPar} = ⌈${lim.par} × 1.5⌉，和源码推出来的一样`,
+      lim.proPar === Math.ceil(lim.par * 1.5) && f?.proPar === lim.proPar, `源码 ${f?.proPar}`);
+  }
   const c = facts.consts;
   check('⑩ 几个常数和源码一样：一局几秒、连击封顶、每枚几分、炸弹扣几分、步步为营一枚 / 一颗星几分',
-    MS.FLIP_SECONDS === c.MODE_SECONDS && MS.FLIP_MULT_CAP === c.FLIP_MULT_CAP && MS.POINTS_PER_FLIP === c.POINTS_PER_FLIP &&
+    MS.FLIP_SECONDS === c.FLIP_SECONDS && MS.FLIP_MULT_CAP === c.FLIP_MULT_CAP && MS.POINTS_PER_FLIP === c.POINTS_PER_FLIP &&
       MS.BOMB_HAZARD_PENALTY === c.BOMB_HAZARD_PENALTY && MS.PUZZLE_CLEARED_POINTS === c.PUZZLE_CLEARED_POINTS &&
       MS.PUZZLE_STAR_POINTS === c.PUZZLE_STAR_POINTS,
     `服务器 ${JSON.stringify([MS.FLIP_SECONDS, MS.FLIP_MULT_CAP, MS.POINTS_PER_FLIP, MS.BOMB_HAZARD_PENALTY, MS.PUZZLE_CLEARED_POINTS, MS.PUZZLE_STAR_POINTS])} · 源码 ${JSON.stringify(c)}`);
@@ -491,7 +526,8 @@ const sortKeys = (o) => Object.fromEntries(Object.entries(o || {}).sort(([a], [b
     tilesSrc ? `${tilesSrc[1]} / ${tilesSrc[2]}` : '读不到 PUZZLE_TILES');
   // 步数系数：服务器那一份要和客户端逐位相同（同样的运算次序），综合分的四舍五入才对得上。
   let diff = null;
-  for (const par of [28, 54, 81, 86]) {
+  // 推14 起的 par（普通 65 / 34 / 104 / 98）和 Pro 的 par（98 / 51 / 156 / 147）都在里面，外加原先那几个。
+  for (const par of [28, 34, 51, 54, 65, 81, 86, 98, 104, 147, 156]) {
     for (const tiles of [28, 36, 49, 54]) {
       for (let cleared = 0; cleared <= tiles && !diff; cleared++) {
         for (let moves = 0; moves <= 120 && !diff; moves++) {
@@ -502,54 +538,182 @@ const sortKeys = (o) => Object.fromEntries(Object.entries(o || {}).sort(([a], [b
       }
     }
   }
-  check('⑩ 步数系数：服务器和客户端逐位相同（四个 par × 四种全盘 × 清掉几枚 × 0–120 步）', diff === null, JSON.stringify(diff));
-  // 方案 A-3 那张表的最后一列（T）、老虎机那一句（S）：公式哪天改了，这几个数先变。
-  const T = { square: 1469664, circle: 504896, squareDiamond: 2099520, circleHex: 2099520, circleSeven: 8335292, triangleBig: 12400290 };
-  check('⑩ 乘系数那几档的上界 T 和方案 A-3 那张表一样',
+  check('⑩ 步数系数：服务器和客户端逐位相同（十一个 par（含 Pro）× 四种全盘 × 清掉几枚 × 0–120 步）', diff === null, JSON.stringify(diff));
+  // 方案 A-3 那张表的最后一列（T）、老虎机那一句（S）：公式哪天改了，这几个数先变。推14 换了 par（ero2），T 跟着重算：
+  // (2N + d·N·Lmax) · par²；Pro 用 proPar。
+  const T = { square: 2129400, circle: 744464, squareDiamond: 3042000, circleHex: 3042000, circleSeven: 12189632, triangleBig: 18151560 };
+  check('⑩ 乘系数那几档的上界 T（推14 的 par）',
     Object.entries(T).every(([id, t]) => MS.stepCeiling(id) === t),
     Object.keys(T).map((id) => `${id} ${MS.stepCeiling(id)}`).join(' · '));
+  check('⑩ Pro 的上界：方块 504 × 98² = 4,840,416', MS.stepCeiling('square', true) === 4840416, String(MS.stepCeiling('square', true)));
+  check('⑩ 无限反转的上界乘了反转系数：方块 420 步 × 5,175 × 6 = 13,041,000', MS.flipCeiling('square') === 13041000, String(MS.flipCeiling('square')));
   check('⑩ 老虎机的上界 S：方块 29,304、小球 11,564', MS.slotCeiling('square') === 29304 && MS.slotCeiling('circle') === 11564,
     `${MS.slotCeiling('square')} / ${MS.slotCeiling('circle')}`);
 }
 
-// ---- ⑪ 总榜不收无限反转（10-11 方案 A-3，玩家 Q11 定案）-------------------------
+// ---- ⑪ 默认选择里有无限反转（推14 Z-B15，口径反过来）-------------------------------------------
 //
-// 无限反转的分和别的玩法不是一把尺子量的；放进「谁最高」那一张，总榜就成了无限反转一档的榜。它自己那
-// 张单局榜照常。交卷、重建两条路都量（换邮箱那一条走的是同一个 bestOverall，check-scores 量搬家）。
+// 原先（10-11 方案 A-3，玩家 Q11）总榜不收无限反转：它的分和别的玩法不是一把尺子量的。推14 起旧总榜 lb:total 退役，
+// 默认选择（全部 · 全部 · 全部）是各张现行榜合出来的，**含无限反转**（站长 10-22：「全部」就是全部）——那一档的分乘了反转
+// 系数（方块 ×6、小球 ×2.5），和别的玩法放在同一把尺子上。交卷、重建两条路都量。
 {
+  const board = async (who, q = {}) => {
+    for (const k of await store.scanKeys('lbq:*')) await store.del(k);
+    return call({ action: 'board', ...who, ...q });
+  };
   const M = await makePlayer('guard-m@example.com');
-  const flipRun = await vetPush(M, 'm1', 'square', vetData('square', 5000, { modeKey: 'flip', flipRules: 2 }));
-  check('⑪（尺子）无限反转 5000 收下了，它自己那张榜上有', flipRun.status === 200 && (await store.zscore('lb:square:flip2', M.email)) === 5000,
+  const flipRun = await vetPush(M, 'm1', 'square', vetData('square', 6000, { modeKey: 'flip', flipRules: 2 }));
+  check('⑪（尺子）无限反转 6000 收下了，它自己那张榜上有', flipRun.status === 200 && (await store.zscore('lb:square:flip2', M.email)) === 6000,
     `${flipRun.status} ${JSON.stringify(flipRun.payload)}`);
-  check('⑪ 只打过无限反转：总榜上没有他', (await store.zscore('lb:total', M.email)) === null, String(await store.zscore('lb:total', M.email)));
-  // 这一版之前无限反转也算进总榜：只打无限反转的人，总榜上还躺着那一行。他下一次交卷就撤掉。
-  const M0 = await makePlayer('guard-m0@example.com');
-  await store.zadd('lb:total', 8000, M0.email);
-  await store.hset('lb:total:mode', M0.email, 'square:flip2');
-  await vetPush(M0, 'm0', 'square', vetData('square', 6000, { modeKey: 'flip', flipRules: 2 }));
-  check('⑪ 总榜上留着一行旧的无限反转分：他再交一局无限反转，那一行撤掉',
-    (await store.zscore('lb:total', M0.email)) === null && (await store.hget('lb:total:mode', M0.email)) === null,
-    `${await store.zscore('lb:total', M0.email)} / ${await store.hget('lb:total:mode', M0.email)}`);
-  // 归档的老榜（没封顶那一版，不带 flipRules）也不算。
+  const me1 = (await board(M)).payload?.me;
+  check('⑪ 只打过无限反转：默认选择里有他那一局（6000）', me1?.score === 6000, JSON.stringify(me1));
+  const row1 = (await board(M)).payload?.rows?.find((r) => r.me);
+  check('⑪ 那一行标着方块 · 无限反转', row1?.board === 'square' && row1?.kind === 'flip', JSON.stringify(row1));
+  check('⑪ 旧总榜一行都没写', (await store.zscore('lb:total', M.email)) === null, String(await store.zscore('lb:total', M.email)));
+  // 第 1 版无限反转（不带 flipRules）：推14 Z-B14 起不上任何榜（存档照收）。
   await vetPush(M, 'm2', 'square', vetData('square', 9000, { modeKey: 'flip' }));
+  check('⑪ 第 1 版无限反转 9000：不上归档榜 square:flip', (await store.zscore('lb:square:flip', M.email)) === null,
+    String(await store.zscore('lb:square:flip', M.email)));
   await vetPush(M, 'm3', 'square', vetData('square', 300));
-  check('⑪ 再打一局基础 300：总榜上是 300、记号是方块基础（5000、9000 两局无限反转都不算）',
-    (await store.zscore('lb:total', M.email)) === 300 && (await store.hget('lb:total:mode', M.email)) === 'square:base',
-    `${await store.zscore('lb:total', M.email)} / ${await store.hget('lb:total:mode', M.email)}`);
+  const me2 = (await board(M)).payload?.me;
+  check('⑪ 再打一局基础 300：默认选择上取高的那一局（无限反转 6000）', me2?.score === 6000, JSON.stringify(me2));
+  const onlyBase = (await board(M, { modes: ['base'] })).payload?.me;
+  check('⑪ 只选基础：300', onlyBase?.score === 300, JSON.stringify(onlyBase));
   process.env.ADMIN_TOKEN = 'r'.repeat(40);
   const rb = await call({ action: 'rebuild', token: process.env.ADMIN_TOKEN });
   delete process.env.ADMIN_TOKEN;
-  check('⑪ 重建之后总榜上还是 300（重建也不收无限反转），无限反转那张榜上还是 5000',
-    rb.status === 200 && (await store.zscore('lb:total', M.email)) === 300 && (await store.zscore('lb:square:flip2', M.email)) === 5000,
-    `${rb.status} total=${await store.zscore('lb:total', M.email)} flip2=${await store.zscore('lb:square:flip2', M.email)}`);
+  const me3 = (await board(M)).payload?.me;
+  check('⑪ 重建之后：无限反转那张榜上还是 6000、默认选择上还是 6000、基础榜上 300、旧总榜不写',
+    rb.status === 200 && (await store.zscore('lb:square:flip2', M.email)) === 6000 && me3?.score === 6000 &&
+      (await store.zscore('lb:square:base', M.email)) === 300 && (await store.zscore('lb:total', M.email)) === null,
+    `${rb.status} flip2=${await store.zscore('lb:square:flip2', M.email)} me=${JSON.stringify(me3)} base=${await store.zscore('lb:square:base', M.email)}`);
+}
+
+// ---- 九折：剩下没翻的色块（推14 Z-B08，站长 10-25）------------------------------------------------
+//
+// 只在判死（无法继续匹配）、手动结束时扣：剩 n 枚 × 0.9ⁿ（服务器按自己判的口径算，不信客户端报的 unflippedScale）。时间到、
+// 炸弹相连、步步为营、无限反转 n 再大也不扣；老虎机判死也扣。neverFlipped 越界回 implausible、缺了回 legacy。
+{
+  const MS = await import('../api/_maxscore.js');
+  const L = await makePlayer('guard-left@example.com');
+  const STUCK = '无法继续匹配';
+  const MANUAL = '手动结束';
+  // 清 30 枚、剩 6 枚里有 n 枚没翻：flips = 30（每枚 2 分）、削 1 条线 36 分 → 拼出分 96；清 30、走 40 步。
+  const SQ = MS.BOARD_LIMITS.square;
+  const coef = MS.stepCoefOf(SQ.par, 30, SQ.N, 40);
+  const left = (n, reason, extra = {}, totalOver) => {
+    const scale = MS.leftoverScale(n);
+    const total = totalOver ?? Math.max(0, Math.round(96 * scale * coef));
+    return vetData('square', total, {}, {
+      flips: 30, patternPoints: 60, linePoints: 36, lines: 1, score: 96, cleared: 30, moves: 40, stepCoef: coef,
+      neverFlipped: n, unflippedScale: scale, reason, totalScore: total, ...extra,
+    });
+  };
+  check('（尺子）九折：服务器的 leftoverScale(2) 是 0.81、(0) 是 1', MS.leftoverScale(2).toFixed(2) === '0.81' && MS.leftoverScale(0) === 1);
+  let n = 0;
+  for (const [name, data] of [
+    ['判死剩 2 枚：只收 round(96 × 0.81 × 系数)', left(2, STUCK)],
+    ['手动结束剩 4 枚：只收 round(96 × 0.9⁴ × 系数)', left(4, MANUAL)],
+    ['判死剩 0 枚：不扣', left(0, STUCK)],
+    ['时间到剩 5 枚：不扣（时间到不是判死）', left(5, '时间到', {}, Math.round(96 * coef))],
+  ]) {
+    const r = await vetPush(L, `left-ok-${++n}`, 'square', data);
+    check(`九折 · ${name}（${data.totalScore}）：照收`, r.status === 200 && r.payload?.ok === true && r.payload?.stored !== false,
+      `${r.status} ${JSON.stringify(r.payload)} why=${r.why}`);
+  }
+  // 拿不打折的数报判死剩 2 枚：拒在 total（服务器自己按 0.81 算）。
+  const cheat = await vetPush(L, 'left-bad-1', 'square', left(2, STUCK, {}, Math.round(96 * coef)));
+  check('九折 · 判死剩 2 枚却报不打折的数：400 implausible，拒在「total」', cheat.status === 400 && cheat.why === 'total',
+    `${cheat.status} ${JSON.stringify(cheat.payload)} why=${cheat.why}`);
+  // 客户端报 unflippedScale 1（谎称没扣）也没用——服务器不信它，照样拒。
+  const lie = await vetPush(L, 'left-bad-2', 'square', left(2, STUCK, { unflippedScale: 1 }, Math.round(96 * coef)));
+  check('九折 · 报 unflippedScale 1 骗不过（服务器自己算）', lie.status === 400 && lie.why === 'total', `${lie.status} why=${lie.why}`);
+  // 炸弹相连收场：不扣九折（只扣 100）。
+  const bombData = vetData('square', 0, { modeKey: 'bomb', bombRules: 3 }, {
+    flips: 30, patternPoints: 60, linePoints: 36, lines: 1, score: 96, cleared: 30, moves: 40, stepCoef: coef,
+    neverFlipped: 5, unflippedScale: 1, reason: '炸弹相连', hazardEnd: true, totalScore: Math.max(0, Math.round(96 * coef) - 100),
+  });
+  const rb = await vetPush(L, 'left-bomb', 'square', bombData);
+  check('九折 · 炸弹相连剩 5 枚：不扣（只扣 100）', rb.status === 200 && rb.payload?.ok === true, `${rb.status} ${JSON.stringify(rb.payload)} why=${rb.why}`);
+  // 无限反转、步步为营：n 再大也不扣（反转局一枚能来回翻，neverFlipped 也不和 flips 对账）。
+  const fr = await vetPush(L, 'left-flip', 'square', vetData('square', 600, { modeKey: 'flip', flipRules: 2 }, { neverFlipped: 30, reason: STUCK }));
+  check('九折 · 无限反转报剩 30 枚、判死：不扣', fr.status === 200 && fr.payload?.ok === true, `${fr.status} ${JSON.stringify(fr.payload)} why=${fr.why}`);
+  const pzr = await vetPush(L, 'left-pz', 'square', { ...pz2('square', 240, { cleared: 20, stars: 8 }), neverFlipped: 8, reason: STUCK });
+  check('九折 · 步步为营剩 8 枚、判死：不扣', pzr.status === 200 && pzr.payload?.ok === true, `${pzr.status} ${JSON.stringify(pzr.payload)} why=${pzr.why}`);
+  // 老虎机判死剩 2 枚：只收 round(拼出分 × 0.81)。
+  const slotData = (total) => vetData('square', total, { slot: true }, { flips: 30, patternPoints: 100, linePoints: 0, lines: 0, score: 100, neverFlipped: 2, reason: STUCK, totalScore: total });
+  const sOk = await vetPush(L, 'left-slot-ok', 'square', slotData(81));
+  check('九折 · 老虎机判死剩 2 枚：只收 round(100 × 0.81) = 81', sOk.status === 200 && sOk.payload?.ok === true, `${sOk.status} ${JSON.stringify(sOk.payload)} why=${sOk.why}`);
+  const sBad = await vetPush(L, 'left-slot-bad', 'square', slotData(100));
+  check('九折 · 老虎机判死剩 2 枚报 100：拒在「slotSplit」', sBad.status === 400 && sBad.why === 'slotSplit', `${sBad.status} why=${sBad.why}`);
+  // neverFlipped 越界（翻过的 + 没翻的 > 全盘）：implausible；缺了：legacy（不上榜）。
+  const over = await vetPush(L, 'left-over', 'square', left(7, STUCK));
+  check('九折 · neverFlipped 越界（30 + 7 > 36）：400 implausible，拒在「leftover」', over.status === 400 && over.why === 'leftover',
+    `${over.status} ${JSON.stringify(over.payload)} why=${over.why}`);
+  const missing = left(0, STUCK);
+  delete missing.neverFlipped;
+  const miss = await vetPush(L, 'left-miss', 'square', missing);
+  check('九折 · 缺 neverFlipped：照收进存档、不上榜（legacy）', miss.status === 200 && miss.payload?.stored !== true &&
+    !(await call({ action: 'mine', ...L })).payload?.archive?.every((r) => r.runId !== 'left-miss'),
+    `${miss.status} ${JSON.stringify(miss.payload)}`);
+}
+
+// ---- Pro：按 Pro 的 par 算（推14 Z-B13）-------------------------------------------------------
+//
+// 一局 pro: true 按 proPar 算的系数收下、进 :pro 榜；同一份明细按普通 par 报（系数对不上）回 coef。
+{
+  const MS = await import('../api/_maxscore.js');
+  const PR = await makePlayer('guard-pro@example.com');
+  const SQ = MS.BOARD_LIMITS.square;
+  const proCoef = MS.stepCoefOf(SQ.proPar, 36, SQ.N, 40);
+  const normCoef = MS.stepCoefOf(SQ.par, 36, SQ.N, 40);
+  const mk = (c, pro) => vetData('square', Math.round(300 * c), {}, {
+    flips: 36, patternPoints: 72, linePoints: 228, lines: 7, score: 300, cleared: 36, moves: 40, stepCoef: c, totalScore: Math.round(300 * c),
+    ...(pro ? { pro: true, par: SQ.proPar } : {}),
+  });
+  const ok = await vetPush(PR, 'pro-ok', 'square', mk(proCoef, true));
+  check(`Pro · 按 Pro par ${SQ.proPar} 算的系数（${proCoef.toFixed(3)}）：照收、进 square:base:pro`,
+    ok.status === 200 && ok.payload?.ok === true && (await store.zscore('lb:square:base:pro', PR.email)) === Math.round(300 * proCoef),
+    `${ok.status} ${JSON.stringify(ok.payload)} why=${ok.why}`);
+  check('Pro · 普通榜上没有这一局', (await store.zscore('lb:square:base', PR.email)) === null);
+  const bad = await vetPush(PR, 'pro-bad', 'square', mk(normCoef, true));
+  check(`Pro · 同一份明细按普通 par ${SQ.par} 报（系数 ${normCoef.toFixed(3)}）：400 implausible，拒在「coef」`,
+    bad.status === 400 && bad.why === 'coef', `${bad.status} ${JSON.stringify(bad.payload)} why=${bad.why}`);
+}
+
+// ---- 旧分别被带回（推14 Z-B18，站长 D40 甲）：stats.bestRules 缺省当 ero1 ----------------------------
+//
+// 一份没有 bestRules 的老 stats（best 里躺着 900）：交一局 ero2 之后那份 best 清空、只剩新局；不勾「全部清空」重建一次 900 也
+// 不回榜；看榜时「我」那一行看不到 900。
+{
+  const O = await makePlayer('guard-old@example.com');
+  await store.set('stats:' + O.email, { total: 900, runs: 1, best: { 'square:base': 900 }, seen: ['old-1'] });
+  await store.zadd('lb:square:base', 900, O.email);
+  const board = async (who, q = {}) => {
+    for (const k of await store.scanKeys('lbq:*')) await store.del(k);
+    return call({ action: 'board', ...who, ...q });
+  };
+  const before = (await board(O, { families: ['square'], modes: ['base'] })).payload?.me;
+  check('bestRules · 老 stats（没有 bestRules）：「我」那一行看不到 900', before === null, JSON.stringify(before));
+  await vetPush(O, 'new-1', 'square', vetData('square', 200));
+  const mine = await call({ action: 'mine', ...O });
+  check('bestRules · 交一局 ero2 之后：best 只剩新局 200（900 清掉了）',
+    JSON.stringify(mine.payload?.best) === JSON.stringify({ 'square:base': 200 }), JSON.stringify(mine.payload?.best));
+  process.env.ADMIN_TOKEN = 'b'.repeat(40);
+  const rb = await call({ action: 'rebuild', token: process.env.ADMIN_TOKEN });
+  delete process.env.ADMIN_TOKEN;
+  const after = (await board(O, { families: ['square'], modes: ['base'] })).payload?.me;
+  check('bestRules · 不勾「全部清空」重建一次：900 不回榜，「我」是 200',
+    rb.status === 200 && (await store.zscore('lb:square:base', O.email)) === 200 && after?.score === 200,
+    `${rb.status} z=${await store.zscore('lb:square:base', O.email)} me=${JSON.stringify(after)}`);
 }
 
 // ---- ⑫ 机器人真打出来的每一局：一局都不许误拒 ----------------------------------
 //
 // 上面那些是照规则拼出来的局；这一节拿真局对：scripts/fixtures/bot-runs.json 是自检机器人（bot-selfcheck
 // 那一套）照编号表把每一种玩法 × 棋盘真开局、真滑出来的 RunData，原样存下来的。服务器那几道上界是照
-// 规则推的，推错了的话真局会先撞上——这一节就是拿来先撞的。去掉种子那几位（那几局是敲代号开的，
-// 不上榜），交上去必须照收、上榜。
+// 规则推的，推错了的话真局会先撞上——这一节就是拿来先撞的。去掉种子那几位（交卷只看规则，不看来路；代号局
+// D12 起也上榜，10-31 方案推14 Z-B17），交上去必须照收、上榜。夹具推14 照 ero2 重收过（Z-B24）。
 {
   let runs = [];
   try {
@@ -647,13 +811,15 @@ const sortKeys = (o) => Object.fromEntries(Object.entries(o || {}).sort(([a], [b
     await api.pushRun({ ...run, at: 6 });
     await new Promise((r) => setTimeout(r, 2300));
     const offline = calls.length;
-    const board = await api.fetchBoard('square:base');
+    // 推14 Z-B15 起看榜收的是三行选择（或 'daily'），不再是一个榜号；这儿取「方块 · 普通 · 基础」那一格。
+    const SQ_BASE = { families: ['square'], tiers: ['normal'], modes: ['base'] };
+    const board = await api.fetchBoard(SQ_BASE);
     globalThis.fetch = thrower;
     check('⑬ L-9 断网：交卷只打这一趟、这一局留在待发队列里；看榜说「网络」', offline === 1 && queued(6) && board.reason === 'network',
       `${offline} 趟 队列 ${queued(6)} ${board.reason}`);
     const boardSays = async (status) => {
       answer = { status, body: { error: 'x' } };
-      return (await api.fetchBoard('square:base')).reason;
+      return (await api.fetchBoard(SQ_BASE)).reason;
     };
     const said = { 429: await boardSays(429), 403: await boardSays(403), 404: await boardSays(404), 500: await boardSays(500), 401: await boardSays(401) };
     check('⑬ L-9 看榜：429 → tooMany、403 → geniusOnly、别的 4xx 和 5xx → unavailable、401 → expired',

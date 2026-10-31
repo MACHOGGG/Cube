@@ -26,13 +26,18 @@
  * 按 (r + 2c + 3) mod 6 排（全翻完也没有一整行一整列同色——不然会多出整线消除的分）。两副都拿
  * scratchpad 里的 design63.py 逐格验过：除了设计好的那几组，哪儿都凑不出组。
  *
- *   甲 先扣 31 段（在 1×2、剩 1 段）；(2,0) 换成 1 号。第 1 行往右滑一格，(1,5) 的 1 号转到 (1,0)，
- *      和 (2,0) 竖着挨成一组 1×2——只有这一组。翻这两枚就到 1 枚：场上剩下 34 枚色块当场全部翻掉。
- *      36 枚 × 2 = 72 分。
- *   乙 先扣 14 段（在 1×4、剩 1 段）；第 5 行左边三枚 0 号、(4,3) 也是 0 号，第 1 行左边三枚 4 号（现
- *      成的 1×3，1×4 的时候不算）。第 3 列往下滑一格，(4,3) 补进 (5,3)，第 5 行凑成 1×4——只有这一
- *      组。翻这四枚就降到 1×3：第 1 行那组现成的 1×3 不在这一步动过的格子上，照旧当场结算。7 枚 ×
- *      2 = 14 分，新一级 11 段扣掉 3 + 3 剩 5 段。
+ * 10-31 方案推14 Z-B02（F5，站长）起基础局到 2 枚为止、**降级不重找**（只有老虎机照旧全盘重找）。两副改成：
+ *
+ *   甲 先扣 33 段（方块 [22, 12]：在 1×3、剩 1 段）；用乙那副盘、只把 (5,0) 换成 5 号。第 3 列往下滑一格，(4,3) 补进
+ *      (5,3)，第 5 行凑成 1×3（(5,1)–(5,3)）——只有这一组。翻这三枚就降到 2 枚：场上其余 33 枚色块一枚不翻（第 1 行那组现成
+ *      的 1×3 也不翻——不重找）。3 枚 × 2 = 6 分。
+ *   乙 先扣 21 段（在 1×4、剩 1 段）；第 5 行左边三枚 0 号、(4,3) 也是 0 号，第 1 行左边三枚 4 号（现成的 1×3，1×4 的时候
+ *      不算）。第 3 列往下滑一格，第 5 行凑成 1×4——只有这一组。翻这四枚就降到 1×3：第 1 行那组现成的 1×3 不在这一步动过的
+ *      格子上，**还摆着没翻**（原先 ero1 降级全盘重找，它当场结算）。4 枚 × 2 = 8 分。
+ *
+ * 原先的甲（走到解锁 1×1，场上剩下的色块当场全部翻掉）在基础局不再成立；方案要把它挪给老虎机局，可手摆入口
+ * （engine/devDeal.ts）只摆盘面、定不了老虎机转出来的那个目标图案，摆不出一副「再翻两枚就到 1×1」的老虎机局——照方案
+ * 停下回报，那一段没挪。老虎机「降到 1×1 全翻」由 check-erosion ⑦（纯 node，CI 里）用真的连锁步进器量。
  */
 import { chromium } from 'playwright';
 import { unlockAll } from './lib/unlockAll.mjs';
@@ -67,6 +72,9 @@ const B = [
   '2>1 3>3 4>5 0>1 0>3 1>5',
   '0>2 0>4 0>0 1>2 2>4 3>0',
 ];
+
+/** 甲：乙那副盘只把 (5,0) 换成 5 号——第 5 行滑完是 [5 0 0 0]，凑的是 (5,1)–(5,3) 那组 1×3。 */
+const B3 = B.map((row, r) => (r === 5 ? row.replace(/^0>2/, '5>2') : row));
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 const errs = [];
@@ -137,34 +145,36 @@ async function settle(page) {
 
 const faces = (o) => Object.values(o.tiles);
 
-console.log('甲 走到解锁 1×1：场上剩下的色块当场全部翻面');
+console.log('甲 从 1×3 剩 1 段滑一步：降到 2 枚，场上其余色块一枚不翻（不重找）');
 {
-  const page = await open(A, 31);
+  const page = await open(B3, 33);
   const o0 = await page.evaluate(READ);
   check('甲（尺子）手摆那副牌生效了：36 枚全是色块', faces(o0).length === 36 && faces(o0).every((f) => f === 'flavor'), `${faces(o0).filter((f) => f === 'flavor').length} 枚色块`);
-  check('甲（尺子）开局先扣的 31 段生效了：《得分图案》此刻是 2 枚', o0.n === 2, o0.pattern);
-  await drag(page, [1, 0], [1, 1]);
-  const o1 = await settle(page);
-  const left = faces(o1).filter((f) => f === 'flavor').length;
-  check('甲 那一组 1×2 一翻就到 1 枚：场上一枚色块都不剩', left === 0, `剩 ${left} 枚`);
-  check('甲 《得分图案》到了 1 枚', o1.n === 1, o1.pattern);
-  check('甲 分数是 36 枚 × 2 = 72（那一组 2 枚 + 剩下的 34 枚，没有整线消除）', o1.score === 72, String(o1.score));
-  await page.close();
-}
-
-console.log('\n乙 降到 1×3：盘上那组现成的 1×3 当场结算');
-{
-  const page = await open(B, 14);
-  const o0 = await page.evaluate(READ);
-  check('乙（尺子）手摆那副牌生效了：36 枚全是色块', faces(o0).length === 36 && faces(o0).every((f) => f === 'flavor'));
-  check('乙（尺子）开局先扣的 14 段生效了：《得分图案》此刻是 4 枚', o0.n === 4, o0.pattern);
+  check('甲（尺子）开局先扣的 33 段生效了：《得分图案》此刻是 3 枚', o0.n === 3, o0.pattern);
   await drag(page, [0, 3], [1, 3]);
   const o1 = await settle(page);
   const flipped = Object.entries(o1.tiles).filter(([, f]) => f === 'dot').map(([k]) => k).sort();
-  const want = ['1,0', '1,1', '1,2', '5,0', '5,1', '5,2', '5,3'].sort();
-  check('乙 翻的正好是第 5 行那组 1×4 和第 1 行那组现成的 1×3（不在这一步动过的格子上）', flipped.join(' ') === want.join(' '), flipped.join(' '));
+  check('甲 翻的正好是第 5 行那组 1×3（第 1 行那组现成的 1×3 不翻）', flipped.join(' ') === ['5,1', '5,2', '5,3'].sort().join(' '), flipped.join(' '));
+  check('甲 《得分图案》降到 2 枚', o1.n === 2, o1.pattern);
+  check('甲 场上其余 33 枚色块原样剩着', faces(o1).filter((f) => f === 'flavor').length === 33, `${faces(o1).filter((f) => f === 'flavor').length} 枚`);
+  check('甲 分数是 3 枚 × 2 = 6', o1.score === 6, String(o1.score));
+  await page.close();
+}
+
+console.log('\n乙 降到 1×3：盘上那组现成的 1×3 还摆着没翻（不重找）');
+{
+  const page = await open(B, 21);
+  const o0 = await page.evaluate(READ);
+  check('乙（尺子）手摆那副牌生效了：36 枚全是色块', faces(o0).length === 36 && faces(o0).every((f) => f === 'flavor'));
+  check('乙（尺子）开局先扣的 21 段生效了：《得分图案》此刻是 4 枚', o0.n === 4, o0.pattern);
+  await drag(page, [0, 3], [1, 3]);
+  const o1 = await settle(page);
+  const flipped = Object.entries(o1.tiles).filter(([, f]) => f === 'dot').map(([k]) => k).sort();
+  const want = ['5,0', '5,1', '5,2', '5,3'].sort();
+  check('乙 翻的只有第 5 行那组 1×4；第 1 行那组现成的 1×3 还摆着没翻', flipped.join(' ') === want.join(' ') &&
+    ['1,0', '1,1', '1,2'].every((k) => o1.tiles[k] === 'flavor'), flipped.join(' '));
   check('乙 《得分图案》降到 3 枚', o1.n === 3, o1.pattern);
-  check('乙 分数是 7 枚 × 2 = 14', o1.score === 14, String(o1.score));
+  check('乙 分数是 4 枚 × 2 = 8', o1.score === 8, String(o1.score));
   await page.close();
 }
 

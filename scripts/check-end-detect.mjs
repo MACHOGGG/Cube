@@ -11,8 +11,8 @@
  * 里是哪一句抛的查不到，所以改法不靠找到根因（gameController.ts 的 guardFn / guardHooks / runBeat / watch /
  * endGame 的 finally），而这一道量「随便哪一处装饰抛错，都照常结算」：
  *
- *   ① 故障矩阵：43 个故障点 × 3 种最后一手（sqRow 方块整行、ciEdge 小球削底边、ciMatch 小球先翻再削）× 5 种玩法
- *      × 动态效果开 / 关。每一格（这一手根本走不到那个点的除外）都必须**当场**露出结算页、存进本机、理由和时刻
+ *   ① 故障矩阵：43 个故障点 × 4 种最后一手（sqRow 方块整行、ciEdge 小球削底边、ciMatch 小球先翻一对 1×2 再削、ciDead
+ *      小球散边逐枚削星、只剩一枚孤儿色块判死——后两种是 10-31 方案推14 按 F5 改写 / 新加的）× 5 种玩法 × 动态效果开 / 关。每一格（这一手根本走不到那个点的除外）都必须**当场**露出结算页、存进本机、理由和时刻
  *      都和不出错时一样（动态效果开时 snapFlipFaces × ciMatch 那几格翻面那一拍被跳过，允许早到约 170ms）；
  *      `end.logicBeforeRun`（endGame 记账逻辑本身抛错）那一格露出最低限度的结算页就算过。endGame 只结算一次。
  *      注入故障的格子里，end_guard 统计每个标签最多报一次、kind 只是标签（不带错误原文）、mode 是这一局的玩法。
@@ -20,9 +20,10 @@
  *      M3 判死后 1.4 秒那个定时器被撤掉——各自 3 秒内结算（守望 watch 兜住）。
  *   ③ 等价：随机残局 600 局、随机走子（中途碰一下、暂停再继续），不注入故障时逐局结局 / 分数 / 步数 / 结算页 /
  *      存档都和「去掉兜底的同一包」相同；兜底一次都没出声（没有 [slides:end-guard]、没有 end_guard）。
- *   ④ 判死夹具（10-31 方案推02 Z-A02）：六边三角门槛 3、12 / 13 / 14 颗全是星星的残局（穷举在 20000 个盘面内走不完，
- *      推02 之前永远不结束）→ 3 秒内「无法继续匹配」；10-19 复现 7（小球 1×2、收尾放开后只剩三枚互不同线、一手都
- *      滑不了）→ 同上；方块 1×N 只剩活炸弹 → 「全部消完了」（判死层不许抢在清盘判定前面）。基础、步步为营各一遍。
+ *   ④ 判死夹具（10-31 方案推02 Z-A02，推14 按 ero2 改预期）：六边三角门槛 3、12 / 13 / 14 颗全是星星的残局 → 推14 起
+ *      散边逐枚削完 →「全部消完了」（推02 时是「无法继续匹配」）；10-19 复现 7（小球 1×2、只剩两枚孤儿色块和两颗互不
+ *      同线的星星）→ 星星削完、亮红 1.4 秒「无法继续匹配」，剩 2 枚 ×0.81；方块 1×N 只剩活炸弹 → 「全部消完了」（判死
+ *      层不许抢在清盘判定前面）。基础、步步为营各一遍（步步为营不打九折）。
  *   ⑤ 轨道层的尺子：六副棋盘的随机残局，轨道计数层说死、而且 ≤12 枚（穷举走得完）时，同一副照常穷举一遍——
  *      穷举说「还能得分」就是反例，一例就红。
  *
@@ -48,7 +49,7 @@ const fail = (msg) => { failures.push(msg); };
 const F = (n) => `(globalThis as any).__F?.('${n}');`;
 export const POINTS = [
   // ── 控制器里的装饰函数（本体）──
-  [GC, '  function bigMoment(originCell: Cell | undefined): void {\n    // 装饰件：抛错只记一笔，不拦连锁（10-31 方案推01 Z-A01 ②）。原地包一层，不改名——check-erosion 按名字切这一段。\n    try {\n', 'ctl.bigMoment', 'after'],
+  [GC, '  function bigMoment(originCell: Cell | undefined, kind: \'line\' | \'celebrate\'): void {\n    // 装饰件：抛错只记一笔，不拦连锁（10-31 方案推01 Z-A01 ②）。原地包一层，不改名——check-erosion 按名字切这一段。\n    try {\n', 'ctl.bigMoment', 'after'],
   [GC, '  const syncProWheel0 = () => {\n', 'ctl.syncProWheel', 'after'],
   [GC, '  function paintSteps0(left: number) {\n', 'ctl.paintSteps', 'after'],
   [GC, '  function bumpSteps0(scored: boolean) {\n', 'ctl.bumpSteps', 'after'],
@@ -125,7 +126,15 @@ const sub = (file, from, to) => (rel, src) => {
   return src.replace(from, to);
 };
 
-// ─────────────────────────── 三种最后一手 ───────────────────────────
+// ─────────────────────────── 四种最后一手 ───────────────────────────
+/**
+ * 把图案降到这一局的最低级（基础局 1×2）。Pro 局冻结（推14 Z-B13）：spend 扣多少段都停在开局的 4 枚，只有卡死时才一级一级
+ * 松——夹具当它「之前已经松到底了」，用 release() 一路松到最低级（普通局 spend(999) 已经到底，release() 回 false 不动）。
+ */
+const toFloor = (g) => {
+  g.ero.spend(999);
+  for (let i = 0; i < 4 && g.ero.release(); i++);
+};
 const SCEN = {
   // 方块：只剩一行 6 颗同色星星，滑一下 → 整行消（只有消线拍）
   sqRow(g) {
@@ -140,9 +149,20 @@ const SCEN = {
     g.tap.setGrid(gr);
     return new Set(['6,0', '6,1', '6,2']);
   },
-  // 小球：图案 1 枚级，底边 [星1 星1 色块(背面 1)] → 先翻色块（图案拍：翻面、滚筒、图案块）再削底边
+  // 小球：图案到底（F5 封底 1×2，推14），底边 [星1 星1 色块0 色块0]（两枚色块背面都是 1）→ 先翻那一对 1×2（图案拍：翻面、
+  // 滚筒、图案块）再削底边清盘。原先（ero1）是 1×1 级、底边 [星1 星1 色块]，F5 下 spend(999) 只到 1×2，一枚凑不成。
   ciMatch(g) {
-    g.ero.spend(999);
+    toFloor(g);
+    const gr = [];
+    for (let r = 0; r < 7; r++) gr.push(Array.from({ length: r + 1 }, () => BLANK_TILE()));
+    gr[6][0] = star(1); gr[6][1] = star(1); gr[6][2] = tile(0, 1, 'flavor'); gr[6][3] = tile(0, 1, 'flavor');
+    g.tap.setGrid(gr);
+    return new Set(['6,0', '6,1', '6,2', '6,3']);
+  },
+  // 小球：封底 1×2，底边 [星1 星1 孤儿色块0] → 散边逐枚削星 → 只剩那枚孤儿 → 亮红 1.4 秒「无法继续匹配」、×0.9（推14 Z-B08
+  // 「剩正面色块判死」那条路，rerun-f5 补跑 §1 的 ciDead）。
+  ciDead(g) {
+    toFloor(g);
     const gr = [];
     for (let r = 0; r < 7; r++) gr.push(Array.from({ length: r + 1 }, () => BLANK_TILE()));
     gr[6][0] = star(1); gr[6][1] = star(1); gr[6][2] = tile(0, 1, 'flavor');
@@ -150,7 +170,7 @@ const SCEN = {
     return new Set(['6,0', '6,1', '6,2']);
   },
 };
-const BOARD = { sqRow: 'square', ciEdge: 'circle', ciMatch: 'circle' };
+const BOARD = { sqRow: 'square', ciEdge: 'circle', ciMatch: 'circle', ciDead: 'circle' };
 const HOOKS = {
   onLive: () => globalThis.__F?.('hook.onLive'),
   shouldLeadOut: () => { globalThis.__F?.('hook.shouldLeadOut'); return false; },
@@ -349,7 +369,8 @@ async function equivRun(mutate) {
         const spec = id === 'square' ? squareStart(rand, level === 1) : circleStart(B, rand, level === 1);
         const g = sim.open(id, mode === 'puzzle' ? { steps: true } : {});
         localStorage.removeItem(g.bestKey + '::runs');
-        if (level < 4) g.ero.spend(id === 'square' ? { 3: 15, 2: 26, 1: 999 }[level] : { 3: 12, 2: 20, 1: 999 }[level]);
+        // F5（推14）：方块 [22, 12]、小球 [17, 9]，封底 2 枚——「level 1」那一档 spend(999) 也只到 1×2（照旧摆全是星星的残局）。
+        if (level < 4) g.ero.spend(id === 'square' ? { 3: 22, 2: 34, 1: 999 }[level] : { 3: 17, 2: 26, 1: 999 }[level]);
         g.tap.setGrid(buildGrid(spec));
         if (g.hooks.isGameOver()) { g.close(); out.push({ i, id, mode, skip: true }); continue; }
         g.hooks.render();
@@ -398,41 +419,52 @@ function triBoard(g, spec) {
   g.tap.setGrid(ng);
   return new Set([spec.split(' ')[0].split(':')[0]]);
 }
+// 每一项：[名字, 棋盘, 选项, 摆盘, 理由（null = 全部消完了）, 基础局结算时的剩余色块系数（unflippedScale）]。
 const DEAD_FIXTURES = [
-  ...Object.entries(TRI).map(([n, spec]) => [`六边三角 ${n} 颗全是星星`, 'triangleBig', {}, (g) => triBoard(g, spec), '无法继续匹配']),
-  ['10-19 复现 7（小球 1×2、收尾放开后剩三枚互不同线）', 'circle', {}, (g) => {
-    g.ero.spend(20);
+  // 推14：散边逐枚削星（looseEnd）——这几副推02 时是「无法继续匹配」，ero2 起削得完（和方案 B·末「交界」第 1 条一致）。
+  ...Object.entries(TRI).map(([n, spec]) => [`六边三角 ${n} 颗全是星星`, 'triangleBig', {}, (g) => triBoard(g, spec), null, 1]),
+  ['10-19 复现 7（小球 1×2、两枚孤儿色块、两颗互不同线的星星）', 'circle', {}, (g) => {
+    // F5：封底 1×2（原先 spend(20) 是 ero1 那张三段表的 1×2）。
+    g.ero.spend(999);
     const gr = []; for (let r = 0; r < 7; r++) gr.push(Array.from({ length: r + 1 }, () => BLANK_TILE()));
     gr[1][0] = tile(0, 1); gr[6][3] = tile(2, 1); gr[4][0] = star(1); gr[4][2] = star(3);
     g.tap.setGrid(gr);
     // 滑一下 (4,0)(4,2)：两颗星星对调，滑完之后谁也凑不成
     const t = gr[4][0]; gr[4][0] = gr[4][2]; gr[4][2] = t;
     return new Set(['4,0', '4,2']);
-  }, '无法继续匹配'],
-  ['方块 1×N 只剩活炸弹', 'square', { bomb: true }, (g) => { g.tap.setGrid([[star(2), star(2), star(2), tile(0, 1)]]); return new Set(['0,0', '0,1', '0,2', '0,3']); }, null],
+  }, '无法继续匹配', 0.81],
+  ['方块 1×N 只剩活炸弹', 'square', { bomb: true }, (g) => { g.tap.setGrid([[star(2), star(2), star(2), tile(0, 1)]]); return new Set(['0,0', '0,1', '0,2', '0,3']); }, null, 1],
 ];
 async function deadSection(extraMutate) {
   const sim = await makeSim(ROOT, { motion: true, mutate: extraMutate });
   const bad = [];
   const lines = [];
-  for (const [label, id, opts, set, reason] of DEAD_FIXTURES) {
+  for (const [label, id, opts, set, reason, scale] of DEAD_FIXTURES) {
     for (const steps of [false, true]) {
       const g = sim.open(id, { ...opts, ...(steps ? { steps: true } : {}) });
+      localStorage.removeItem(g.bestKey + '::runs');
       const mask = set(g);
       g.hooks.render();
       const t0 = sim.now;
       g.ctl.resolveMove(mask, 0);
       // 判死之后盘子会「收尾放开」、把还削得掉的外边削掉（带动画），削完才轮到那 1.4 秒。所以量的是「盘面停下来
-      // （连锁走完）之后 1.4 秒内结算」，不是从这一手起算——最多等 8 秒。
+      // （连锁走完）之后 1.4 秒内结算」，不是从这一手起算。
+      // 推14 起收尾逐一消除（一拍一组、最后一组放大定格再消），六边三角 14 颗星的那一副要削十来拍、约 10 秒才清完——最多等 20 秒。
       let settled = t0;
-      for (let w = 0; w < 800 && !g.ends.length; w++) { if (g.ctl.resolving) settled = sim.now; sim.tick(10); }
+      for (let w = 0; w < 2000 && !g.ends.length; w++) { if (g.ctl.resolving) settled = sim.now; sim.tick(10); }
       sim.tick(500);
       const want = reason ?? sim.B.ALL_FLIPPED_REASON;
       const at = g.ends[0] ? g.ends[0].at - t0 : null;
       const after = g.ends[0] ? g.ends[0].at - settled : null;
       const line = `${label} ${steps ? '步步为营' : '基础'}：理由=${JSON.stringify(g.ends.map((e) => e.reason))} 于=${at === null ? '-' : at + 'ms'}（停下后 ${after === null ? '-' : after + 'ms'}） 结算页=${g.shown()}`;
-      lines.push(line);
+      // 剩余色块九折（推14 Z-B08）：基础局判死剩 n 枚 ×0.9ⁿ；步步为营不打折（1）。读本机存档里这一局的 unflippedScale。
+      let run = null;
+      try { run = JSON.parse(localStorage.getItem(g.bestKey + '::runs'))?.[0]?.data ?? null; } catch { run = null; }
+      const wantScale = steps ? 1 : scale;
+      const gotScale = run ? Math.round(run.unflippedScale * 100) / 100 : null;
+      lines.push(`${line} 剩余色块系数=${gotScale}`);
       if (!g.shown() || g.ends.length !== 1 || g.ends[0].reason !== want || after > 1400 + 100) bad.push(`④ ${line}（要在盘面停下后 1.4 秒内以「${want}」结算）`);
+      if (gotScale !== wantScale) bad.push(`④ ${label} ${steps ? '步步为营' : '基础'}：剩余色块系数 ${gotScale}，要 ${wantScale}`);
       g.close();
     }
   }
@@ -456,7 +488,8 @@ async function rulerSection(extraMutate) {
       const g = sim.open(id, {});
       const K = g.hooks.boardColors;
       const level = pick(rand, [1, 2, 3, 4]);
-      if (level < 4) g.ero.spend({ 3: 15, 2: 26, 1: 999 }[level]);
+      // F5（推14）：先扣到 1×3 / 1×2（各副段数不同，按方块那一行扣：小球 22 段落在 1×3 里，照样是一种残局），1 那一档到封底。
+      if (level < 4) g.ero.spend({ 3: 22, 2: 34, 1: 999 }[level]);
       let grid;
       if (id === 'square') {
         const R = 1 + Math.floor(rand() * 4), C = 1 + Math.floor(rand() * 4);
@@ -543,7 +576,9 @@ if (MUTANTS) {
     // 方案原写「canvas.null 红」；实测 canvas.null 另有两层接住（shareCard 判空、renderCard 自己的 try），拆掉 finally
     // 只剩记账逻辑本身抛错的那一格露不出结算页——这正是 finally 独自兜着的那一格。
     // 推02（Z-A02）的两条：
-    '去掉轨道层 → ④ 三角那几副红': [sub('src/engine/residueBoard.ts', '  if (!opts.slot && orbitDead(', '  if (!opts.slot && false && orbitDead('), '④'],
+    // 推14 起三角那几副残局由散边削完（不再靠轨道层判死），去掉轨道层它们照样绿——改量 ⑤：轨道层一次都不出声，「说死的随机残局
+    // 至少 100 副」那一条红。
+    '去掉轨道层 → ⑤ 尺子红': [sub('src/engine/residueBoard.ts', '  if (!opts.slot && orbitDead(', '  if (!opts.slot && false && orbitDead('), '⑤'],
     '加回零手那一句 → ④ 复现 7 红': [sub('src/engine/residueBoard.ts', '  const bonusLines = toBonus(built, opts.bonusLines);\n  const moves =', "  if (!built.moveLines.length) return 'unknown';\n  const bonusLines = toBonus(built, opts.bonusLines);\n  const moves ="), '④'],
     '去掉 endGame 的 finally → end.logicBeforeRun 红': [sub(GC, '    } finally {\n      if (gameOver && !hooks.practice) {\n', '    } finally {\n      if (false) {\n'), '①'],
   };

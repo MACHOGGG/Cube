@@ -259,9 +259,8 @@ export function renderRecordsPage(
   });
 
   const ranks = container.querySelector<HTMLButtonElement>('#ranksPanel')!;
-  // 缩略图上只有总榜的前几名（leaderboard 的 THUMB_ROWS）——那半块屏幕装不下
-  // 六个母标签和它们旗下的子标签，而站在这儿的人想知道的也就「榜上头几个是
-  // 谁」。点开才是完整的那几张榜。
+  // 缩略图上只有默认选择（全部 · 全部 · 全部，10-31 方案推14 Z-B15 起取代原先的总榜）的前几名（leaderboard 的
+  // THUMB_ROWS）——那半块屏幕装不下页签和三行药丸，而站在这儿的人想知道的也就「榜上头几个是谁」。点开才是能筛的那一页。
   mountBoardThumb(ranks, lang);
   /*
    * 排行榜是活的：每次点开都重新去问。

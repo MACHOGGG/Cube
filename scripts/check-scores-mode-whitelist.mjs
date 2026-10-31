@@ -4,6 +4,9 @@
  *
  *   ALLOW_MEMORY_STORE=1 node scripts/check-scores-mode-whitelist.mjs
  *
+ * 推14 Z-B14 起还量：算出来的榜号不在现行那 36 张里（伪造的布局玩法，例如菱形方块 ＋ 计时）就不上任何榜；pro: true 的局
+ * 只进 :pro 榜。旧总榜 lb:total 退役，看榜那几条改成默认选择。
+ *
  * 不起浏览器也不起服务器：直接叫 api/scores.js 的 handler，用内存里那个 Redis 替身（和 check-scores 同一套）。
  *
  * ── 审计核实过的那几条（都是真的，而且比报的更严重）───────────────────────────
@@ -73,8 +76,13 @@ async function makePlayer(email) {
 }
 
 const TOKEN = process.env.ADMIN_TOKEN;
-const BOARDS = ['square:base', 'circle:base', 'square:timed', 'square:puzzle3', 'circle:puzzle3', 'squareDiamond', 'circleHex', 'circleSeven', 'triangleBig'];
-/** 这个人此刻在哪几张榜上（含总榜、总榜的玩法标记、今天的每日榜）。 */
+/**
+ * 现行的那 36 张（推14 Z-B14：六副棋盘都分玩法、各有 :pro）——从服务端现读，不手抄；外加归档的光名榜（四副布局原先各只有
+ * 一张，旧数据可能还躺在上面）。
+ */
+const { ALL_BOARDS } = await import('../api/scores.js');
+const BOARDS = [...ALL_BOARDS, 'squareDiamond', 'circleHex', 'circleSeven', 'triangleBig'];
+/** 这个人此刻在哪几张榜上（含旧总榜、旧总榜的玩法标记、今天的每日榜）。 */
 async function boardsOf(id) {
   const on = [];
   for (const b of BOARDS) if ((await store.zscore('lb:' + b, id)) !== null) on.push(b);
@@ -102,6 +110,20 @@ const X = await makePlayer('x@example.com');
     const ok = await call({ action: 'push', ...B, runId: `ok-${mode}`, mode, score: 120 });
     check(`① （尺子）正式棋盘 ${mode} 照收`, ok.status === 200 && ok.payload?.ok === true, JSON.stringify(ok));
   }
+  // 伪造的布局玩法（推14 Z-B14）：菱形方块没有计时（编号表里没有这一格），算出来的榜号 squareDiamond:timed 不在 ALL_BOARDS
+  // 里——存档照收，不进任何榜、不进 best。
+  const C = await makePlayer('c@example.com');
+  const fake = await call({ action: 'push', ...C, runId: 'fake-1', mode: 'squareDiamond', score: 4000, data: { modeKey: 'timed' } });
+  const mineC = await call({ action: 'mine', ...C });
+  check('① 伪造的布局玩法（菱形方块 ＋ 计时）：存档照收，不进 best、不进任何榜',
+    fake.status === 200 && mineC.payload?.archive?.some((r) => r.runId === 'fake-1') && Object.keys(mineC.payload?.best || {}).length === 0 &&
+      (await store.zscore('lb:squareDiamond:timed', C.email)) === null && (await boardsOf(C.email)).length === 0,
+    `${fake.status} ${JSON.stringify(fake.payload)} 榜：${(await boardsOf(C.email)).join(' ')}`);
+  // pro: true 的局只进 :pro 榜，普通榜上没有它。
+  const pro = await call({ action: 'push', ...C, runId: 'pro-1', mode: 'square', score: 500, data: { modeKey: 'base', pro: true } });
+  check('① pro: true 的局只进 square:base:pro，普通榜上没有它',
+    pro.status === 200 && (await store.zscore('lb:square:base:pro', C.email)) === 500 && (await store.zscore('lb:square:base', C.email)) === null,
+    `${pro.status} ${JSON.stringify(pro.payload)} 榜：${(await boardsOf(C.email)).join(' ')}`);
   // 旧客户端（规则版本对不上）照旧走那条温和的 200，不吃新那道 400——闸的次序没乱。
   const oldClient = await call({ action: 'push', ...A, runId: 'old-1', mode: 'hacker', score: 1, data: { rules: 'old' } });
   // call() 会把 rules 补成现行版本，这一条要绕开它：直接叫 handler。
@@ -116,10 +138,13 @@ const X = await makePlayer('x@example.com');
 {
   // 照审计摆出从前那种局面：从前 push 收任意 mode，乱名的榜、best、存档、总榜都是这么写进去的。
   const id = X.email;
-  await store.set('stats:' + id, { total: 999999999 + 300, runs: 2, best: { hacker: 999999999, 'square:base': 300 }, seen: ['h1', 's1'] });
+  // bestRules 写成现行版本：这份 stats 是推14 之后写的（没有它就当 ero1，重建会把 best 整份清掉——那是 check-scores-guard
+  // 「旧分别被带回」那一节量的事，这儿量乱名）。存档里那局正式棋盘的局是一份对得上账的明细（夹具拼）：重建只认过得了
+  // vetRun 的局。
+  await store.set('stats:' + id, { total: 999999999 + 300, runs: 2, best: { hacker: 999999999, 'square:base': 300 }, seen: ['h1', 's1'], bestRules: SCORING_V });
   await store.set('runs:' + id, [
     { runId: 'h1', mode: 'hacker', score: 999999999, at: Date.now(), data: { shapeId: 'hacker', totalScore: 999999999, rules: SCORING_V } },
-    { runId: 's1', mode: 'square', score: 300, at: Date.now() - 1000, data: { shapeId: 'square', totalScore: 300, rules: SCORING_V } },
+    { runId: 's1', mode: 'square', score: 300, at: Date.now() - 1000, data: { ...fillRun('square', 300, {}), rules: SCORING_V } },
   ]);
   await store.zadd('lb:hacker', 999999999, id);
   await store.zadd('lb:square:base', 300, id);
@@ -134,8 +159,13 @@ const X = await makePlayer('x@example.com');
   const rb = await call({ action: 'rebuild', token: TOKEN });
   check('② 重建跑完了', rb.status === 200 && rb.payload?.done === true, JSON.stringify(rb.payload));
   check('② 乱名那张榜上没有他了', (await store.zscore('lb:hacker', id)) === null);
-  check('② 总榜换成他正式棋盘上的最高分（300），玩法标记跟着换', (await store.zscore('lb:total', id)) === 300 && (await store.hget('lb:total:mode', id)) === 'square:base',
-    `${await store.zscore('lb:total', id)} / ${await store.hget('lb:total:mode', id)}`);
+  // 旧总榜 lb:total 推14 起退役（不读不写）：库里那一行 999999999 还躺着也没人看得见。看榜的默认选择是各张现行榜合出来的。
+  for (const k of await store.scanKeys('lbq:*')) await store.del(k);
+  const look = await call({ action: 'board', ...X });
+  check('② 默认选择上他是正式棋盘上的最高分（300，方块基础），旧总榜那一行 999999999 不读',
+    look.payload?.me?.score === 300 && look.payload?.rows?.find((r) => r.me)?.board === 'square' &&
+      !(look.payload?.rows ?? []).some((r) => r.score === 999999999),
+    JSON.stringify(look.payload?.me));
   const st = await store.get('stats:' + id);
   check('② 新算的 best 里没有乱名', st?.best && !('hacker' in st.best) && st.best['square:base'] === 300, JSON.stringify(st?.best));
   check('② 存档一个字没动（两局都还在）', (await store.get('runs:' + id))?.length === 2);
@@ -165,8 +195,9 @@ const X = await makePlayer('x@example.com');
   const src = readFileSync(new URL('../api/scores.js', import.meta.url), 'utf8');
   check('③ 源码：上限那道闸按 boardId 判（isPuzzleBoard），不再问 data.modeKey',
     /if \(isPuzzleBoard\(boardId\)\)/.test(src) && !/if \(String\(data\.modeKey \|\| ''\) === 'puzzle'\)/.test(src));
-  // isPuzzleBoard 认的是现行连同归档的那几张（10-15 补充 S9：原先只认 `:${PUZZLE_KIND}`，归档榜上 300007 印成三十万分）。
-  check('③ 源码：isPuzzleBoard 是 /:puzzle\d*$/', /const isPuzzleBoard = \(boardId\) => \/:puzzle\\d\*\$\/\.test\(String\(boardId\)\);/.test(src));
+  // isPuzzleBoard 认的是现行连同归档的那几张（10-15 补充 S9：原先只认 `:${PUZZLE_KIND}`，归档榜上 300007 印成三十万分），
+  // 推14 Z-B14 起还认 Pro 那张（square:puzzle3:pro）。
+  check('③ 源码：isPuzzleBoard 是 /:puzzle\d*(:pro)?$/', /const isPuzzleBoard = \(boardId\) => \/:puzzle\\d\*\(:pro\)\?\$\/\.test\(String\(boardId\)\);/.test(src));
 }
 
 // ── ④ purge：撤下所有榜，再推也上不去，重建也不请回来 ─────────────────────────
@@ -206,21 +237,25 @@ const X = await makePlayer('x@example.com');
   check('④ 重建之后他还是不在任何一张榜上（存档里那几局不再替他算）', rb.status === 200 && (await boardsOf(id)).length === 0, (await boardsOf(id)).join(' '));
   check('④ 重建之后 banned 还在', (await store.get('stats:' + id))?.banned === true);
 
-  // 他自己去看总榜：老版本那条「没有玩法标记就按存档补回总榜」（healTotalBoard）不能把他补回去。
-  const look = await call({ action: 'board', ...B, mode: '' });
-  check('④ 他自己打开总榜那一下，也没被补回总榜', look.status === 200 && (await store.zscore('lb:total', id)) === null, JSON.stringify(look.status));
-  // 再狠一点：banned 记着、best 里却还留着数（比如一份更老的写法写回去的 stats）。补总榜那一步认的
-  // 是 banned，不是「best 恰好是空的」。
+  // 他自己去看榜（默认选择）：「我」那一行是空的（myBest 先问 banned），旧总榜也没被补回去（healTotalBoard 推14 删了）。
+  for (const k of await store.scanKeys('lbq:*')) await store.del(k);
+  const look = await call({ action: 'board', ...B });
+  check('④ 他自己打开榜：200，「我」那一行是空的，旧总榜上也没有他',
+    look.status === 200 && look.payload?.me === null && (await store.zscore('lb:total', id)) === null, `${look.status} ${JSON.stringify(look.payload?.me)}`);
+  // 再狠一点：banned 记着、best 里却还留着数，榜上也伪造一行（比如一份更老的写法写回去的）。「我」那一行认的是 banned，
+  // 不是「best 恰好是空的」。
   const st3 = await store.get('stats:' + id);
   await store.set('stats:' + id, { ...st3, best: { 'circle:base': 9999 } });
-  await store.hdel('lb:total:mode', id);
-  await call({ action: 'board', ...B, mode: '' });
-  check('④ banned 记着、best 里还留着数：打开总榜也不会把他补回去', (await store.zscore('lb:total', id)) === null, String(await store.zscore('lb:total', id)));
+  await store.zadd('lb:circle:base', 9999, id);
+  for (const k of await store.scanKeys('lbq:*')) await store.del(k);
+  const look2 = await call({ action: 'board', ...B, families: ['circle'], modes: ['base'] });
+  check('④ banned 记着、best 里还留着数：「我」那一行照样是空的', look2.payload?.me === null, JSON.stringify(look2.payload?.me));
+  await store.zrem('lb:circle:base', id);
   await store.set('stats:' + id, st3);
 
   // 尺子：没被撤的人照样上榜。
   const other = await call({ action: 'push', ...A, runId: 'after-2', mode: 'circleSeven', score: 777 });
-  check('④ （尺子）别人照样上榜', other.status === 200 && (await store.zscore('lb:circleSeven', A.email)) === 777);
+  check('④ （尺子）别人照样上榜', other.status === 200 && (await store.zscore('lb:circleSeven:base', A.email)) === 777);
 }
 
 // ── ⑤ 只读的分数统计：只回数 ────────────────────────────────────────────────
@@ -229,7 +264,7 @@ const X = await makePlayer('x@example.com');
   check('⑤ 令牌不对：401', no.status === 401, JSON.stringify(no));
   const st = await call({ action: 'scoreStats', token: TOKEN }, '192.0.2.5');
   const boards = st.payload?.boards || {};
-  check('⑤ 回了每一张现行的榜', st.status === 200 && ['square:base', 'circle:base', 'square:puzzle3', 'circleSeven', 'triangleBig'].every((b) => b in boards), Object.keys(boards).join(' '));
+  check('⑤ 回了每一张现行的榜（那 36 张，推14 Z-B14）', st.status === 200 && ALL_BOARDS.length === 36 && ALL_BOARDS.every((b) => b in boards), Object.keys(boards).join(' '));
   // over / zero 是 10-15 补充 L-5 加的两格（超过上界的行数、0 分的行数）——也只是数。
   check('⑤ 每一张只有 n / max / p999 / over / zero 五个数', Object.values(boards).every((v) => Object.keys(v).sort().join() === 'max,n,over,p999,zero' && Object.values(v).every((x) => typeof x === 'number')));
   check('⑤ 步步为营那张拆回了分数（360，不是 360000）', boards['square:puzzle3']?.max === 360, JSON.stringify(boards['square:puzzle3']));

@@ -1,4 +1,5 @@
 import { buildShell } from '../ui/gameShell';
+import { beatScale } from '../engine/flipSpeed';
 import { applyDevDeal, devDealFor } from '../engine/devDeal';
 import { createGameController } from '../engine/gameController';
 import { groupPoints } from '../engine/groupScore';
@@ -22,6 +23,8 @@ import { createCoachGlow, starClearHintFor, type PlanBoard, type StarClearHint }
 import { extendRunInLine, runLabel as runLabelOf } from '../engine/matchGrowth';
 import { buildEdgeBand } from '../ui/edgeBand';
 import { outerEdges, shortestEdge, EDGE_MIN, EDGE_MIN_ENDGAME, NO_EDGE, type EdgeBoard } from '../engine/outerEdge';
+import { createLooseEnd } from '../engine/looseEnd';
+import { pickLineGroup } from '../engine/linePick';
 import { packSnapshot, type BoardSnapshot, type RawCell } from '../engine/shareCard';
 import { renderPatternHintIcons, type PatternDef } from '../engine/patternIcon';
 import { scoreForSize, sizeAtLevel } from '../engine/targets';
@@ -547,11 +550,16 @@ export function createCircleGame(): ShapeGame {
         return boxOf(all)!;
       })();
       /** 此刻还在盘上的那些格子。削掉离场的不算（《侵蚀阶梯》v1.2 §3）。 */
+      /** 上一次还有活格时那一份（liveBox 盘空时用；resetBoard 清空）。 */
+      let lastLiveCells: Cell[] = [];
       function liveBox(): FitBox | null {
         const cells: Cell[] = [];
         for (let r = 0; r < ROWS; r++)
           for (let c = 0; c <= r; c++) if (grid[r]?.[c] && !isBlank(grid[r][c])) cells.push([r, c]);
-        return boxOf(cells);
+        // 盘空了（最后一拍刚把剩下的消光）：用上一次还有活格时那一份，最后一拍的淡出替身原地、按满盘尺寸淡出，不缩回去
+        // （D85，finale-zoom ②③，推14 Z-B09 第 9 条）。
+        if (cells.length) lastLiveCells = cells;
+        return boxOf(cells.length ? cells : lastLiveCells);
       }
 
       function layoutBoard() {
@@ -878,21 +886,77 @@ export function createCircleGame(): ShapeGame {
        * 一条线来，穿过它的每条线当场断成两段——而滑动是在一条连续的活格上做循环移
        * 位，断了就再也滑不动了。
        */
-      function collectEdges(threshold: number): Cell[][] {
+      /** 这一组那一色的星星此刻盘上一共几颗（engine/linePick.ts 的 ②：一样长时剩得少的那一色先，站长 D23）。 */
+      const starsOfColour = (g: readonly Cell[]): number => {
+        const col = grid[g[0][0]][g[0][1]].dotColor;
+        let n = 0;
+        for (let r = 0; r < grid.length; r++) {
+          for (let c = 0; c < grid[r].length; c++) {
+            if (!edgeBoard.isLive(r, c)) continue;
+            const t = grid[r][c];
+            if (t.face === 'dot' && t.dotColor === col) n++;
+          }
+        }
+        return n;
+      };
+      /** 此刻够格的那几组整线（整条同色星星、没领过奖）——**只看、不记签名、不改任何状态**（finalGroupNext 也问它）。 */
+      function edgeCandidates(threshold: number): Cell[][] {
         const found: Cell[][] = [];
         for (const { live } of outerEdges(edgeBoard, threshold)) {
           if (!isFullDotMatch(live)) continue;
-          const sig = edgeSig(live);
-          if (bonusedSignatures.has(sig)) continue;
-          bonusedSignatures.add(sig);
+          if (bonusedSignatures.has(edgeSig(live))) continue;
           found.push(live);
         }
         return found;
       }
+      /**
+       * 这一拍交哪一条：**一拍只消一组**（10-31 方案推14 Z-B09 R2′，站长 D01 甲）——够格的里头挑一条（engine/linePick.ts：
+       * 最长的先、一样长时那一色星星剩得少的先、再按扫描次序），只给它记签名。剩下的下一拍再问（那时候盘面已经放大过）。
+       */
+      function collectEdges(threshold: number): Cell[][] {
+        const cands = edgeCandidates(threshold);
+        const i = pickLineGroup(cands, starsOfColour);
+        if (i < 0) return [];
+        bonusedSignatures.add(edgeSig(cands[i]));
+        return [cands[i]];
+      }
+
+      /**
+       * 下一拍会不会把盘上剩下的一次消光（gameController 的 finalGroupNext，推14 Z-B09 第 4 条）——只问、不改状态。是的话
+       * 控制器在那一拍之前定格 1.4 秒。活格（不含活炸弹）非空且全是星星；散边队列非空时只在「只剩一枚」才算；否则够格的
+       * 整线里有一组长度等于活格数。无限反转回 false（反面会翻回来，不消线）。
+       */
+      function finalGroupNext(): boolean {
+        if (flipMode) return false;
+        const live: Cell[] = [];
+        for (let r = 0; r < grid.length; r++) {
+          for (let c = 0; c < grid[r].length; c++) {
+            if (edgeBoard.isLive(r, c) && !liveBomb(grid[r][c])) live.push([r, c]);
+          }
+        }
+        if (!live.length || !live.every(([r, c]) => grid[r][c].face === 'dot')) return false;
+        if (loose.pending() > 0) return live.length === 1;
+        return edgeCandidates(EDGE_MIN_ENDGAME).some((g) => g.length === live.length);
+      }
+
+      /**
+       * 死后散边（engine/looseEnd.ts，10-31 方案推14 Z-B04）：放开之后又卡死，最外面一条很短、全是星星的边不论颜色一颗一颗
+       * 削（每颗 1 分）。为什么：三角格阵上最小的核每条边都是 3 枚。活炸弹不许被削。
+       */
+      const loose = createLooseEnd({
+        edgeBoard,
+        isLooseStar: (r, c) => grid[r][c].face === 'dot' && !liveBomb(grid[r][c]),
+        stuck: () => stuckAt(EDGE_MIN_ENDGAME).length > 0,
+      });
 
       function findWholeLineBonuses(): Cell[][] {
+        // 散边队列里还有就先交一颗（同一条边一颗一颗削，D28）。
+        const queued = loose.nextQueued();
+        if (queued) return queued;
         const found = collectEdges(edgeThreshold());
-        if (found.length || endgameOpen || flipMode) return found;
+        if (found.length || flipMode) return found;
+        // 已经放开过：又削不动了就挑一条死后散边（engine/looseEnd.ts，推14 Z-B04）。
+        if (endgameOpen) return loose.pick();
         /*
          * **收尾放开**（《侵蚀阶梯》v1.2 §3）。
          *
@@ -908,7 +972,8 @@ export function createCircleGame(): ShapeGame {
          */
         if (!stuckAt(edgeThreshold()).length) return found;
         endgameOpen = true;
-        return collectEdges(EDGE_MIN_ENDGAME);
+        const opened = collectEdges(EDGE_MIN_ENDGAME);
+        return opened.length ? opened : loose.pick();
       }
 
       // Flips the bonused line's tiles to their dot face (matching what the
@@ -1029,7 +1094,16 @@ export function createCircleGame(): ShapeGame {
         return { color: effColor(t), dot: t.face === 'dot' };
       };
 
+      /**
+       * Pro 局卡死时先松一级再问（controller.relaxIfStuck，10-31 方案推14 Z-B13）。**必须包在棋盘自己的 stuckAt 里**：收尾
+       * 放开也问它，而且在连锁里更早问到——只在控制器那一句 updateStuckState 里松的话，星星先被削光，剩下那一两枚色块
+       * 再也滑不动（pro-score §1.3 第 3 条，已模拟：六边圆球高手 35% 的局会这样）。不是 Pro 局时原样回 stuckAtRaw。
+       */
       function stuckAt(threshold: number): Cell[][] {
+        return controller.relaxIfStuck(() => stuckAtRaw(threshold));
+      }
+
+      function stuckAtRaw(threshold: number): Cell[][] {
         const edge = shortestEdge(edgeBoard, threshold);
         const need = target ? targetNeed() : controller.matchLen();
         const live = liveTiles();
@@ -1123,6 +1197,7 @@ export function createCircleGame(): ShapeGame {
       }
 
       function resetBoard(deal?: { pro: boolean }) {
+        lastLiveCells = [];
         // 手指还按着的那一次拖动不许落到新发的牌上（10-31 方案推07 Z-H03 ①）：按着不松 → 暂停 →《再来一局》→ 松手，原先
         // 旧的那次拖动接着结算在新的一局上（新的一局记 1 步，重开到松手之间新盘上还画着旧链的影子）。onEnd 拿到 null 只重画。
         chains.stopAll();
@@ -1150,6 +1225,7 @@ export function createCircleGame(): ShapeGame {
         // 「最短边门槛 1」，而玩家看到的是一副全新的棋盘。不崩、不报错，只是
         // 这一局的消除规则悄悄比规则书写的松。
         endgameOpen = false;
+        loose.reset();
         glow.reset();
       }
 
@@ -1312,9 +1388,11 @@ export function createCircleGame(): ShapeGame {
         signInHint: opts?.signInHint,
         onLive: opts?.onLive,
         shouldTeachTotal: opts?.shouldTeachTotal,
+        shouldTeachFlip: opts?.shouldTeachFlip,
         resetBoard,
         render,
         isGameOver,
+        finalGroupNext,
         buildCascadeConfig,
         checkHazard: isBomb ? checkBombHazard : undefined,
         findStuckGroups,
@@ -1354,6 +1432,7 @@ export function createCircleGame(): ShapeGame {
       });
 
       const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      // 淡出时长乘这一拍的倍数（engine/flipSpeed.ts 的 beatScale：拉杆倍率、自动消线拍 0.4，推14 Z-B09 第 8 条）。
       const REMOVE_FADE_MS = 700;
       // Captured by applyLineBonus (the only point that still has the old
       // dot color, right before overwriting it to BLANK) and consumed here
@@ -1374,9 +1453,9 @@ export function createCircleGame(): ShapeGame {
             ghost.style.pointerEvents = 'none';
             ghost.style.opacity = '1';
             refs.boardEl.appendChild(ghost);
-            ghost.style.transition = `opacity ${REMOVE_FADE_MS}ms ease`;
+            ghost.style.transition = `opacity ${Math.round(REMOVE_FADE_MS * beatScale())}ms ease`;
             requestAnimationFrame(() => { ghost.style.opacity = '0'; });
-            setTimeout(() => ghost.remove(), REMOVE_FADE_MS + 40);
+            setTimeout(() => ghost.remove(), Math.round(REMOVE_FADE_MS * beatScale()) + 40);
           }
         }
       }

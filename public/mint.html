@@ -144,13 +144,13 @@
       <!-- 第 16 推的一次性迁移（api/scores.js 的 buildNicknameIndex）。上线之后只勾这一项跑一次。 -->
       <input id="buildNicknames" type="checkbox" />
       <label for="buildNicknames" style="margin:0;font-weight:400">
-        <strong>建立昵称索引</strong>：把旧榜名整理成「一个账号一个、全站唯一」。重名的留给总榜分数最高的那个账号，其余清掉（他们下次打开会看到「设置昵称」）。只回几个数，不列名字。
+        <strong>建立昵称索引</strong>：把旧榜名整理成「一个账号一个、全站唯一」。重名的留给最高分记录最高的那个账号，其余清掉（他们下次打开会看到「设置昵称」）。只回几个数，不列名字。
       </label>
     </div>
     <div class="check">
       <input id="wipeAll" type="checkbox" />
       <label for="wipeAll" style="margin:0;font-weight:400">
-        <strong>全部清空</strong>：所有玩法的榜一张不留，总榜也清。改了记分尺子之后用它。
+        <strong>全部清空</strong>：所有玩法的榜一张不留，今天和昨天的今日榜也清，旧总榜键一并删除。换计分规则之后用它。
       </label>
     </div>
     <p style="margin:0 0 10px;color:var(--soft);font-size:0.85rem;line-height:1.5">

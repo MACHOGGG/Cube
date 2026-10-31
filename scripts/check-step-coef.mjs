@@ -22,6 +22,9 @@
  *
  * 外加一条「任意前缀 ≤ 打完」：录三条走子序列，每走一步算一次综合分，最后那一下
  * 必须是最高的。这一条钉的是整套规则的**方向**——不能出现「早点退出更划算」。
+ *
+ * 10-31 方案推14 Z-B08 起还有「剩余色块九折」（leftoverScale(n) = 0.9 连乘 n 次）：服务器手抄一份（api/_maxscore.js），
+ * 交卷时自己按结局理由算一遍、和客户端交上来的综合分**逐位相等**才收——两份差一个末位，判死、手动结束的局全被拒。
  * ─────────────────────────────────────────────────────────────────────────
  */
 const src = process.argv[2];
@@ -29,7 +32,8 @@ if (!src) {
   console.error('用法: node scripts/check-step-coef.mjs <打包好的 stepCoef.mjs>');
   process.exit(2);
 }
-const { stepCoefFor } = await import(src);
+const { stepCoefFor, leftoverScale, LEFTOVER_K } = await import(src);
+const MS = await import('../api/_maxscore.js');
 
 let fail = 0;
 const check = (name, ok, extra = '') => {
@@ -128,6 +132,18 @@ const near = (a, b) => Math.abs(a - b) < 1e-9;
     check(`「${run.name}」：打完那一下就是最高分（任意前缀 ≤ 打完）`,
       last === best, `打完 ${last} / 最高 ${best}（第 ${totals.indexOf(best) + 1} 步）`);
   }
+}
+
+// ---------------------------------------------------------------------------
+// 剩余色块九折（推14 Z-B08）：客户端和服务端逐位一致
+// ---------------------------------------------------------------------------
+{
+  check('九折：leftoverScale(0) === 1（清盘、没剩色块不扣）', leftoverScale(0) === 1 && MS.leftoverScale(0) === 1);
+  check('九折：k 两边都是 0.9', LEFTOVER_K === 0.9 && MS.LEFTOVER_K === 0.9);
+  const off = [];
+  for (let n = 0; n <= 60; n++) if (!Object.is(leftoverScale(n), MS.leftoverScale(n))) off.push(`${n}: ${leftoverScale(n)} vs ${MS.leftoverScale(n)}`);
+  check('九折：n = 0…60 客户端和服务端 Object.is 逐位一致', off.length === 0, off.slice(0, 3).join(' / '));
+  check("九折：leftoverScale(2).toFixed(2) === '0.81'", leftoverScale(2).toFixed(2) === '0.81', leftoverScale(2).toFixed(2));
 }
 
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);

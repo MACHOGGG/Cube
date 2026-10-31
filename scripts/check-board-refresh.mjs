@@ -87,6 +87,8 @@ store.set(ENTITLEMENT_KEY, JSON.stringify({
 
 const api = await import(bundle);
 const { cachedBoard, fetchBoard, invalidateBoards, pushRun, waitForPush } = api;
+/** 方块 · 基础那一格（推14 Z-B15 起榜是三行筛选；原先这儿是 'square:base' 那种榜键）。 */
+const SQ = { families: ['square'], tiers: [], modes: ['base'] };
 
 // ── ⓪ 前提：这套假浏览器真的让它跑起来了 ────────────────────────
 {
@@ -104,11 +106,22 @@ const { cachedBoard, fetchBoard, invalidateBoards, pushRun, waitForPush } = api;
   check('① 刚取过那一张，缓存里有', Boolean(had) && had.rows.length === 1);
   check('① 读缓存不打网络', calls.length === 0, String(calls.length));
 
-  // 另一张榜（另一个 mode）是另一格，不许串台。
-  check('① 没取过的那张榜缓存里没有', cachedBoard('square:base') === null);
-  await fetchBoard('square:base');
-  check('① 取过之后它才有', Boolean(cachedBoard('square:base')));
-  check('① 两格互不干扰（总榜那一格还在）', Boolean(cachedBoard()));
+  // 另一张榜（另一种三行选择，推14 Z-B15）是另一格，不许串台。
+  check('① 没取过的那张榜缓存里没有', cachedBoard(SQ) === null);
+  calls = [];
+  await fetchBoard(SQ);
+  check('① 取过之后它才有', Boolean(cachedBoard(SQ)));
+  check('① 两格互不干扰（「全部」那一格还在）', Boolean(cachedBoard()));
+  // 请求格式：三行照服务端的格式交，「全部」那一行不传，不带 mode（mode 只给今日榜用）。
+  const req = calls.find((c) => c.action === 'board')?.body ?? {};
+  check('① 请求是 { families: [square], modes: [base] }，没有 tiers、没有 mode',
+    JSON.stringify(req.families) === '["square"]' && JSON.stringify(req.modes) === '["base"]' && !('tiers' in req) && !('mode' in req),
+    JSON.stringify(req));
+  // 缓存键按规范化之后的选择：一行全选上 = 「全部」、乱序 = 同一格。
+  check('① 一行全选上和「全部」是同一格（三族全点 = 全部）',
+    cachedBoard({ families: ['triangle', 'circle', 'square'], tiers: [], modes: [] }) === cachedBoard());
+  check('① 乱序是同一格', cachedBoard({ families: ['square'], tiers: [], modes: ['base'] }) === cachedBoard(SQ));
+  check('① 今日榜是自己那一格（没取过就没有）', cachedBoard('daily') === null);
 }
 
 // ── ② 打完一局：整张表作废 ──────────────────────────────────────
@@ -119,7 +132,7 @@ const { cachedBoard, fetchBoard, invalidateBoards, pushRun, waitForPush } = api;
   pushRun({ at: Date.now(), shapeId: 'square', modeKey: 'base', totalScore: 42 });
   check('② 上报真的发出去了', calls.some((c) => c.action === 'push'), JSON.stringify(calls.map((c) => c.action)));
   check('② 总榜那一格作废了', cachedBoard() === null);
-  check('② 别的榜那一格也作废了（自己那一行可能在任何一张上）', cachedBoard('square:base') === null);
+  check('② 别的榜那一格也作废了（自己那一行可能在任何一张上）', cachedBoard(SQ) === null);
   // 顺带钉住：**上报不带名字**（第 16 推）。从前带着 name + nameV，于是哪台设备最后交卷，
   // 榜上就是哪台设备上存的那个名字。昵称现在只走改名接口（engine/nickname.ts）。
   const push = calls.find((c) => c.action === 'push');

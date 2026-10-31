@@ -32,7 +32,7 @@
  *      done: true，一共算了 25 个人、写了 25 行——一个没漏、一个没算两遍；
  *   ⑧ 断点记在库里：一批算完，票上的「算到了谁」就是这一批最后那个人（按 id 排序），下一批
  *      从他后面接着算；
- *   ⑨ 同一轮的选项照第一批定下的：第一批说了 drop: ['flip']，后面几批请求里不写（或者写别
+ *   ⑨ 同一轮的选项照第一批定下的：第一批说了 drop: ['flip2']，后面几批请求里不写（或者写别
  *      的）也照样清掉无限反转——不然一轮重建前后几批各按各的规矩算；
  *   ⑩ 续跑不吃限速：batch: 1 跑满 25 批（超过一小时 20 次的限速）一次 429 都没有；
  *   ⑪ 编的票照普通的一次算：不认识的票回 410 resume，而且照样计入限速（第 21 次是 429）；
@@ -201,12 +201,14 @@ async function player(i) {
   const acct = accounts.newAccount('secret', 'code');
   acct.until = Date.now() + 30 * 24 * 3600e3;
   await accounts.saveAccount(email, acct);
-  for (const [runId, modeKey, score] of [[`b${i}`, 'base', 100 + i], [`f${i}`, 'flip', 900 + i]]) {
+  // 无限反转那一局：综合分 = 拼出分 × 6（方块的反转系数，推14 Z-B06），夹具要它是 6 的倍数（原先 900 + i）。
+  for (const [runId, modeKey, score] of [[`b${i}`, 'base', 100 + i], [`f${i}`, 'flip', 6 * (150 + i)]]) {
     // 明细由夹具拼齐（10-11 方案 A-3：服务器对每一局对一遍账，缺明细的不上榜；scripts/lib/fakeRun.mjs）。
-    // 不写 flipRules：这一局落进归档的 square:flip，下面量的就是那张榜。
+    // 写 flipRules: 2：这一局落在现行的 square:flip2 上，下面量的就是那张榜。（原先不写、落进归档的 square:flip；推14 Z-B14
+    // 起旧版本的局不上任何榜，再那样写这张榜就是空的。）
     const r = await call(scores, {
       action: 'push', email, token: acct.token, runId, mode: 'square', score,
-      data: fillRun('square', score, { modeKey, rules: SCORING_V }),
+      data: fillRun('square', score, { modeKey, rules: SCORING_V, ...(modeKey === 'flip' ? { flipRules: 2 } : {}) }),
     }, `10.1.0.${i}`);
     if (r.status !== 200) throw new Error(`夹具交卷没成：${email} ${r.status} ${JSON.stringify(r.body)}`);
   }
@@ -216,13 +218,14 @@ const N = 25;
 const emails = [];
 for (let i = 1; i <= N; i++) emails.push(await player(i));
 const ids = [...emails].sort();
-const flipBoard = async () => (await store.zTop('lb:square:flip', 100)).length;
+const flipBoard = async () => (await store.zTop('lb:square:flip2', 100)).length;
 check('（尺子）25 个人都在无限反转那张榜上', (await flipBoard()) === N, String(await flipBoard()));
 
 // ── ⑦ ⑧ ⑨ 拆成几批算完 ──────────────────────────────────────────────────────
 {
   const replies = [];
-  let r = await call(scores, { action: 'rebuild', token: TOKEN, drop: ['flip'], batch: 3 }, '10.2.0.1');
+  // drop 点的是榜号里那个玩法名（现行无限反转是 flip2）。
+  let r = await call(scores, { action: 'rebuild', token: TOKEN, drop: ['flip2'], batch: 3 }, '10.2.0.1');
   replies.push(r);
   const firstTicket = r.body?.resume;
   check('⑦ 第一批：没算完，回一张票（32 位十六进制）、还剩几个',
@@ -291,6 +294,30 @@ check('（尺子）25 个人都在无限反转那张榜上', (await flipBoard())
   check('⑬ 人少的时候一次就算完（done: true），回包的字段和原先一样',
     r.status === 200 && r.body?.done === true && r.body?.players === N && keys.every((k) => k in (r.body || {})),
     JSON.stringify(r.body));
+}
+
+// ── ⑬′ 全部清空分批跑：删今日榜只在头一批做一次（10-31 方案推14 Z-B19）──────────────────────────
+//
+// 全清那一轮第一批就把今天、昨天两张今日榜和旧总榜删掉；后面几批带着票接着算人，不许再删一遍——中间有人交了一局今天的
+// 每日挑战，那一行要留着（不然全清一次跑十几批，这十几批里交的每日局全被吃掉）。
+{
+  const SC = await import('../api/_seedcode.js');
+  const dkey = 'lb:daily:' + SC.dayKey(SC.dayIndexOf(Date.now()));
+  await store.zadd(dkey, 50, 'before@example.com');
+  let r = await call(scores, { action: 'rebuild', token: TOKEN, all: true, batch: 10 }, '10.7.0.1');
+  const replies = [r];
+  check('⑬′ 全清第一批：今日榜删了，回包说清了', r.status === 200 && (await store.zscore(dkey, 'before@example.com')) === null && r.body?.dailyCleared === true,
+    `${r.status} ${JSON.stringify(r.body)}`);
+  // 第一批之后有人交了一局今天的每日挑战。
+  await store.zadd(dkey, 60, 'after@example.com');
+  let guard = 0;
+  while (r.body?.done === false && guard++ < 20) {
+    r = await call(scores, { action: 'rebuild', token: TOKEN, resume: r.body.resume, batch: 10 }, '10.7.0.1');
+    replies.push(r);
+  }
+  check('⑬′（尺子）分了三批才算完', replies.length === 3 && r.body?.done === true, `${replies.length} 批`);
+  check('⑬′ 后面两批不再删今日榜：第一批之后交的那一行还在', (await store.zscore(dkey, 'after@example.com')) === 60, String(await store.zscore(dkey, 'after@example.com')));
+  await store.del(dkey);
 }
 
 // ── ⑭ 令牌比对量不出长度（10-11 方案 A-11）──────────────────────────────

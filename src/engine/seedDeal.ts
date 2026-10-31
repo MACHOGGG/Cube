@@ -21,7 +21,7 @@ import {
   type SeedSource,
   type SeedVariant,
 } from './seedCode';
-import { MODE_SECONDS } from './modeClock';
+import { FLIP_SECONDS, timedSecondsFor } from './modeClock';
 import type { ShapeGameOpts } from '../shapes/types';
 
 /**
@@ -103,12 +103,12 @@ export function seedGameOf(code: string, source: SeedSource, daily?: string): Se
     case 'base':
       return { board, variant, opts: { seed } };
     case 'timed':
-      return { board, variant, opts: { seed, timeLimitSec: MODE_SECONDS } };
+      return { board, variant, opts: { seed, timeLimitSec: timedSecondsFor(board) } };
     case 'bomb':
     case 'bombAdv':
       return { board, variant, opts: { seed, bomb: true } };
     case 'bombTimed':
-      return { board, variant, opts: { seed, bomb: true, timeLimitSec: MODE_SECONDS } };
+      return { board, variant, opts: { seed, bomb: true, timeLimitSec: timedSecondsFor(board) } };
     case 'slot': {
       // 目标从这串码里抽（和老虎机那一页、和控制器开局时抽的是同一下）。
       const family: Family = board === 'circle' ? 'circle' : 'square';
@@ -117,7 +117,7 @@ export function seedGameOf(code: string, source: SeedSource, daily?: string): Se
       return { board, variant, opts: { seed, target } };
     }
     case 'flip':
-      return { board, variant, opts: { seed, flip: true, timeLimitSec: MODE_SECONDS } };
+      return { board, variant, opts: { seed, flip: true, timeLimitSec: FLIP_SECONDS } };
     case 'puzzle':
       return { board, variant, opts: { seed, steps: true } };
   }

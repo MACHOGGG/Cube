@@ -13,7 +13,7 @@ import { landscapePlayed, markLandscapePlayed } from '../engine/landscapeSeen';
 import { planFor, slotMachineHtml, spinSlot } from './slotReels';
 import { needsTurn } from './dailyMode';
 import { menuTag } from './menuTags';
-import { slotTip } from './modeTips';
+import { slotTip, timedTipText } from './modeTips';
 import { drawOne, targetsOf, type Family, type TargetPattern } from '../engine/targets';
 import { cardOf } from '../shapes/registry';
 import { modeKeyOf } from '../engine/runKey';
@@ -159,7 +159,7 @@ export interface ShellRefs {
   endScoreEl: HTMLElement;
   /** 总分旁边那枚通关章的落脚处。平时是空的。 */
   endStampEl: HTMLElement;
-  /** 分数右边那一排徽章（清盘 / 解锁 1 枚）。一个都没有就是空的。 */
+  /** 分数右边那一排徽章（清盘；老虎机多一枚降到底）。一个都没有就是空的。 */
   endBadgesEl: HTMLElement;
   /** 每日挑战那一局没进今日榜时说的那一句（平时藏着）。 */
   endDailyNoteEl: HTMLElement;
@@ -593,7 +593,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
         <div class="end-head">
           <h2 class="end-title" id="endTitle">${s.compositeScoreLabel}</h2>
           <div class="big-score" id="endScore">0</div>
-          <!-- 徽章（清盘 / 解锁 1 枚），一个都没有就是空的、不占地方。 -->
+          <!-- 徽章（清盘；老虎机多一枚降到底），一个都没有就是空的、不占地方。 -->
           <div class="end-badges" id="endBadges"></div>
           <!-- 那枚通关章：只在「全部翻成点面」那一种终局出现，别的终局这个 span 是空的，而空的
                它自己不占位（.end-stamp:empty）——不是画了再藏，是根本不画（见 engine/kinetics.ts
@@ -816,9 +816,9 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     if (slotTarget) {
       tips.push({ key: 'slot', art: slotTip(meta.lang, slotTarget).art });
     }
-    // 无限反转也是 100 秒，可它那一条自己就带着「限时 100 秒」，不必再摆一条计时
-    //（头上那个读数的显隐用的也是这同一个判断）。
-    if (meta.timed && !meta.flip) tips.push({ key: 'timed' });
+    // 无限反转也带钟（100 秒），可它那一条自己就带着「限时 100 秒」，不必再摆一条计时
+    //（头上那个读数的显隐用的也是这同一个判断）。计时那一句按这副棋盘填秒数（小球 60、方块 100，推14 Z-B05）。
+    if (meta.timed && !meta.flip) tips.push({ key: 'timed', text: timedTipText(meta.lang, meta.shapeId) });
     // 步步为营：余步怎么扣、怎么退（2026-10-08 方案 2-9）。和头一回进这个玩法时棋盘底下那
     // 句是同一份文案（i18n 的 MODE_TIPS.puzzle），这一局的标记是 meta.steps。
     if (meta.steps) tips.push({ key: 'puzzle' });

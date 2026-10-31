@@ -3,10 +3,10 @@
  *
  *   import { deriveFacts } from './lib/boardFacts.mjs';
  *   const facts = await deriveFacts();
- *   facts.boards.square   // { N, d, Lmax, par, lines }
+ *   facts.boards.square   // { N, d, Lmax, par, proPar, lines }
  *   facts.slotP.square    // 老虎机：「经过某一格的不同摆法数 × ⌈k²/2⌉」的最大值
  *   facts.flipStep.circle // 无限反转：一步之内各拍原始分之和、拍数的上界
- *   facts.consts          // MODE_SECONDS、连击封顶、每枚几分……
+ *   facts.consts          // TIMED_SECONDS、FLIP_SECONDS、FLIP_COEF、连击封顶、每枚几分……
  *
  * api/ 是纯 .js，import 不进 src 里的 ts，所以服务器那几张表只能手抄；手抄的东西没人对就会悄悄走样
  * ——改了棋盘、阶梯、计分，服务器还拿旧尺子量，真玩家打出来的分就被当成「打不出来」拒掉。门
@@ -19,7 +19,7 @@
  *     （engine/residueBoard.ts 的 gridLines，方块那一副自己也是这么交出它的线的）。
  *   · d（一枚最多同时在几条线上）、Lmax（一条线上最多几枚活格）：照线数出来。六边圆球中心那个永久
  *     空位（`CENTER_CELL`）在线上占一格，可它不是棋子——不算进 Lmax。
- *   · par：engine/erosion.ts 的 EROSION_TABLE。
+ *   · par：engine/erosion.ts 的 EROSION_TABLE；proPar：同一个文件的 proParOf（推14 Z-B13）。
  *   · 老虎机的 P：engine/targetMatch.ts 的 erodedShapes + orientationsOf + findTargetAt，在真棋盘的格子
  *     上把每一级、每一个子形、每一种摆法都摆一遍，数「经过同一格的不同摆法」最多几种。
  *   · 无限反转一步的上界：照线数「每条线上每一段 ≥ 4 枚的连续段」（图案冻结在 1×4：engine/erosion.ts
@@ -47,9 +47,9 @@ const SHAPES_DIR = ROOT + 'src/shapes/';
 /** 打一份 engine 那几个纯模块的包，import 进来。 */
 async function loadEngine() {
   const entry = `
-    export { EROSION_TABLE, createErosion } from './src/engine/erosion';
-    export { MODE_SECONDS } from './src/engine/modeClock';
-    export { FLIP_STREAK_BASE, FLIP_STREAK_CAP, POINTS_PER_FLIP, TOGGLE_SCORES_PER_GROUP } from './src/engine/scoring';
+    export { EROSION_TABLE, createErosion, proParOf } from './src/engine/erosion';
+    export { TIMED_SECONDS, FLIP_SECONDS } from './src/engine/modeClock';
+    export { FLIP_STREAK_BASE, FLIP_STREAK_CAP, FLIP_COEF, POINTS_PER_FLIP, TOGGLE_SCORES_PER_GROUP } from './src/engine/scoring';
     export { MIN_GROUP_POINTS } from './src/engine/groupScore';
     export { BOMB_HAZARD_PENALTY } from './src/engine/bomb';
     export { PUZZLE_CLEARED_POINTS, PUZZLE_STAR_POINTS, PUZZLE_START_STEPS } from './src/engine/puzzleScore';
@@ -258,7 +258,7 @@ export async function deriveFacts() {
     const g = geometryFacts(geo, engine);
     const table = engine.EROSION_TABLE[geo.id];
     if (!table) throw new Error(`boardFacts：engine/erosion.ts 的 EROSION_TABLE 里没有 ${geo.id}`);
-    boards[geo.id] = { ...g, par: table.par, file: f };
+    boards[geo.id] = { ...g, par: table.par, proPar: engine.proParOf(table.par), file: f };
   }
 
   // 无限反转的图案冻结在开局那一级（1×4）：真的扣一千段，看它降不降。
@@ -283,7 +283,9 @@ export async function deriveFacts() {
     slotP: P,
     flipStep: F,
     consts: {
-      MODE_SECONDS: engine.MODE_SECONDS,
+      TIMED_SECONDS: engine.TIMED_SECONDS,
+      FLIP_SECONDS: engine.FLIP_SECONDS,
+      FLIP_COEF: engine.FLIP_COEF,
       FLIP_MULT_CAP: engine.FLIP_STREAK_BASE ** engine.FLIP_STREAK_CAP,
       POINTS_PER_FLIP: engine.POINTS_PER_FLIP,
       BOMB_HAZARD_PENALTY: engine.BOMB_HAZARD_PENALTY,

@@ -274,25 +274,26 @@ await browser.close();
   check('⑥（尺子）存档只剩最近 60 局，900 那一局已经不在里头', archive.length === 60 && !archive.some((r) => r.score === 900),
     `${archive.length} 局，最高 ${Math.max(...archive.map((r) => r.score))}`);
   const r1 = await rebuild();
-  check('⑥ 61 局以前的最高分重建之后不掉：方块基础榜、总榜上都还是 900',
-    r1.status === 200 && (await on('square:base', P.email)) === 900 && (await on('total', P.email)) === 900,
+  // 旧总榜 lb:total 推14 起退役（不读不写，Z-B15 ⑦）：原先这几条也量它，现在量它一直是空的。
+  check('⑥ 61 局以前的最高分重建之后不掉：方块基础榜上还是 900（旧总榜不写）',
+    r1.status === 200 && (await on('square:base', P.email)) === 900 && (await on('total', P.email)) === null,
     `${r1.status} 榜 ${await on('square:base', P.email)} 总榜 ${await on('total', P.email)}`);
 
   // 全清之后点一次普通重建：同规则、没超上界的老高分回来（mint.html 那句「全清是可逆的」）。
   const w = await rebuild({ all: true });
-  check('⑥ 全部清空：900 那一行撤了', w.status === 200 && (await on('square:base', P.email)) === null && (await on('total', P.email)) === null,
+  check('⑥ 全部清空：900 那一行撤了', w.status === 200 && (await on('square:base', P.email)) === null,
     `${w.status} ${await on('square:base', P.email)}`);
   await rebuild();
   check('⑥ 全清之后普通重建：900 回来了（存档里翻不出它，靠的是留着的最高分记录）',
-    (await on('square:base', P.email)) === 900 && (await on('total', P.email)) === 900, String(await on('square:base', P.email)));
+    (await on('square:base', P.email)) === 900, String(await on('square:base', P.email)));
 
   // 只打过 0 分局、又没起昵称：旧版本留下的那一行 0 分（那时 0 分也上榜）。
   const Z = await player('rb-zero@example.com');
   await push(Z, 0);
   await store.zadd('lb:square:base', 0, Z.email);
   const names = await store.hget('lbnames', Z.email);
-  check('⑥（尺子）这个人没有昵称、不在总榜上，只在方块基础榜上躺着一行 0 分',
-    !names && (await on('total', Z.email)) === null && (await on('square:base', Z.email)) === 0, `${JSON.stringify(names)} · ${await on('square:base', Z.email)}`);
+  check('⑥（尺子）这个人没有昵称，只在方块基础榜上躺着一行 0 分',
+    !names && (await on('square:base', Z.email)) === 0, `${JSON.stringify(names)} · ${await on('square:base', Z.email)}`);
   await rebuild({ all: true });
   check('⑥ 无昵称、只有 0 分局的人：全部清空之后榜上没有他', (await on('square:base', Z.email)) === null, String(await on('square:base', Z.email)));
 
@@ -302,12 +303,11 @@ await browser.close();
   const sx = await store.get('stats:' + X.email);
   await store.set('stats:' + X.email, { ...sx, best: { ...sx.best, 'square:base': 999999999 } });
   await store.zadd('lb:square:base', 999999999, X.email);
-  await store.zadd('lb:total', 999999999, X.email);
   await rebuild();
   const sx2 = await store.get('stats:' + X.email);
-  check('⑥ 超出方块基础榜上界（1,469,664）的旧最高分：重建之后换成存档算得出来的 300',
-    (await on('square:base', X.email)) === 300 && (await on('total', X.email)) === 300 && sx2?.best?.['square:base'] === 300,
-    `榜 ${await on('square:base', X.email)} 总榜 ${await on('total', X.email)} best ${JSON.stringify(sx2?.best)}`);
+  check('⑥ 超出方块基础榜上界（推14 起 2,129,400）的旧最高分：重建之后换成存档算得出来的 300',
+    (await on('square:base', X.email)) === 300 && sx2?.best?.['square:base'] === 300,
+    `榜 ${await on('square:base', X.email)} best ${JSON.stringify(sx2?.best)}`);
 
   // 换过计分规则的旧最高分：stats.bestRules 不是现行那一版。
   const R = await player('rb-old-rules@example.com');
@@ -316,6 +316,44 @@ await browser.close();
   await store.set('stats:' + R.email, { ...sr, best: { ...sr.best, 'square:base': 5000 }, bestRules: 'older' });
   await rebuild();
   check('⑥ 换过计分规则的旧最高分不留：重建之后是存档里的 200', (await on('square:base', R.email)) === 200, String(await on('square:base', R.email)));
+
+  // 每日挑战、小屋、敲代号开的局都进对应玩法的常规榜（推14 Z-B17，站长 10-22）：重建也照存档把它们写回去。
+  for (const src of ['entered', 'daily', 'room']) {
+    const Q = await player(`rb-src-${src}@example.com`);
+    await call({ action: 'push', ...Q, runId: `rb-src-${src}`, mode: 'square', score: 420, data: { ...fillRun('square', 420, {}), rules: SCORING_V, seedSource: src } });
+    await store.zrem('lb:square:base', Q.email);
+    await rebuild();
+    check(`⑥ seedSource ${src} 的局：重建之后照存档写回方块基础榜（420）`, (await on('square:base', Q.email)) === 420, String(await on('square:base', Q.email)));
+  }
+
+  // 全部清空连今日榜一起删（推14 Z-B19，站长 D07）：今天、昨天两张今日榜和旧总榜 lb:total / lb:total:mode 都删掉，8 天前那张不碰
+  // （8 天过期，自己会走）；不勾全清的普通重建不碰今日榜。今日榜的键照服务器自己的北京日期算（api/_seedcode.js）。
+  {
+    const SC = await import('../api/_seedcode.js');
+    const today = SC.dayIndexOf(Date.now());
+    const key = (d) => 'lb:daily:' + SC.dayKey(d);
+    const D = await player('rb-daily@example.com');
+    const seed = async () => {
+      await store.zadd(key(today), 111, D.email);
+      await store.zadd(key(today - 1), 222, D.email);
+      await store.zadd(key(today - 8), 333, D.email);
+      await store.zadd('lb:total', 444, D.email);
+      await store.hset('lb:total:mode', D.email, 'square:base');
+    };
+    await seed();
+    await rebuild();
+    check('⑥ 不勾全清的普通重建：今天、昨天两张今日榜都不动',
+      (await store.zscore(key(today), D.email)) === 111 && (await store.zscore(key(today - 1), D.email)) === 222,
+      `${await store.zscore(key(today), D.email)} / ${await store.zscore(key(today - 1), D.email)}`);
+    const wipe = await rebuild({ all: true });
+    check('⑥ 全部清空：今天、昨天两张今日榜，旧总榜 lb:total、lb:total:mode 四个键都不在了',
+      wipe.status === 200 && (await store.zscore(key(today), D.email)) === null && (await store.zscore(key(today - 1), D.email)) === null &&
+        (await store.zscore('lb:total', D.email)) === null && (await store.hget('lb:total:mode', D.email)) === null,
+      `${wipe.status} ${JSON.stringify(wipe.payload)}`);
+    check('⑥ 全部清空：8 天前那张今日榜不碰', (await store.zscore(key(today - 8), D.email)) === 333, String(await store.zscore(key(today - 8), D.email)));
+    check('⑥ 全部清空的回包说清了今日榜、删了旧总榜（两个布尔，不带名字）', wipe.payload?.dailyCleared === true && wipe.payload?.totalDropped === true,
+      JSON.stringify(wipe.payload));
+  }
   delete process.env.ADMIN_TOKEN;
 }
 

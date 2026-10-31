@@ -30,6 +30,12 @@ if (!src) {
 }
 const { runBreakdown, isSumRow, buildShareInfo } = await import(src);
 
+/**
+ * 系数那一栏的值读成数（10-31 方案推14 Z-B08）：法文用小数逗号（×0,81、×6,00），简繁英用点。先去掉乘号、把逗号换成点再转
+ * ——原先只 `Number(mult.slice(1))`，法文 `1,50` 会读成 NaN。
+ */
+const coefOf = (v) => Number(String(v).trim().slice(1).replace(',', '.'));
+
 let fail = 0;
 const check = (name, ok, extra = '') => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${extra ? '  ' + extra : ''}`);
@@ -114,9 +120,21 @@ const CASES = [
     sum: 57,
   },
   {
-    name: '无限反转局（图案分 + 连锁加成）',
-    d: base({ modeKey: 'flip', flips: 30, lines: 0, linePoints: 0, patternPoints: 80, comboBonusPoints: 40, score: 120, totalScore: 120, flipRules: 2 }),
+    // 反转系数（推14 Z-B06）：方块 ×6，拼出得分 120 → 综合得分 720。
+    name: '无限反转局（图案分 + 连锁加成，方块 ×6）',
+    d: base({ modeKey: 'flip', flips: 30, lines: 0, linePoints: 0, patternPoints: 80, comboBonusPoints: 40, score: 120, flipCoef: 6, totalScore: 720, flipRules: 2 }),
     sum: 120,
+  },
+  {
+    name: '无限反转局（小球 ×2.5）',
+    d: base({ shapeId: 'circle', shapeFallback: '小球', modeKey: 'flip', flips: 30, lines: 0, linePoints: 0, patternPoints: 80, comboBonusPoints: 40, score: 120, flipCoef: 2.5, totalScore: 300, flipRules: 2 }),
+    sum: 120,
+  },
+  {
+    // 剩余色块九折（推14 Z-B08）：判死剩 2 枚 → ×0.81，在拼出得分和步数系数之间；66 × 0.81 × 1.5 = 80.19 → 80。
+    name: '判死剩 2 枚（剩余色块 ×0.81 再乘步数系数）',
+    d: base({ reason: '无法继续匹配', flips: 24, defused: 0, lines: 2, linePoints: 18, patternPoints: 48, score: 66, neverFlipped: 2, unflippedScale: 0.81, totalScore: 80, par: 30, stepCoef: 1.5, moves: 20 }),
+    sum: 66,
   },
 ];
 
@@ -138,12 +156,14 @@ for (const c of CASES) {
       cut >= 0 ? `${rows[cut][0]}=${rows[cut][1]}` : '（没找到拼出分那一行）',
     );
     // 后半段：拼出分 × 系数 − 惩罚 = 综合分。系数那一行只在真的乘了它的那几档摆（不摆
-    // 就当 1），惩罚同理。
-    const mult = rows.slice(cut + 1).map(([, v]) => String(v)).find((v) => v.startsWith('×'));
+    // 就当 1），惩罚同理。**一局现在可以有两行系数**（剩余色块 × 步数系数，推14 Z-B08），所以拼出分之后所有 `×` 行连乘；
+    // 每个值走 coefOf（法文是小数逗号）。
+    const mults = rows.slice(cut + 1).map(([, v]) => String(v)).filter((v) => v.startsWith('×'));
+    const prod = mults.reduce((a, v) => a * coefOf(v), 1);
     const pen = rows.slice(cut + 1).map(([, v]) => addend(v)).filter((n) => n !== null && n < 0);
-    const want = Math.max(0, Math.round(c.sum * (mult ? Number(mult.slice(1)) : 1)) + pen.reduce((a, b) => a + b, 0));
+    const want = Math.max(0, Math.round(c.sum * prod) + pen.reduce((a, b) => a + b, 0));
     check(
-      `${c.name} · ${lang}：拼出分 ${mult ? mult + ' ' : ''}${pen.length ? pen.join(' ') + ' ' : ''}= 综合分 ${c.d.totalScore}`,
+      `${c.name} · ${lang}：拼出分 ${mults.length ? mults.join(' ') + ' ' : ''}${pen.length ? pen.join(' ') + ' ' : ''}= 综合分 ${c.d.totalScore}`,
       sums.length === 2 && Number(sums[1][1]) === c.d.totalScore && want === c.d.totalScore,
       `主数行 ${sums.length} 条：${sums.map(([l, v]) => `${l}=${v}`).join(' / ')}；算出来 ${want}`,
     );
@@ -238,9 +258,73 @@ for (const c of CASES) {
 //
 // 只有字该不一样。数不一样只有一个来源：某一种语言里的占位符写错了（`{n}` 写成 `{N}`、
 // 抄漏一个 `.replace`），而那种错在屏幕上长得像一行正常的文案。
+//
+// 比之前把法文系数里的小数逗号换回点（推14 Z-B08：法文结算页系数一律 ×0,81 这种写法）；逗号对不对另由 4b 量。分隔用 `|`，
+// 免得和逗号混在一起。
+const normFr = (v) => (String(v).startsWith('×') ? String(v).replace(',', '.') : String(v));
 for (const c of [...CASES, { name: '步步为营', d: base({ modeKey: 'puzzle', totalScore: 90, puzzle: { cleared: 7, stars: 4, spent: 12, scoredMoves: 5, streakRefunds: 2, edgeRefunds: 4, left: 3, peak: 9 } }) }]) {
-  const seen = LANGS.map((lang) => runBreakdown(c.d, lang).map(([, v]) => String(v)).join(','));
+  const seen = LANGS.map((lang) => runBreakdown(c.d, lang).map(([, v]) => normFr(v)).join('|'));
   check(`${c.name}：四种语言的数一模一样`, new Set(seen).size === 1, seen.join('  ≠  '));
+}
+
+// ── 4b. 系数那一栏的小数点：法文逗号、简繁英点（站长 10-30 第二轮追答，推14 Z-B08）────────────
+//
+// 同一局：法文那几行 `×` 值都含 `,`、不含 `.`；简繁英都含 `.`、不含 `,`。门量的是 runBreakdown 的产物，分享卡、记录页、
+// 小红书都复用它（见 7）。
+const coefRowsOk = (rb) => {
+  const bad = [];
+  let seen = 0;
+  for (const c of CASES) {
+    for (const lang of LANGS) {
+      for (const [l, v] of rb(c.d, lang)) {
+        const t = String(v);
+        if (!t.startsWith('×')) continue;
+        seen++;
+        const ok = lang === 'fr' ? t.includes(',') && !t.includes('.') : t.includes('.') && !t.includes(',');
+        if (!ok) bad.push(`${c.name}/${lang}: ${l}=${t}`);
+      }
+    }
+  }
+  return { ok: bad.length === 0 && seen >= 20, bad, seen };
+};
+{
+  const r = coefRowsOk(runBreakdown);
+  check('系数行：法文含逗号不含点、简繁英含点不含逗号', r.ok, r.bad.length ? r.bad.slice(0, 3).join(' / ') : `量了 ${r.seen} 个系数值`);
+  const fr = runBreakdown(CASES.find((c) => c.d.flipCoef === 6).d, 'fr').find(([, v]) => String(v).startsWith('×'))?.[1];
+  const en = runBreakdown(CASES.find((c) => c.d.flipCoef === 6).d, 'en').find(([, v]) => String(v).startsWith('×'))?.[1];
+  check('反转系数：英文 ×6.00、法文 ×6,00', en === '×6.00' && fr === '×6,00', `${en} / ${fr}`);
+  const left = CASES.find((c) => c.d.neverFlipped === 2).d;
+  const lfr = runBreakdown(left, 'fr').map(([, v]) => v).filter((v) => String(v).startsWith('×'));
+  const lzh = runBreakdown(left, 'zhHans').map(([, v]) => v).filter((v) => String(v).startsWith('×'));
+  check('剩余色块：简体 ×0.81 ×1.50、法文 ×0,81 ×1,50（剩余色块在前，步数系数在后）',
+    lzh.join(' ') === '×0.81 ×1.50' && lfr.join(' ') === '×0,81 ×1,50', `${lzh.join(' ')} / ${lfr.join(' ')}`);
+  const zero = runBreakdown(base({ flips: 24, lines: 2, linePoints: 18, patternPoints: 48, score: 66, totalScore: 99, par: 30, stepCoef: 1.5 }), 'zhHans');
+  check('剩 0 枚（unflippedScale 1）：不摆剩余色块那一行', zero.filter(([, v]) => String(v).startsWith('×')).length === 1, dump(zero));
+  const legacy = { ...CASES.find((c) => c.d.flipCoef === 6).d };
+  delete legacy.flipCoef;
+  legacy.totalScore = 120;
+  const old = runBreakdown(legacy, 'zhHans');
+  check('老档反转局（没有 flipCoef）：不摆反转系数那一行', !old.some(([, v]) => String(v).startsWith('×')), dump(old));
+
+  // 反面尺子：把 fmtCoef 的法文分支去掉（法文也写点），上面「法文含逗号」那一条要红。
+  const { build } = await import('esbuild');
+  const { readFileSync, mkdtempSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join, dirname, resolve } = await import('node:path');
+  const { fileURLToPath, pathToFileURL } = await import('node:url');
+  const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+  const SRC = join(ROOT, 'src/engine/runRecord.ts');
+  const FR = "return '×' + (lang === 'fr' ? t.replace('.', ',') : t);";
+  check('（尺子）runRecord.ts 里 fmtCoef 的法文分支认得出', readFileSync(SRC, 'utf8').split(FR).length === 2);
+  const dir = mkdtempSync(join(tmpdir(), 'breakdown-'));
+  const out = join(dir, 'rr.mjs');
+  await build({
+    entryPoints: [SRC], bundle: true, format: 'esm', outfile: out, logLevel: 'silent',
+    plugins: [{ name: 'mut', setup(b) { b.onLoad({ filter: /src\/engine\/runRecord\.ts$/ }, (a) => ({ contents: readFileSync(a.path, 'utf8').replace(FR, "return '×' + t;"), loader: 'ts' })); } }],
+  });
+  const M = await import(pathToFileURL(out).href);
+  rmSync(dir, { recursive: true, force: true });
+  check('尺子：fmtCoef 去掉法文分支，「法文含逗号」那一条红', !coefRowsOk(M.runBreakdown).ok);
 }
 
 // ── 5. 没有一行留着没替换掉的占位符 ─────────────────────────────────────────

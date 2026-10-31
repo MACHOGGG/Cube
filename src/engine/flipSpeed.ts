@@ -1,5 +1,6 @@
 /**
- * 图形翻面的快慢，玩家自己定。
+ * 图形翻面的快慢，玩家自己定。ero2 起收尾节拍、图案拍也跟它（站长 D22、D29，10-31 方案推14 Z-B09 / Z-B10）——拉杆
+ * 名字随之改成「速度」。定格 1.4 秒、判死 1.4 秒不跟它。
  *
  * 天才特供里的一根拉杆：十档，从设计速度的一半到两倍，正中那一档标《推荐》。
  * 想看清楚每一次翻面的人可以放慢，打熟了嫌拖沓的人可以加快——这件事没有一
@@ -63,4 +64,16 @@ export function setFlipStep(next: number): void {
   } catch {
     /* 存不下就只在这一次会话里生效，不值得为它报错。 */
   }
+}
+
+/**
+ * 这一拍的动画倍数（10-31 方案推14 Z-B09 第 8 条）：控制器每一拍开始时设（拉杆倍率的倒数 × 自动消线拍的 0.4），放大
+ * （ui/boardZoom.ts 的 ZOOM_BACK_MS / ZOOM_HOLD_MS）、淡出（五副的 REMOVE_FADE_MS）、方块收拢（COLLAPSE_FADE_MS /
+ * COLLAPSE_SLIDE_MS）都乘它——于是「淡出 700 + 停 480 ≤ 这一拍的间隔 1250」对每一档、每一拍都成立。模块级一个数，
+ * 默认 1（开局页、主菜单等不在连锁里的地方都是 1）。
+ */
+let beatK = 1;
+export const beatScale = (): number => beatK;
+export function setBeatScale(k: number): void {
+  beatK = Number.isFinite(k) && k > 0 ? k : 1;
 }

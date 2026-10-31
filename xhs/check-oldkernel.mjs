@@ -30,6 +30,7 @@
  *
  */
 import { chromium } from 'playwright';
+import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -420,9 +421,19 @@ for (const key of list) {
   // 结算页那一句「综合得分怎么算」：只摆头一回，而这一档是新开的上下文——这是它这辈子
   // 第一张结算页。这一版从前没接 shouldTeachTotal（第 14 推），这一句一次都没摆过。
   // 只在基础方块那一档量：老虎机、无限反转不乘步数系数，本来就不讲这一句。
+  //
+  // 10-31 方案推14 起：明细里有九折那一行（没清盘就结束——这儿多半是按《结束游戏》收的场）的那一局不讲，留到下一局（站长
+  // 10-31，横屏装不下）。所以这儿分两种：有那一行就该没有那一句；没有那一行才该有。接没接上 shouldTeachTotal 另从源码认一遍
+  // （按《结束游戏》收场的话，「该有」那一种这儿量不到）。
   if (endUp && key === 'square') {
-    const tip = await p.$eval('#endOverlay', (e) => (e.querySelector('.end-row--tip') || {}).textContent || '').catch(() => '');
-    say(tip.trim().length > 0, '头一回的结算页上摆着「综合得分怎么算」那一句（第 14 推）', tip.trim().slice(0, 40));
+    const r = await p.$eval('#endOverlay', (e) => ({
+      tip: ((e.querySelector('.end-row--tip') || {}).textContent || '').trim(),
+      leftover: !!e.querySelector('.end-row--leftover'),
+    })).catch(() => ({ tip: '', leftover: false }));
+    if (r.leftover) say(!r.tip, '头一回的结算页：明细有九折那一行，「综合得分怎么算」那一句留到下一局（推14）', r.tip.slice(0, 40));
+    else say(r.tip.length > 0, '头一回的结算页上摆着「综合得分怎么算」那一句（第 14 推）', r.tip.slice(0, 40));
+    say(/shouldTeachTotal: claimFirstTotalTip/.test(readFileSync(new URL('./src/main.ts', import.meta.url), 'utf8')),
+      '小红书这一版接上了 shouldTeachTotal（xhs/src/main.ts）', '');
   }
   // 结算页不滑（10-08 方案 3-I：「横线下方……overflow:hidden + touch-action:none，禁上下左右滑……XHS 端在
   // 降级层确认 touch-action 支持」）。touch-action 是 Chrome 36 就有的老属性，降级层不用补；这儿量的是

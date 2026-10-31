@@ -224,12 +224,36 @@ function memory(args) {
       if (!(z instanceof Map)) return null;
       const member = String(rest[0]);
       if (!z.has(member)) return null;
-      const order = [...z.entries()].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0])));
+      // 同分按成员名**倒序**——和真 Redis 的 ZREVRANK / ZRANGE … REV 一样（10-31 方案推14 Z-B15：合并榜的前 200 名要和
+      // 暴力合并逐行一致，同分那一截谁进前 200 就得和真库一个次序）。原先这儿写的是正序。
+      const order = [...z.entries()].sort((a, b) => b[1] - a[1] || (String(a[0]) < String(b[0]) ? 1 : String(a[0]) > String(b[0]) ? -1 : 0));
       return order.findIndex(([m]) => m === member);
     }
     case 'ZCARD': {
       const z = mem.get(key);
       return z instanceof Map ? z.size : 0;
+    }
+    // ZCOUNT key min max：min / max 照 Redis 的写法——'(' 打头是开区间，'-inf' / '+inf'（10-31 方案推14 Z-B16：今日榜
+    // 「我的名次」= 严格大于我的人数 + 1）。
+    case 'ZCOUNT': {
+      const z = mem.get(key);
+      if (!(z instanceof Map)) return 0;
+      const bound = (v) => {
+        const t = String(v);
+        const open = t.startsWith('(');
+        const raw = open ? t.slice(1) : t;
+        const n = raw === '+inf' ? Infinity : raw === '-inf' ? -Infinity : Number(raw);
+        return { n, open };
+      };
+      const lo = bound(rest[0]);
+      const hi = bound(rest[1]);
+      let count = 0;
+      for (const sc of z.values()) {
+        const okLo = lo.open ? sc > lo.n : sc >= lo.n;
+        const okHi = hi.open ? sc < hi.n : sc <= hi.n;
+        if (okLo && okHi) count++;
+      }
+      return count;
     }
     case 'ZRANGE': {
       const z = mem.get(key);
@@ -238,7 +262,8 @@ function memory(args) {
       const rev = flags.includes('REV');
       const scores = flags.includes('WITHSCORES');
       let order = [...z.entries()].sort((a, b) => a[1] - b[1] || String(a[0]).localeCompare(String(b[0])));
-      if (rev) order = [...z.entries()].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0])));
+      // REV：同分按成员名倒序（真 Redis 就是这样，见上面 ZREVRANK 那一段）。
+      if (rev) order = [...z.entries()].sort((a, b) => b[1] - a[1] || (String(a[0]) < String(b[0]) ? 1 : String(a[0]) > String(b[0]) ? -1 : 0));
       const start = Number(rest[0]);
       const stop = Number(rest[1]);
       const slice = order.slice(start, stop < 0 ? order.length + stop + 1 : stop + 1);
@@ -577,6 +602,8 @@ export const zrevrank = async (key, member) => {
   return raw === null || raw === undefined ? null : Number(raw);
 };
 export const zcard = async (key) => Number(await command(['ZCARD', key])) || 0;
+/** 分数落在 [min, max] 里的有几个（min / max 照 Redis：'(' 打头是开区间，'-inf' / '+inf'）。 */
+export const zcount = async (key, min, max) => Number(await command(['ZCOUNT', key, String(min), String(max)])) || 0;
 
 /** 前 n 名，从高到低，[{ member, score }]。 */
 export async function zTop(key, n) {

@@ -97,6 +97,8 @@ export interface ExtraTipView {
   label?: string;
   /** 配图。不给就用这一条的固定配图（老虎机要传当局那两个图案）。 */
   art?: string;
+  /** 那句话。不给就用 MODE_TIPS[lang][key]；计时那一条要按当局棋盘填秒数（ui/modeTips.ts 的 timedTipText，推14 Z-B05）。 */
+  text?: string;
 }
 
 /** 没有「当局」可言的那个入口摆哪几条：只有这两条不依赖当局的任何东西。 */
@@ -199,7 +201,7 @@ export function openRulesModal(opts: RulesModalOptions): () => void {
             return `<div class="tut-rule tut-rule--extra">
               <span class="tut-rule-num tut-rule-num--word">${esc(t.label ?? menuTag(lang, t.key))}</span>
               ${a ? `<span class="tut-rule-art">${a}</span>` : ''}
-              <span class="tut-rule-text">${esc(MODE_TIPS[lang][t.key])}</span>
+              <span class="tut-rule-text">${esc(t.text ?? MODE_TIPS[lang][t.key])}</span>
             </div>`;
           })
           .join('')}

@@ -11,6 +11,7 @@
  */
 import { chromium } from 'playwright';
 import { unlockAll } from './lib/unlockAll.mjs';
+import { fillRun, SCORING_RULES } from './lib/fakeRun.mjs';
 
 const BASE = process.argv[2] || 'http://localhost:8815/';
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
@@ -46,42 +47,53 @@ page.on('request', (r) => {
 await page.goto(BASE, { waitUntil: 'load' });
 await page.waitForSelector('#navRecords', { timeout: 20000 });
 
-// 上一行那几颗母标签，照 ui/leaderboard.ts 的 boardGroups 顺序。
-// 《步步为营》是后来加的那一档——这一行漏了它，于是这三条「上一行一个不少」从
-// 那时候起一直是红的。它们不在 CI 的 browser 那一档里（那儿只收四道），所以红了
-// 没人看见：门自己过期了比没有门更糟，它会教人「这道门本来就红」。
-// 第 19 推：最后多了一颗「今日」（每日挑战的今日榜，方案原话「排行榜加『今日』标签」）。它
-// 不是一个母标签——底下没有子标签，点开就是那一天的榜——所以排在所有母标签后面。
-const ALL_TOP = '总榜 基础 计时 炸弹 特殊布局 老虎机 无限反转 步步为营 今日';
+// 推14 Z-B15 起榜单是「全球榜 / 今日挑战」两个页签 ＋ 三行药丸（棋盘 / 普通·Pro / 玩法），原先那一排母标签、下一行子标签整个
+// 换掉了。三行药丸的点法规则（变灰、收回「全部」、只剩三角回退）另有 check-lb-cells 穷举，这儿量的是界面接没接上。
+const chipsOf = (row) => page.$$eval(`.records-panel--big .rank-chips[data-row="${row}"] .rank-chip`, (els) =>
+  els.map((e) => ({ v: e.dataset.chip, on: e.getAttribute('aria-pressed') === 'true', grey: e.getAttribute('aria-disabled') === 'true', text: e.textContent.trim() })));
+const tapChip = (row, v) => page.click(`.records-panel--big .rank-chip[data-row="${row}"][data-chip="${v}"]`);
+const pressedOf = async (row) => (await chipsOf(row)).filter((c) => c.on).map((c) => c.v).join(',');
 
 // ---- 还没登录：榜上说的是「登录之后才会上榜」，不是一句「敬请期待」 ------
 await page.click('#navRecords');
 await page.waitForTimeout(400);
 await page.click('#ranksPanel');
-await page.waitForSelector('.rank-tab', { timeout: 8000 });
-const tabs = await page.$$eval('.rank-tab', (els) => els.map((e) => e.textContent.trim()));
-// 这一排和下面的 ALL_TOP 是同一份，只是这时候还没登录。写成同一个常量：从前是
-// 两处各抄一遍字面量，《步步为营》加进来的时候两处一起过期。
-check('最外面一排：总榜、七个母标签、今日', tabs.join(' ') === ALL_TOP, tabs.join(' '));
+await page.waitForSelector('.records-panel--big .rank-chip', { timeout: 8000 });
+const scope = await page.$$eval('.records-panel--big .rank-scope-tab', (els) => els.map((e) => e.textContent.trim()));
+check('两个页签：全球榜、今日挑战', scope.join(' ') === '全球榜 今日挑战', scope.join(' '));
+const fam0 = await chipsOf('families');
+const tier0 = await chipsOf('tiers');
+const mode0 = await chipsOf('modes');
+check('三行药丸：棋盘（全部 方块 小球 三角）、普通 / Pro、玩法（全部 + 六个）',
+  fam0.map((c) => c.v).join(' ') === 'all square circle triangle' && tier0.map((c) => c.v).join(' ') === 'all normal pro' &&
+    mode0.map((c) => c.v).join(' ') === 'all base timed bomb slot flip puzzle',
+  `${fam0.map((c) => c.text).join(' ')} | ${tier0.map((c) => c.text).join(' ')} | ${mode0.map((c) => c.text).join(' ')}`);
+check('打开就是「全部 · 全部 · 全部」', (await pressedOf('families')) === 'all' && (await pressedOf('tiers')) === 'all' && (await pressedOf('modes')) === 'all');
 check('没登录时说的是「登录之后，您的成绩才会上榜」',
   (await page.$eval('#rankBody', (e) => e.textContent.trim())) === '登录之后，您的成绩才会上榜',
   await page.$eval('#rankBody', (e) => e.textContent.trim()));
 await page.keyboard.press('Escape');
 await page.waitForTimeout(300);
 
-// ---- 兑一张内部码，成为天才 ---------------------------------------------
-await page.click('#navProfile');
-await page.waitForTimeout(400);
-await page.click('#insiderRow');
-await page.waitForTimeout(500);
-await page.fill('#redeemCode', 'TESTMONTH');
-await page.click('#redeemGo');
-await page.waitForSelector('#pwNews', { timeout: 15000 });
-await page.fill('#pwUser', 'rank@example.com');
-await page.fill('#pwNew', '123456');
-await page.click('#pwGo');
-await page.waitForSelector('#pwNews', { state: 'detached', timeout: 15000 }).catch(() => {});
-await page.waitForTimeout(1200);
+// ---- 注册一个免邮箱账号（两串自己定的字）----------------------------------------
+// 原先这儿兑一张内部码、再设密码：那条路（#insiderRow → #redeemCode → #pwNew）早撤了（第 20 推起没有密码、10-11 起内部码不再开
+// 账号），这道门手跑、没人发现它从那时起就走不下去。推12 起锁着的布局卡直接开登录窗（和 check-axis-overlay 同一条路）。
+await page.goto(BASE, { waitUntil: 'load' });
+await page.waitForSelector('.mode-axis .home-icon-btn--locked', { timeout: 20000 });
+await page.evaluate(() => document.querySelector('.mode-axis .home-icon-btn--locked').click());
+await page.waitForSelector('#authAlt', { timeout: 10000 });
+await page.click('#authAlt');
+await page.waitForSelector('#authPairForm:not([hidden]) input', { timeout: 10000 });
+{
+  const inputs = await page.$$('#authPairForm input');
+  const tag = Math.random().toString(36).slice(2, 10).replace(/[^a-z0-9]/g, '');
+  await inputs[0].fill(`rankfirst${tag}`);
+  if (inputs[1]) await inputs[1].fill(`ranksecond${tag}`);
+}
+await page.click('#authGo');
+await page.waitForSelector('#statusDone', { timeout: 15000 });
+await page.click('#statusDone');
+await page.waitForTimeout(800);
 
 // ---- 打一局，交卷 -------------------------------------------------------
 // 重开一次而不是点回主菜单：权益存在 localStorage 里，活得过刷新，而这样
@@ -97,21 +109,9 @@ await page.waitForFunction(
   () => document.querySelectorAll('#boardWrap .tile, #boardWrap .ball').length > 0,
   { timeout: 25000 },
 );
-// 结算要有一个非零的分数才看得出榜上排的是不是它（0 分的一局不上总榜——
-// 总榜写的是每人最高的那一局，0 不算「最高」）。得分靠拖太慢，而交上去的
-// 那个数是 gameController 从棋局算出来的，页面上改不动；所以在网络这一层
-// 把上报的分数改成 4321——客户端照常上报（下面照常验它），服务器存下的是
-// 4321，榜上才有东西可看。
-await page.route('**/api/scores', async (route) => {
-  const req = route.request();
-  if (req.method() === 'POST') {
-    try {
-      const b = JSON.parse(req.postData() || '{}');
-      if (b.action === 'push') { b.score = 4321; return route.continue({ postData: JSON.stringify(b) }); }
-    } catch { /* 读不出来就原样放行 */ }
-  }
-  return route.continue();
-});
+// 原先这儿在网络层把上报的分数改成 4321，好让榜上有东西可看。服务器 2026-10-03 起要求 score 和 data.totalScore 一致（对不上
+// 400 mismatch）、10-11 起还对一遍账——改过的那一局一律被拒，这道门手跑、没人发现。现在这一局照实交（0 分，进存档、不上榜），
+// 榜上那一行在下面用同一个账号另交一局 300 分。
 await page.waitForTimeout(300);
 // 单人局的《完成》搬进了暂停面板：先按《暂停》，再按《结束游戏》。
 await page.$eval('#stopBtn', (el) => el.click());
@@ -147,15 +147,17 @@ check('手动结束这一局：结算页里根本没有那枚通关章的 SVG',
 const push = pushes.find((b) => b.action === 'push');
 check('结算的时候真的往云上报了一条', Boolean(push), JSON.stringify(pushes.map((b) => b.action)));
 if (push) {
-  check('报的是这个账号（邮箱 + 令牌都带上了）',
-    push.email === 'rank@example.com' && typeof push.token === 'string' && push.token.length > 8,
+  // 免邮箱账号的 id 是 hdl:<sha256>（交卷照样放在 email 那一格）。
+  check('报的是这个账号（账号 id + 令牌都带上了）',
+    typeof push.email === 'string' && push.email.startsWith('hdl:') && typeof push.token === 'string' && push.token.length > 8,
     JSON.stringify({ email: push.email, token: push.token?.slice(0, 6) + '…' }));
   // 分数不是「大于零」——一局什么都没得的棋也是一局，也该记上。要验的是
   // 「报上去的那个数就是结算页上那个数」，这才是会写错的地方。
   const shown = Number(await page.$eval('#endOverlay', (e) => e.dataset.total));
   check('带着玩法 id，报的分数就是结算页记下的综合得分',
     push.mode === 'square' && push.score === shown, `${push.mode} / ${push.score} vs ${shown}`);
-  check('榜上写的名字就是小屋里那个', push.name === '甲', push.name);
+  // 第 16 推起上报不带名字（昵称只走改名接口，engine/nickname.ts）；原先这一条量「push.name 就是小屋里那个」，早过期了。
+  check('上报里不带名字（昵称只走改名接口）', !('name' in push), JSON.stringify(Object.keys(push)));
   check('整局的原始数据也一起存了（记录页要靠它重画战绩图）',
     Boolean(push.data && push.data.shapeId === 'square'));
   check('这一局有自己的编号（同一局报两次才认得出来）',
@@ -165,6 +167,18 @@ if (push) {
 // ---- 回记录页看榜 -------------------------------------------------------
 await page.click('#endBackBtn');
 await page.waitForSelector('.home-page', { timeout: 10000 });
+// 上面那一局开局就按了结束，是 0 分——0 分照常进存档、不上榜（10-11 方案 B-13 第 10 条）。榜上要有「我」这一行，再用同一个账号
+// 交一局 300 分的经典方块（明细由夹具拼齐、照现行规则版本，和真客户端交的同一个形状）。
+{
+  const data = { ...fillRun('square', 300, {}), rules: SCORING_RULES };
+  const r = await page.evaluate(async (data) => {
+    const g = JSON.parse(localStorage.getItem('slides_genius') || '{}');
+    const res = await fetch('/api/scores', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'push', email: g.email, token: g.token, runId: `rank-300-${Date.now()}`, mode: 'square', score: 300, data }) });
+    return { status: res.status, body: await res.json().catch(() => null) };
+  }, data);
+  check('（尺子）同一个账号再交一局 300 分，收下了', r.status === 200 && r.body?.ok === true && r.body?.stored !== false, JSON.stringify(r));
+}
 await page.click('#navRecords');
 await page.waitForTimeout(600);
 await page.click('#ranksPanel');
@@ -227,73 +241,60 @@ check('榜底下没有《N 人在榜 · 您排第 N》那句',
   (await page.$$eval('.records-panel--big .rank-foot', (e) => e.length)) === 0 &&
     !/人在榜|[你您]排第/.test(await page.$eval('.records-panel--big', (e) => e.textContent)));
 
-// 点开母标签《基础》：上一行七个一个不少，旗下那几张落到下一行去。
-const clickTab = (label) =>
-  page.$$eval('.rank-tab', (els, want) => {
-    const hit = els.find((e) => e.textContent.trim() === want);
-    if (hit) hit.click();
-    return Boolean(hit);
-  }, label);
-const rowText = (sel) =>
-  page.$$eval(`${sel} .rank-tab`, (els) => els.map((e) => e.textContent.trim()).join(' '));
-await clickTab('基础');
-await page.waitForTimeout(400);
-// 玩家点名改的：点开一个母标签之后，别的母标签不撤，上一行原样留着。
-check('点开《基础》：上一行八个一个不少',
-  (await rowText('#rankTabs')) === ALL_TOP, await rowText('#rankTabs'));
-check('那颗《＜》已经不存在了',
-  (await page.$$eval('.rank-tab--back', (e) => e.length)) === 0);
-check('旗下那几张落在下一行',
-  (await rowText('#rankSubTabs')) === '经典方块 经典小球 三角', await rowText('#rankSubTabs'));
-check('下一行是露出来的',
-  (await page.$eval('#rankSubTabs', (e) => e.hidden)) === false);
-check('母标签自己是选中的那一个（看的是它合起来的榜）',
-  (await page.$eval('.rank-tab--on', (e) => e.textContent.trim())) === '基础');
-await page.waitForSelector('.records-panel--big .rank-row', { timeout: 8000 });
-check('《基础》母榜上有我', (await page.$$eval('.records-panel--big .rank-row', (e) => e.length)) === 1);
+// ---- 三行药丸（推14 Z-B15，站长 10-22：「点击了三角，玩法的部分就是灰色的不能点开」）----------------------
+// 自己那一行带着两枚行首图：棋盘、玩法（rank-glyph、rank-glyph--mode），读屏念得出名字。
+const glyphs = await page.$$eval('.records-panel--big .rank-row--me .rank-glyph', (els) => els.map((e) => e.getAttribute('aria-label') || ''));
+check('自己那一行行首两枚图：棋盘、玩法（读屏念得出名字）', glyphs.length === 2 && glyphs.every(Boolean), JSON.stringify(glyphs));
 
-// 换一张榜：基础方块那一张也该有我，基础三角那一张一个人都没有。
-await clickTab('经典方块');
-await page.waitForSelector('.records-panel--big .rank-row', { timeout: 8000 });
-check('基础方块那张单局榜上也有我',
-  (await page.$$eval('.records-panel--big .rank-row', (e) => e.length)) === 1);
-await clickTab('三角');
-await page.waitForFunction(
-  () => !document.querySelector('.records-panel--big .rank-row'), { timeout: 8000 })
-  .then(() => true).catch(() => false);
-check('没打过的玩法，榜是空的，而且明说「这个玩法您还没打过」',
-  (await page.$eval('#rankBody', (e) => e.textContent)).includes('这张榜上还没有人'),
-  await page.$eval('#rankBody', (e) => e.textContent.trim()));
+// 点三角：玩法行只剩「全部」「基础」可点，别的都灰（aria-disabled）。
+await tapChip('families', 'triangle');
+await page.waitForTimeout(500);
+const triModes = await chipsOf('modes');
+check('点三角：玩法行只有「全部」「基础」不灰', triModes.filter((c) => !c.grey).map((c) => c.v).join(' ') === 'all base',
+  triModes.map((c) => `${c.v}${c.grey ? '(灰)' : ''}`).join(' '));
+// 点一下灰的「计时」：不选中，三行下面说一句（读屏区 aria-live 里）。
+// 灰的那颗带 aria-disabled，Playwright 的 click 会等它「可用」——直接派一次点击（玩家照样点得到它，那一下只出一句说明）。
+await page.$eval('.records-panel--big .rank-chip[data-row="modes"][data-chip="timed"]', (e) => e.click());
+await page.waitForTimeout(300);
+const say = await page.$eval('#rankSay', (e) => e.textContent.trim());
+check('点灰的「计时」：不选中，下面说「三角没有计时玩法」', (await pressedOf('modes')) === 'all' && say.includes('三角') && say.includes('计时'), `${await pressedOf('modes')} · ${say}`);
+check('那句话在 aria-live 区里', await page.$eval('#rankSay', (e) => Boolean(e.closest('[aria-live="polite"]'))));
+await page.waitForFunction(() => !document.querySelector('.records-panel--big .rank-row--me'), { timeout: 8000 }).then(() => true).catch(() => false);
+check('三角那张榜上没有我（我打的是方块）', (await page.$$eval('.records-panel--big .rank-row--me', (e) => e.length)) === 0);
 
-// 上一行一直在，所以换一类直接横着跳，不用先退回去。
-await clickTab('炸弹');
-await page.waitForTimeout(400);
-check('横着跳到《炸弹》：上一行还是那八个',
-  (await rowText('#rankTabs')) === ALL_TOP, await rowText('#rankTabs'));
-// 比的是 data-mode 不是字面：炸弹旗下那三张的名字和基础旗下那三张一模一样
-// （都是方块 / 圆球 / 三角），只有 mode 里的后缀不同。这也正是「上一行不能
-// 撤」的理由——光看下一行分不出自己在哪一类里。
-const rowModes = (sel) =>
-  page.$$eval(`${sel} .rank-tab`, (els) => els.map((e) => e.dataset.mode).join(' '));
-// bomb3 是炸弹规则的第三版（api/scores.js 的 BOMB_KIND、engine/bomb.ts 的
-// BOMB_RULES_VERSION）——2026-09 取消那一枚永久炸弹之后开的新榜。这里连版本号一起
-// 对，就是防着「客户端点开的还是老榜、新局全报去了新榜」这种两头对不上的错。
-// 这一条自己也栽过一次：规则升到第 3 版的那一次改了 leaderboard.ts，却漏了这道
-// 门，于是它钉着的正是那个「两头对不上」的旧值。
-check('下一行换成了炸弹旗下那几张',
-  (await rowModes('#rankSubTabs')) === 'square:bomb3 circle:bomb3 triangle:bomb3' &&
-    (await page.$eval('#rankSubTabs', (e) => e.hidden)) === false,
-  await rowModes('#rankSubTabs'));
-check('高亮跟着跳到《炸弹》',
-  (await page.$eval('.rank-tab--on', (e) => e.textContent.trim())) === '炸弹');
+// 一行每一颗都点上就收回「全部」。
+await tapChip('families', 'square');
+await page.waitForTimeout(200);
+await tapChip('families', 'circle');
+await page.waitForTimeout(500);
+check('棋盘那一行三颗全点上：收回「全部」', (await pressedOf('families')) === 'all', await pressedOf('families'));
+await page.waitForSelector('.records-panel--big .rank-row--me', { timeout: 8000 });
 
-// 《总榜》不是大类，点它就把下一行收起来。
-await clickTab('总榜');
-await page.waitForTimeout(400);
-check('点《总榜》把下一行收起来',
-  (await page.$eval('#rankSubTabs', (e) => e.hidden)) === true);
-check('收起来之后上一行还是那八个',
-  (await rowText('#rankTabs')) === ALL_TOP, await rowText('#rankTabs'));
+// 方块 · 普通 · 基础：有我，没有 Pro 小标。
+await tapChip('families', 'square');
+await tapChip('tiers', 'normal');
+await tapChip('modes', 'base');
+await page.waitForTimeout(700);
+await page.waitForSelector('.records-panel--big .rank-row--me', { timeout: 8000 });
+check('方块 · 普通 · 基础：榜上有我', (await page.$$eval('.records-panel--big .rank-row--me', (e) => e.length)) === 1);
+check('选了普通：没有一行挂「Pro」', !(await page.$eval('.records-panel--big .rank-body', (e) => /\bPro\b/.test(e.textContent))));
+// 只选 Pro：我那一局不是 Pro 局，榜上没有我。（先把「普通」点掉：普通、Pro 两颗都点上就是一整行，收回「全部」。）
+await tapChip('tiers', 'normal');
+await page.waitForTimeout(300);
+await tapChip('tiers', 'pro');
+await page.waitForTimeout(700);
+await page.waitForFunction(() => !document.querySelector('.records-panel--big .rank-row--me'), { timeout: 8000 }).then(() => true).catch(() => false);
+check('只选 Pro：我那一局不是 Pro 局，不在这张榜上', (await page.$$eval('.records-panel--big .rank-row--me', (e) => e.length)) === 0);
+
+// 「今日挑战」页签：三行收起，切回来三行是切走前的样子。
+const before = `${await pressedOf('families')}|${await pressedOf('tiers')}|${await pressedOf('modes')}`;
+await page.click('.records-panel--big .rank-scope-tab[data-scope="daily"]');
+await page.waitForTimeout(500);
+check('今日挑战：三行药丸收起来', await page.$eval('#rankFilters', (e) => e.hidden));
+await page.click('.records-panel--big .rank-scope-tab[data-scope="global"]');
+await page.waitForTimeout(500);
+const after = `${await pressedOf('families')}|${await pressedOf('tiers')}|${await pressedOf('modes')}`;
+check('切回全球榜：三行还是切走前那样', before === after && !(await page.$eval('#rankFilters', (e) => e.hidden)), `${before} → ${after}`);
 
 // 按那颗《返回》：弹窗关掉，底排导航回来。
 await page.click('.center-pick-back');

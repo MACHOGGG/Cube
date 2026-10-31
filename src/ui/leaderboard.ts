@@ -1,21 +1,34 @@
 import { STRINGS, countPhrase, type Lang } from '../i18n';
-import { cachedBoard, fetchBoard, waitForPush, type BoardPage, type BoardResult } from '../engine/cloudScores';
+import { cachedBoard, fetchBoard, waitForPush, type BoardPage, type BoardQuery, type BoardResult } from '../engine/cloudScores';
 import { shapeName } from './shapeLabels';
 import { rollOdometer } from '../engine/odometer';
-import { gameIcon } from './homeIcons';
+import { gameIcon, ICON_BOMB_BADGE, ICON_FLIP_MODE, ICON_PUZZLE_MODE, ICON_SLOT_MACHINE, ICON_TIMED_COMBINED } from './homeIcons';
 import { compactScore } from '../engine/compactScore';
+import {
+  DEFAULT_SELECTION,
+  LB_FAMILIES,
+  LB_MODES,
+  LB_TIERS,
+  expand,
+  greyed,
+  partialNote,
+  tap,
+  type LbMode,
+  type LbNote,
+  type LbRow,
+  type LbSelection,
+} from '../engine/lbCells';
 
 /**
  * 全球排行榜的那一块。
  *
- * 两张榜，玩家自己定的：一张累计总榜，八个玩法各一张单局最佳榜。上榜不要钱
- * ——一个新玩家打出好成绩，那一行本来就该在榜上；看得见才是天才特权。所以
- * 「有没有权限」这件事永远由服务器说了算（api/scores.js），这里只负责把
- * 三种答复各自画成一屏：拿到了、没权限、还没登录。
+ * 上榜不要钱——一个新玩家打出好成绩，那一行本来就该在榜上。「有没有权限」这件事永远由服务器说了算
+ * （api/scores.js），这里只负责把几种答复各自画成一屏：拿到了、没登录、登录过期、取不到。
  *
- * 没权限的那一屏不是一句「敬请期待」。它照样把这张榜长什么样子摆出来——只是
- * 名字和分数是虚的，中间压着一把锁和一句《成为 Slides 天才》。和《解锁更多
- * 配色》同一个道理：看得见才知道值不值得。
+ * ero2 起（10-31 方案推14 Z-B15，lb-filter §9，按 §10 改）：原先那两层页签（总榜 + 七个母标签、母标签底下按棋盘的子标签）
+ * 换成「全球榜 / 今日挑战」两个页签，全球榜底下三行药丸——族（方块 / 小球 / 三角）、普通 / Pro、玩法——每行都能自选几颗，
+ * 规则全在 engine/lbCells.ts（哪颗灰、点了变成什么、要说哪句话）。默认「全部 · 全部 · 全部」就是新的总榜：每人最好的一局，
+ * 含 Pro 和无限反转（站长知悉，§10②）。人数一律不印（§10.3）。
  */
 
 const esc = (v: string) =>
@@ -38,116 +51,130 @@ const GHOST_ROWS = 8;
  */
 const THUMB_ROWS = 6;
 
-export interface BoardTab {
-  /** 空字符串是总榜；`g:` 开头是母榜（旗下几张合起来）；别的是一张单独的榜。 */
-  mode: string;
-  label: string;
-}
-
-/** 一个母标签，和它旗下那几张榜。 */
-export interface BoardGroup extends BoardTab {
-  children: BoardTab[];
-}
-
-/** 基础那两副（三角那一副 2026-09 删了，见《侵蚀阶梯》v1.2 PR-6）。 */
-const BASE_TWO = ['square', 'circle'] as const;
-const LAYOUTS = ['squareDiamond', 'circleHex', 'circleSeven', 'triangleBig'] as const;
-
-/**
- * 排行榜的六个母标签，和它们旗下的榜。
- *
- * 玩家定的顺序：总榜、基础、计时、炸弹、特殊布局、老虎机、无限反转。点母标签
- * 看的是它旗下几张合起来的样子，点子标签才是单独那一张（服务器那头同一套，见
- * api/scores.js 的 GROUPS）。
- *
- * 特殊布局旗下按棋盘分，不再按玩法分：一张 V 形三角的榜就是「V 形三角打得最好
- * 的人」，那几块棋盘玩的人本来就少，再切一遍只会切出五张空榜。
- */
-export function boardGroups(lang: Lang): BoardGroup[] {
+/** 三行药丸的字（族、普通/Pro、玩法）。 */
+function chipLabel(lang: Lang, row: LbRow, v: string): string {
   const s = STRINGS[lang];
-  const named = (ids: readonly string[], kind: string): BoardTab[] =>
-    ids.map((id) => ({ mode: kind ? `${id}:${kind}` : id, label: shapeName(lang, id, id) }));
-  return [
-    { mode: 'g:base', label: s.rankTabBase, children: named(BASE_TWO, 'base') },
-    { mode: 'g:timed', label: s.rankTabTimed, children: named(BASE_TWO, 'timed') },
-    // 'bomb3' 是炸弹规则的第三版（见 api/scores.js 的 BOMB_KIND）：2026-09 改
-    // 成「炸弹会被拆成星星」之后开过 bomb2，再取消那一枚永久炸弹之后开的这一张；
-    // 老的 square:bomb / square:bomb2 归档，不再露面。
-    // 'flip2' 同理：给连击加了封顶（scoring.ts 的 FLIP_STREAK_CAP）之后开的新榜，
-    // 没封顶那一版能打出的分高一个量级，放一起比就是把老局钉死在榜首。
-    // **这两处最容易漏**：改了服务端的 KIND 却没改这儿，客户端点开的是归档榜，
-    // 新分一个都看不见（反转那一版第一遍就漏了，check-bomb-rules 逮到的）。
-    { mode: 'g:bomb', label: s.rankTabBomb, children: named(BASE_TWO, 'bomb3') },
-    { mode: 'g:layout', label: s.rankTabLayout, children: named(LAYOUTS, '') },
-    { mode: 'g:slot', label: s.rankTabSlot, children: named(BASE_TWO, 'slot') },
-    { mode: 'g:flip', label: s.rankTabFlip, children: named(['square', 'circle'], 'flip2') },
-    // 步步为营：'puzzle3' 是第 3 版规则（空走额度，10-15 补充 S9）那张榜，见 api/scores.js 的 PUZZLE_KIND；
-    // 'puzzle2'（消线退两步）、'puzzle'（消线退一步）是归档的老榜。原先第 2 版上线时这儿还写着 'puzzle'——服务端开了
-    // 新榜之后新局全记在新榜上，客户端点开的却是归档的老榜，新分一个都看不见（巡检 2026-10-03，第 14 推）。这正是上面
-    // 那段说的「最容易漏」的那一处，check-bomb-rules 现在拿服务端那个常量来对它。
-    { mode: 'g:puzzle', label: s.rankTabPuzzle, children: named(BASE_TWO, 'puzzle3') },
-  ];
+  if (row === 'families') return v === 'square' ? s.rankFamilySquare : v === 'circle' ? s.rankFamilyBall : s.rankFamilyTri;
+  if (row === 'tiers') return v === 'pro' ? s.rankTierPro : s.rankTierNormal;
+  return modeLabel(lang, v as LbMode);
+}
+function modeLabel(lang: Lang, m: LbMode): string {
+  const s = STRINGS[lang];
+  return { base: s.rankTabBase, timed: s.rankTabTimed, bomb: s.rankTabBomb, slot: s.rankTabSlot, flip: s.rankTabFlip, puzzle: s.rankTabPuzzle }[m];
+}
+/** 几个名字连成一串：中文用顿号，英法用逗号。 */
+const joinNames = (lang: Lang, names: string[]): string => names.join(lang === 'zhHans' || lang === 'zhHant' ? '、' : ', ');
+
+/** 一行的玩法图（结果里不止一种玩法时画）。基础局没有自己的图（行首那张棋盘图就是它），垫一个空的对齐。 */
+function modeGlyph(kind: LbMode): string {
+  return { base: '', timed: ICON_TIMED_COMBINED, bomb: ICON_BOMB_BADGE, slot: ICON_SLOT_MACHINE, flip: ICON_FLIP_MODE, puzzle: ICON_PUZZLE_MODE }[kind];
 }
 
-/** 一张榜画成的行。自己那一行会被标出来。 */
+/** 点了灰的药丸 / 唯一会变空的那一步：三行下面那一句。 */
+function noteText(lang: Lang, note: LbNote): string {
+  const s = STRINGS[lang];
+  if (note.key === 'rankResetNote') return s.rankResetNote;
+  if (note.key === 'rankGreyFamily') return s.rankGreyFamily.split('{family}').join(chipLabel(lang, 'families', note.family));
+  const fams = note.families.length ? note.families : [...LB_FAMILIES];
+  return s.rankGreyMode
+    .split('{family}').join(joinNames(lang, fams.map((f) => chipLabel(lang, 'families', f))))
+    .split('{mode}').join(modeLabel(lang, note.mode));
+}
+
+/** 表头那一句（或两句）：默认页说「每人最好的一局」；有没贡献的族说 rankPartialNote；选了炸弹再说 rankBombNote。 */
+function headText(lang: Lang, sel: LbSelection): string {
+  const s = STRINGS[lang];
+  const parts: string[] = [];
+  if (!sel.families.length && !sel.tiers.length && !sel.modes.length) parts.push(s.rankDefaultNote);
+  const p = partialNote(sel);
+  if (p) {
+    parts.push(
+      s.rankPartialNote
+        .split('{family}').join(joinNames(lang, p.idle.map((f) => chipLabel(lang, 'families', f))))
+        .split('{mode}').join(joinNames(lang, p.modes.map((m) => modeLabel(lang, m))))
+        .split('{others}').join(joinNames(lang, p.others.map((f) => chipLabel(lang, 'families', f)))),
+    );
+  }
+  if (sel.modes.includes('bomb')) {
+    parts.push(s.rankBombNote.split('{bomb}').join(s.rankTabBomb).split('{timed}').join(s.bombTimedTitle).split('{advanced}').join(s.bombAdvancedTitle));
+  }
+  return parts.join(' · ');
+}
+
 /**
  * 一行一行画出来。
  *
- * **名字可以是空的**，而且空是常态：玩家没在小屋里取过名字就没有名字
- * （engine/cloudScores.ts 的 `leaderboardName`），服务端还会把「长得像凭据」的旧名字
- * 过滤成空（api/scores.js 的 `shownName`，#2 那次泄露）。空的那一行印「匿名玩家」。
+ * **名字可以是空的**，而且空是常态：玩家没起过昵称就没有名字，服务端还会把「长得像凭据」的旧名字过滤成空
+ * （api/scores.js 的 `shownName`，#2 那次泄露）。空的那一行印「匿名玩家」。
  *
- * ⚠️ **不许拿「玩家 + 随机编号」之类的东西填**（玩家 2026-10-02 点名）：那种名字看起来
- * 像一个人，其实只是一个占位，而同一个人每次刷新可能换一个号——榜上于是多出一堆不存在
- * 的人。一句「匿名玩家」说的就是实情。
+ * ⚠️ **不许拿「玩家 + 随机编号」之类的东西填**（玩家 2026-10-02 点名）：那种名字看起来像一个人，其实只是一个占位，
+ * 而同一个人每次刷新可能换一个号——榜上于是多出一堆不存在的人。一句「匿名玩家」说的就是实情。
  */
-function rowsHtml(page: BoardPage, lang: Lang, compact = false): string {
+function rowsHtml(page: BoardPage, lang: Lang, look: RowLook, compact = false): string {
   const s = STRINGS[lang];
   if (!page.rows.length) return `<p class="rank-empty">${s.rankEmpty}</p>`;
-  return rowList(page, lang, compact).join('') + (compact ? '' : mineFootHtml(page, lang));
+  return rowList(page, lang, compact, look).join('') + (compact ? '' : mineFootHtml(page, lang, look));
 }
+
+/** 行首画几样：结果里不止一副棋盘 → 棋盘图；不止一种玩法 → 再画玩法图。 */
+interface RowLook {
+  board: boolean;
+  mode: boolean;
+}
+const lookOf = (q: BoardQuery): RowLook => {
+  if (q === 'daily') return { board: false, mode: false };
+  const cells = expand(q);
+  return { board: new Set(cells.map((c) => c.board)).size > 1, mode: new Set(cells.map((c) => c.mode)).size > 1 };
+};
 
 /**
  * 「我排第几」（10-11 方案 B-13.9，玩家定的 Q7：显示）：放大的那张榜底下固定一行「名次 · 我 · 分数」。
  *
- * 回包里本来就有 page.me（服务器算好的名次），从前只在我挤进列出来的那几行时才看得见——排在外面的人点开
- * 一张榜，从头翻到尾找不到自己，分不清是没上榜还是排得太后。自己已经在列出来的行里就不重复；这张榜上没
- * 有自己（page.me 是 null）就不摆。缩略牌太窄，不加（rowsHtml 的 compact 那一路，记进 G-5）。
- *
- * 总榜每一行行首有个小图形（那一局是哪个玩法），page.me 里没有这一位——垫一个空的，名字那一栏才对得齐。
+ * 在前 200 名里是精确名次（同分同名次）；在 200 名以外名次格印「200+」、读屏念 rankOutside200（推14 Z-B15）；这张榜上没有
+ * 自己（page.me 是 null）就不摆。自己已经在列出来的行里就不重复。缩略牌太窄，不加。
  */
-function mineFootHtml(page: BoardPage, lang: Lang): string {
+function mineFootHtml(page: BoardPage, lang: Lang, look: RowLook): string {
   if (!page.me || page.rows.some((r) => r.me)) return '';
   const s = STRINGS[lang];
-  const glyph = page.rows.some((r) => r.mode) ? '<span class="rank-glyph" aria-hidden="true"></span>' : '';
+  const pad = (on: boolean) => (on ? '<span class="rank-glyph" aria-hidden="true"></span>' : '');
+  const place = page.me.rank === null
+    ? `<span class="rank-place" aria-label="${esc(s.rankOutside200)}">200+</span>`
+    : `<span class="rank-place">${page.me.rank}</span>`;
   return `<div class="rank-row rank-row--me rank-row--pin">
-        <span class="rank-place">${page.me.rank}</span>
-        ${glyph}
+        ${place}
+        ${pad(look.board)}${pad(look.mode)}
         <span class="rank-name">${esc(s.rankMe)}</span>
         <span class="rank-score">${page.me.score}</span>
       </div>`;
 }
 
 /** 一行名次一个字符串——缩略牌要按格子数补齐，所以不能先拼成一整段。 */
-function rowList(page: BoardPage, lang: Lang, compact: boolean): string[] {
+function rowList(page: BoardPage, lang: Lang, compact: boolean, look: RowLook): string[] {
   const s = STRINGS[lang];
-  // 总榜不分玩法，每一行是那个人最高的那一局——行首画一个小图形，说明那一局
-  // 是哪个玩法（玩家的原话：「在前面有小图形标识」）。单局榜整张都是同一个
-  // 玩法，不用画。
-  return page.rows.map(
-    (r) => `<div class="rank-row${r.me ? ' rank-row--me' : ''}">
+  return page.rows.map((r) => {
+    const boardGlyph = look.board && r.board
+      ? `<span class="rank-glyph" aria-label="${esc(shapeName(lang, r.board, r.board))}">${gameIcon(r.board)}</span>`
+      : look.board ? '<span class="rank-glyph" aria-hidden="true"></span>' : '';
+    const modeG = look.mode && r.kind
+      ? `<span class="rank-glyph rank-glyph--mode" aria-label="${esc(modeLabel(lang, r.kind))}">${modeGlyph(r.kind)}</span>`
+      : look.mode ? '<span class="rank-glyph rank-glyph--mode" aria-hidden="true"></span>' : '';
+    return `<div class="rank-row${r.me ? ' rank-row--me' : ''}">
         <span class="rank-place">${r.rank}</span>
-        ${r.mode ? `<span class="rank-glyph" aria-label="${esc(shapeName(lang, r.mode, r.mode))}">${gameIcon(r.mode)}</span>` : ''}
+        ${boardGlyph}${modeG}
         <span class="rank-name">${esc(r.name || s.rankAnon)}</span>
         ${
-          // 步步为营清盘的那一局：「剩 N 步」（第 14 推）。同分时就是靠它排的先后，不印出
-          // 来的话两行一样的分数一前一后，看着像排错了。缩略牌上不印——那半块屏幕连名字都
-          // 要省略号，再塞一句只会把分数挤掉；点开整页就看得到。
+          // 凡来自 Pro 榜的行都挂「Pro」小标（§10.4：只选 Pro 时也挂；字用现成的 proBtn）。缩略牌上不挂——那半块屏幕连名字
+          // 都要省略号。
+          r.pro && !compact ? `<span class="records-row-pro">${esc(s.proBtn)}</span>` : ''
+        }
+        ${
+          // 步步为营清盘的那一局：「剩 N 步」（第 14 推）。同分时就是靠它排的先后，不印出来的话两行一样的分数一前一后，
+          // 看着像排错了。缩略牌上不印。
           r.left && !compact ? `<span class="rank-left">${countPhrase(s.puzzleLeftSteps, r.left, lang)}</span>` : ''
         }
         <span class="rank-score">${compact ? compactScore(r.score, lang) : r.score}</span>
-      </div>`,
-  );
+      </div>`;
+  });
 }
 
 /**
@@ -229,65 +256,120 @@ export interface BoardViewOpts {
 const POLL_MS = 30_000;
 
 /**
- * 把一整块排行榜挂进 host：上面一排玩法切页，下面是榜。
+ * 把一整块排行榜挂进 host：上面「全球榜 / 今日挑战」两个页签，全球榜底下三行药丸，再下面是榜。
  *
  * ── 三件和「新不新」有关的事（2026-10-02）────────────────────
  *
- * ① **换标签不闪。** 从前每点一下都把列表清成一句「加载中」再等一个网络往返，来回点两
- *    三下那一屏看着就是在闪。现在手上有一份十秒内的就先画出来，再在后台拉新的盖上去
- *    （缓存在 engine/cloudScores.ts 的 `cachedBoard`）。头一次点那个标签还是要等——那时
- *    候屏幕上没有任何**真**的东西可留，拿另一张榜的行顶着更糟。
+ * ① **换选择不闪。** 手上有一份十秒内的就先画出来，再在后台拉新的盖上去（缓存在 engine/cloudScores.ts 的 `cachedBoard`，
+ *    键是规范化之后的选择）。连点几颗药丸时只认最后一次（`generation`），而且**最后一次点击之后 300 ms 才去拉**（推14
+ *    Z-B15）——来回点三四颗不该打三四次服务器。
  *
- * ② **看着它的时候每三十秒自己拉一次**，切到后台就停。一张榜是活的，而玩家盯着它看的时
- *    候恰恰最在意名次有没有变。切到后台停：没人看的那一屏不该一直打服务器
- *    （Upstash 那边是按次计费的）。
+ * ② **看着它的时候每三十秒自己拉一次**，切到后台就停。
  *
- * ③ 这一屏一关就停。靠的是 `host.isConnected`——这块 DOM 被 openCenterPicker 整个移掉的
- *    那一刻它就是 false，不用往上层接一个 teardown 回调（接了就一定有人忘了调）。
+ * ③ 这一屏一关就停。靠的是 `host.isConnected`——这块 DOM 被整个移掉的那一刻它就是 false。
+ *
+ * 默认与记忆：每次打开都是「全球榜 · 全部 · 全部 · 全部」；不记上次的选择；切到「今日挑战」三行收起，切回来恢复切走前的
+ * 样子（只在这一次打开面板之内）。
+ *
+ * 无障碍（§9.3⑪）：每一行 role="group" ＋ aria-labelledby 指向行标题（屏上也看得见）；每颗药丸是 <button aria-pressed>
+ * （「全部」也是），Tab 逐颗走；灰的那颗 aria-disabled="true"、仍可聚焦、aria-describedby 指向那句说明；页签用
+ * role="tablist"；表头那句和变灰提示放在同一个 aria-live="polite" 区。
  */
 export function mountBoardView(host: HTMLElement, opts: BoardViewOpts): void {
   const s = STRINGS[opts.lang];
-  const groups = boardGroups(opts.lang);
-  const total: BoardTab = { mode: '', label: s.rankTotalBoard };
-  /**
-   * 「今日」（第 19 推）：每日挑战那一张——服务器眼里的今天，每人当天最好的一局，前五十名＋我排
-   * 第几（api/scores.js 的 board，mode 'daily'）。它和《总榜》一样没有子标签，排在那一排的
-   * **最后**：前面那几个的次序是玩家定的（总榜、基础、计时……），插在中间等于替他改了次序。
-   */
-  const today: BoardTab = { mode: 'daily', label: s.rankTabDaily };
-  /** 哪个母标签被点开了（null 就是最外面那一排）。 */
-  let open: BoardGroup | null = null;
-  /** 现在看的是哪一张榜。 */
-  let current = '';
+  let scope: 'global' | 'daily' = 'global';
+  let sel: LbSelection = DEFAULT_SELECTION;
+  /** 现在看的是哪一张（全球榜那一路是一份选择，今日榜是 'daily'）。 */
+  let current: BoardQuery = sel;
+
+  const ROWS: [LbRow, string, readonly string[]][] = [
+    ['families', s.rankRowFamily, LB_FAMILIES],
+    ['tiers', s.rankRowTier, LB_TIERS],
+    ['modes', s.rankRowMode, LB_MODES],
+  ];
 
   host.classList.add('rank-view');
   host.innerHTML = `
-    <div class="rank-tabs" role="tablist" id="rankTabs"></div>
-    <div class="rank-tabs rank-tabs--sub" role="tablist" id="rankSubTabs" hidden></div>
-    <div class="rank-body" id="rankBody"><p class="rank-empty">${s.rankLoading}</p></div>
+    <div class="rank-side">
+      <div class="rank-scope" role="tablist" id="rankScope">
+        <button type="button" class="rank-scope-tab" role="tab" data-scope="global" id="rankScopeGlobal">${esc(s.rankScopeGlobal)}</button>
+        <button type="button" class="rank-scope-tab" role="tab" data-scope="daily" id="rankScopeDaily">${esc(s.rankScopeDaily)}</button>
+      </div>
+      <div class="rank-filters" id="rankFilters">
+        ${ROWS.map(([row, title]) => `<div class="rank-filter" role="group" aria-labelledby="rankRowT-${row}">
+          <span class="rank-filter-title" id="rankRowT-${row}">${esc(title)}</span>
+          <div class="rank-chips" data-row="${row}"></div>
+        </div>`).join('')}
+      </div>
+    </div>
+    <div class="rank-main">
+      <div class="rank-notes" aria-live="polite">
+        <p class="rank-say" id="rankSay"></p>
+        <p class="rank-head" id="rankHead"></p>
+      </div>
+      <div class="rank-body" id="rankBody"><p class="rank-empty">${s.rankLoading}</p></div>
+    </div>
   `;
-  const tabsEl = host.querySelector<HTMLElement>('#rankTabs')!;
-  const subEl = host.querySelector<HTMLElement>('#rankSubTabs')!;
+  const scopeEl = host.querySelector<HTMLElement>('#rankScope')!;
+  const filtersEl = host.querySelector<HTMLElement>('#rankFilters')!;
+  const sayEl = host.querySelector<HTMLElement>('#rankSay')!;
+  const headEl = host.querySelector<HTMLElement>('#rankHead')!;
   const body = host.querySelector<HTMLElement>('#rankBody')!;
   /** 换得比回包快的时候，别让旧的那一份盖住新的。 */
   let generation = 0;
+  let sayTimer = 0;
+  let loadTimer = 0;
 
   /**
-   * 自己那一行的分数滚过了没有。
-   *
-   * 「进来那一次」滚，不是每次画榜都滚：这一页有十几个标签，来回点的时候每次都
-   * 从 0 滚到自己的分，那就从「一处安静的确认」变成了满页在动。别人的行不滚——
-   * 它们就在眼前，能直接比，整表一起滚只是噪音。
+   * 自己那一行的分数滚过了没有。「进来那一次」滚，不是每次画榜都滚：来回点的时候每次都从 0 滚到自己的分，那就从「一处
+   * 安静的确认」变成了满页在动。别人的行不滚。
    */
   let rolledMine = false;
 
-  const paint = (result: BoardResult) => {
+  const say = (text: string) => {
+    window.clearTimeout(sayTimer);
+    sayEl.textContent = text;
+    // 4 秒后消失，或者被下一次点击换掉。
+    if (text) sayTimer = window.setTimeout(() => { sayEl.textContent = ''; }, 4000);
+  };
+
+  function paintScope(): void {
+    for (const b of scopeEl.querySelectorAll<HTMLButtonElement>('.rank-scope-tab')) {
+      const on = b.dataset.scope === scope;
+      b.classList.toggle('rank-scope-tab--on', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    }
+    filtersEl.hidden = scope === 'daily';
+  }
+
+  function paintChips(): void {
+    const g = greyed(sel);
+    for (const [row, , all] of ROWS) {
+      const box = filtersEl.querySelector<HTMLElement>(`.rank-chips[data-row="${row}"]`)!;
+      const cur = sel[row] as readonly string[];
+      const chip = (v: string, label: string, pressed: boolean, grey: boolean) =>
+        `<button type="button" class="rank-chip${grey ? ' rank-chip--grey' : ''}" data-row="${row}" data-chip="${v}" aria-pressed="${pressed}"` +
+        (grey ? ' aria-disabled="true" aria-describedby="rankSay"' : '') +
+        `>${esc(label)}</button>`;
+      box.innerHTML =
+        chip('all', s.rankAll, cur.length === 0, false) +
+        all.map((v) => chip(v, chipLabel(opts.lang, row, v), cur.includes(v), Boolean((g[row] as Record<string, boolean>)[v]))).join('');
+    }
+  }
+
+  function paintHead(): void {
+    headEl.textContent = scope === 'daily' ? '' : headText(opts.lang, sel);
+  }
+
+  /**
+   * `roll` 为假：这一画是「手上那份缓存先摆出来」，紧跟着这一次真拉回来的那一份就会把整张榜重画一遍——在缓存那一画上滚，滚筒
+   * 几毫秒之后就被冲掉，玩家看到的是一个不动的数（check-leaderboard 量出来的）。所以只在真拉回来的那一画上滚。
+   */
+  const paint = (result: BoardResult, roll = true) => {
     if (result.ok) {
-      body.innerHTML = rowsHtml(result.page, opts.lang);
-      if (!rolledMine) {
+      body.innerHTML = rowsHtml(result.page, opts.lang, lookOf(current));
+      if (roll && !rolledMine) {
         const mineScore = body.querySelector<HTMLElement>('.rank-row--me .rank-score');
-        // 只在这张榜上真有自己那一行的时候算「滚过了」——头一张榜里没有他的时候，
-        // 这一下要留给真的有他的那一张。
         if (mineScore) {
           rolledMine = true;
           rollOdometer(mineScore, Number(mineScore.textContent));
@@ -297,22 +379,16 @@ export function mountBoardView(host: HTMLElement, opts: BoardViewOpts): void {
     }
     if (result.reason === 'geniusOnly') {
       body.innerHTML = lockedHtml(opts.lang);
-      body
-        .querySelector<HTMLButtonElement>('#rankGeniusCta')
-        ?.addEventListener('click', opts.onWantGenius);
+      body.querySelector<HTMLButtonElement>('#rankGeniusCta')?.addEventListener('click', opts.onWantGenius);
       return;
     }
     if (result.reason === 'expired') {
       body.innerHTML = expiredHtml(opts.lang);
-      body
-        .querySelector<HTMLButtonElement>('#rankReLoginCta')
-        ?.addEventListener('click', opts.onReLogin);
+      body.querySelector<HTMLButtonElement>('#rankReLoginCta')?.addEventListener('click', opts.onReLogin);
       return;
     }
-    // 剩下的只有「没登录」和「没拉下来」两种。后者从前落在 rankEmpty（「这张榜上还没有人」）上：
-    // 网断了一下，玩家看到的是一张空榜，以为真没人玩（2026-10-08 方案 2-8）。
-    // 服务器那头 5xx 说「服务器忙」，不说「检查一下网络」（10-09 补充方案 7-13 第 3 条）。
-    // 看得太勤被限速（429）单说一句，不说「检查一下网络」（10-15 补充 L-9）：看榜按帐号限速，他的网好好的。
+    // 剩下的只有「没登录」和「没拉下来」两种。后者从前落在 rankEmpty（「这张榜上还没有人」）上：网断了一下，玩家看到的是
+    // 一张空榜（2026-10-08 方案 2-8）。服务器那头 5xx 说「服务器忙」；看得太勤被限速（429）单说一句（10-15 补充 L-9）。
     body.innerHTML = `<p class="rank-empty">${
       result.reason === 'signedOut'
         ? s.rankSignedOut
@@ -324,42 +400,41 @@ export function mountBoardView(host: HTMLElement, opts: BoardViewOpts): void {
     }</p>`;
   };
 
-  const load = async (mode: string) => {
-    current = mode;
+  /** 换了选择 / 页签：手上有新鲜的先画（①），最后一次点击之后 300 ms 才去拉。 */
+  const load = (q: BoardQuery, wait: number) => {
+    current = q;
     const mine = ++generation;
-    // 手上有一份还新鲜的就先画出来（①）。没有才摆「加载中」。
-    const had = cachedBoard(mode || undefined);
-    if (had) paint({ ok: true, page: had });
+    const had = cachedBoard(q);
+    if (had) paint({ ok: true, page: had }, false);
     else body.innerHTML = `<p class="rank-empty">${s.rankLoading}</p>`;
-    const result = await fetchBoard(mode || undefined);
-    if (mine !== generation) return;
-    // 后台这一拉失败了、而屏幕上已经有一张真的榜：**留着它**。把一张看得见的榜换成一句
-    // 「取不到」是在拿一个更差的东西覆盖一个还算对的东西。
-    if (!result.ok && had) return;
-    paint(result);
+    window.clearTimeout(loadTimer);
+    const go = async () => {
+      const result = await fetchBoard(q);
+      if (mine !== generation) return;
+      // 后台这一拉失败了、而屏幕上已经有一张真的榜：**留着它**。
+      if (!result.ok && had) return;
+      paint(result);
+    };
+    if (wait > 0) loadTimer = window.setTimeout(() => void go(), wait);
+    else void go();
   };
 
-  /**
-   * 定时那一拉（②）。
-   *
-   * 和 `load` 分开写，因为它不许动屏幕上已经有的东西，除非真拿到了新的一份：定时刷新撞
-   * 上一次网络抖动，不该让玩家眼前那张榜变成一句错误。
-   */
+  /** 定时那一拉（②）：不许动屏幕上已经有的东西，除非真拿到了新的一份。 */
   const poll = async () => {
     if (!host.isConnected) return;
     if (document.visibilityState !== 'visible') return;
-    const mode = current;
+    const q = current;
     const mine = generation;
-    const result = await fetchBoard(mode || undefined);
-    // 这期间他换了标签、或者这一屏关了：这一份已经不是他在看的那张榜了。
-    if (!host.isConnected || mine !== generation || mode !== current) return;
+    const result = await fetchBoard(q);
+    if (!host.isConnected || mine !== generation || q !== current) return;
     if (result.ok) paint(result);
   };
 
   const timer = window.setInterval(() => {
-    // 这一屏被移掉了（openCenterPicker 关掉的那一下）：收摊。
     if (!host.isConnected) {
       window.clearInterval(timer);
+      window.clearTimeout(loadTimer);
+      window.clearTimeout(sayTimer);
       document.removeEventListener('visibilitychange', onShow);
       return;
     }
@@ -371,94 +446,63 @@ export function mountBoardView(host: HTMLElement, opts: BoardViewOpts): void {
   }
   document.addEventListener('visibilitychange', onShow);
 
-  /** 现在看的这张榜归哪个母标签——退回外面那一排时，高亮的是它。 */
-  const ownerOf = (mode: string): BoardGroup | null =>
-    groups.find((g) => g.mode === mode || g.children.some((c) => c.mode === mode)) ?? null;
+  scopeEl.addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>('.rank-scope-tab');
+    if (!b) return;
+    const next = b.dataset.scope === 'daily' ? 'daily' : 'global';
+    if (next === scope) return;
+    scope = next;
+    say('');
+    paintScope();
+    paintHead();
+    // 切到「今日挑战」三行收起；切回来恢复切走前的样子（sel 一直留着）。
+    load(scope === 'daily' ? 'daily' : sel, 0);
+  });
+  filtersEl.addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>('.rank-chip');
+    if (!b) return;
+    const row = b.dataset.row as LbRow;
+    const res = tap(sel, row, b.dataset.chip ?? '');
+    say(res.note ? noteText(opts.lang, res.note) : '');
+    if (res.sel === sel) return;
+    sel = res.sel;
+    paintChips();
+    paintHead();
+    // 焦点留在刚点的那一颗（重画之后按 data-chip 找回来），键盘用户不用从头再 Tab。
+    filtersEl.querySelector<HTMLButtonElement>(`.rank-chip[data-row="${row}"][data-chip="${b.dataset.chip}"]`)?.focus();
+    load(sel, 300);
+  });
 
-  const tabHtml = (t: BoardTab, on: boolean) =>
-    `<button class="rank-tab${on ? ' rank-tab--on' : ''}" role="tab" data-mode="${esc(t.mode)}">${esc(t.label)}</button>`;
-
+  paintScope();
+  paintChips();
+  paintHead();
   /**
-   * 标签分两行。
-   *
-   * 上一行是母标签：总榜，加六个玩法大类。**这一行从头到尾都在**——点中其中
-   * 一个，它高亮起来，旗下那几张榜落到下一行；别的母标签一个都不撤（玩家的
-   * 原话：「点击了母 tag 后，其他母 tag 不要在第一行消失，仍然保留，只是下
-   * 面出现了子 tag」）。
-   *
-   * 因为上一行一直在，换一类直接点上一行的另一个就是了，所以从前那颗《＜》
-   * 退回键没有存在的理由了——玩家点名删掉。要收起下一行，点最左边那颗《总
-   * 榜》：它本来就不是一个大类，没有子标签可展开。
-   *
-   * 下一行不点也行：点母标签的那一下已经把它那张合起来的榜摆出来了，那就是
-   * 这一类的「总榜」。子标签是想单看某一副棋盘时才点的。
+   * 开头那一拉**先等刚打完那一局上报落地**，最多两秒（engine/cloudScores.ts 的 `waitForPush`）：不等的话玩家刚刷新了自己的
+   * 最高分，点开排行榜，上面还是旧名次。
    */
-  function paintTabs(): void {
-    const owner = ownerOf(current);
-    // 上一行：总榜 + 七个大类 + 今日（第 19 推），永远是这几个。高亮的是「正在看的那张榜」，
-    // 或者「正在看的那张榜属于哪一类」——看子标签的时候，它的母标签也亮着，
-    // 这样一眼知道自己在哪一类里。
-    tabsEl.innerHTML = [total, ...groups, today]
-      .map((t) => tabHtml(t, t.mode === current || t.mode === owner?.mode || t.mode === open?.mode))
-      .join('');
-    subEl.innerHTML = open ? open.children.map((t) => tabHtml(t, t.mode === current)).join('') : '';
-    subEl.hidden = !open;
-
-    const clickable = [
-      ...tabsEl.querySelectorAll<HTMLButtonElement>('.rank-tab'),
-      ...subEl.querySelectorAll<HTMLButtonElement>('.rank-tab'),
-    ];
-    for (const tab of clickable) {
-      tab.addEventListener('click', () => {
-        const mode = tab.dataset.mode ?? '';
-        // 上一行点一个大类：展开它的子标签，同时把它那张合起来的榜摆出来。
-        // 点的是另一个大类就换过去——不像从前那样「已经开着就不再换」，因为
-        // 现在七个大类一直都在，随时可以横着跳。
-        const group = groups.find((g) => g.mode === mode);
-        if (group) open = group;
-        // 《总榜》《今日》不是大类，没有子标签：点它们就把下一行收起来。
-        if (mode === '' || mode === today.mode) open = null;
-        void load(mode);
-        paintTabs();
-      });
-    }
-  }
-
-  paintTabs();
-  /**
-   * 开头那一拉**先等刚打完那一局上报落地**，最多两秒（engine/cloudScores.ts 的
-   * `waitForPush`）。
-   *
-   * 不等的话会撞上这一幕：玩家刚刷新了自己的最高分，兴冲冲点开排行榜，上面还是旧名次
-   * ——而那一趟上报多半就在半秒之内落地。屏幕上这期间摆的是「加载中」（这一块的初始
-   * HTML 就是它），所以不多一次闪。
-   *
-   * 没打过局、或者那一趟早就落地了，`waitForPush` 当场返回，这一行什么都不耽误。
-   */
-  void waitForPush().then(() => load(''));
+  void waitForPush().then(() => load(sel, 0));
 }
 
 /**
- * 记录页里那一半的缩略图：只有总榜的前三名，外加「我排第几」。
+ * 记录页里那一半的缩略图：默认选择（全部 · 全部 · 全部）的前 6 名（推14 Z-B15 ⑤：跟着变成全站混排）。
  *
- * 缩略图不放切页——那半块屏幕装不下九个标签，而缩略图要回答的只有一个问题：
- * 现在榜上是什么光景，我在哪儿。点开才是完整的那一屏。
+ * 缩略图不放药丸——那半块屏幕装不下，而缩略图要回答的只有一个问题：现在榜上是什么光景。点开才是完整的那一屏。
  */
 export function mountBoardThumb(host: HTMLElement, lang: Lang): void {
   const s = STRINGS[lang];
+  /** 缩略牌太窄：只画棋盘那一枚图，不画玩法图。 */
+  const look: RowLook = { board: true, mode: false };
   /** 手上有一份还新鲜的就先画出来，别让这半块牌空着闪一下。 */
-  const had = cachedBoard();
+  const had = cachedBoard(DEFAULT_SELECTION);
   const shown = (page: BoardPage) =>
-    page.rows.length ? thumbHtml(rowList(page, lang, true)) : thumbHtml([], s.rankEmpty);
+    page.rows.length ? thumbHtml(rowList(page, lang, true, look)) : thumbHtml([], s.rankEmpty);
   host.innerHTML = had ? shown(had) : thumbHtml([], s.rankLoading);
   // 和整屏那一块同一个道理：先等刚打完那一局上报落地（最多两秒），再拉。
-  void waitForPush().then(() => fetchBoard()).then((result) => {
+  void waitForPush().then(() => fetchBoard(DEFAULT_SELECTION)).then((result) => {
     if (!result.ok) {
       // 拉不到、而牌上已经有一张真的（缓存那一份）：留着它，别换成一句错误。
       if (had) return;
       if (result.reason === 'geniusOnly') {
-        // 灰杠的宽度在 45/60/75 三档里轮着来。原先写的是 45 + i*15，三行的时候
-        // 刚好停在 75；摆到五行、六行，后面几行会算成 105%、120%，那条杠要顶出牌子。
         host.innerHTML = thumbHtml(
           Array.from(
             { length: THUMB_ROWS },
@@ -471,8 +515,6 @@ export function mountBoardThumb(host: HTMLElement, lang: Lang): void {
         );
         return;
       }
-      // 缩略图上没地方放按钮，但话还是要说到——不然点开全页之前，这半块
-      // 屏幕看上去和「这张榜还没有人」一模一样。
       host.innerHTML = thumbHtml(
         [],
         result.reason === 'signedOut'

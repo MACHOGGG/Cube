@@ -127,8 +127,8 @@ async function freshPlayer(tag) {
 /**
  * 把这个人从库里彻底抹掉。
  *
- * 不是为了干净，是为了这道门量的东西还是它想量的：rebuild 的名单来自总榜加名
- * 字表，上一档留下的人会一直算进去，跑到第三十档时它要翻三十个人的存档——那时
+ * 不是为了干净，是为了这道门量的东西还是它想量的：rebuild 的名单来自 stats:* 加名
+ * 字表（推14 起不再从旧总榜拉），上一档留下的人会一直算进去，跑到第三十档时它要翻三十个人的存档——那时
  * 微任务偏移早就落在别人那一段里了，等于什么都没测。所以一档一个人，跑完抹掉。
  */
 async function wipe(id) {
@@ -353,9 +353,10 @@ for (let k = 0; k <= MOVE_UPTO; k++) {
   const archive = (await S.get('runs:' + who.email)) || [];
   check('A-4 ① 重报：收下（不是 duplicate，也没被锁挡着）', again.status === 200 && again.payload?.ok === true && !again.payload?.duplicate,
     `${again.status} ${JSON.stringify(again.payload)}`);
-  check('A-4 ① 三样对得上：存档里一份、累计 300 / 1 局、方块基础榜和总榜上都是 300',
+  // 旧总榜 lb:total 推14 起退役（不再写）：原先这一条也量它是 300，现在量它**没被写**（默认选择是从各张现行榜合出来的）。
+  check('A-4 ① 三样对得上：存档里一份、累计 300 / 1 局、方块基础榜上是 300（旧总榜不再写）',
     archive.filter((r) => r.runId === 'a4-1').length === 1 && stats?.total === 300 && stats?.runs === 1 &&
-      (await S.zscore('lb:square:base', who.email)) === 300 && (await S.zscore('lb:total', who.email)) === 300,
+      (await S.zscore('lb:square:base', who.email)) === 300 && (await S.zscore('lb:total', who.email)) === null,
     `存档 ${archive.length} 份 · 累计 ${stats?.total}/${stats?.runs} · 榜 ${await S.zscore('lb:square:base', who.email)}`);
   const third = await call({ action: 'push', email: who.email, token: who.token, runId: 'a4-1', mode: 'square', score: 300 });
   const stats3 = await S.get('stats:' + who.email);

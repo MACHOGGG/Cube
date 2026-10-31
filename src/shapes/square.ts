@@ -1,4 +1,6 @@
 import { buildShell } from '../ui/gameShell';
+import { beatScale } from '../engine/flipSpeed';
+import { pickLineGroup } from '../engine/linePick';
 import { applyDevDeal, devDealFor } from '../engine/devDeal';
 import { createGameController } from '../engine/gameController';
 import { slideLine } from '../engine/slideLine';
@@ -397,6 +399,8 @@ export function createSquareGame(): ShapeGame {
       }
 
       function layoutBoard() {
+        // 行列被消光（最后一拍收拢完）时不重排：rows 或 cols 为 0 那一拍按 0 去算格子尺寸，框会塌（D85 finale ⑦b，推14 Z-B09）。
+        if (rows === 0 || cols === 0) return;
         CELL = computeCell();
         refs.boardEl.style.width = CELL * cols + 'px';
         refs.boardEl.style.height = CELL * rows + 'px';
@@ -647,11 +651,48 @@ export function createSquareGame(): ShapeGame {
         for (const c of colClears) groups.push(Array.from({ length: rows }, (_, r) => [r, c] as Cell));
         return { rowClears, colClears, groups };
       }
+      /** 这一组那一色的星星此刻盘上一共几颗（engine/linePick.ts 的 ②：一样长时剩得少的那一色先，站长 D23）。 */
+      const starsOfColour = (g: readonly Cell[]): number => {
+        const col = grid[g[0][0]][g[0][1]].dotColor;
+        let n = 0;
+        for (const row of grid) for (const t of row) if (t.face === 'dot' && t.dotColor === col) n++;
+        return n;
+      };
+      /**
+       * 下一拍会不会把盘上剩下的一次消光（gameController 的 finalGroupNext，推14 Z-B09 第 4 条）——只问、不改状态。盘上
+       * （不含活炸弹）非空且全是星星，而且有一整行或一整列同色星星正好是剩下的全部。无限反转回 false。
+       */
+      function finalGroupNext(): boolean {
+        if (flipMode) return false;
+        let n = 0;
+        for (const row of grid) {
+          for (const t of row) {
+            if (isBlank(t) || liveBomb(t)) continue;
+            if (t.face !== 'dot') return false;
+            n++;
+          }
+        }
+        if (!n) return false;
+        return fullDotLines().groups.some((g) => g.length === n);
+      }
+
+      /**
+       * 这一拍交哪一行 / 哪一列：**一拍只消一组**（10-31 方案推14 Z-B09 R2′，站长 D01 甲）。fullDotLines 的组里挑一条
+       * （engine/linePick.ts：最长的先、一样长时那一色星星剩得少的先、再按扫描次序——先行后列、从上到下、从左到右），
+       * pendingRowClears / pendingColClears 只留那一行或那一列。原先一拍交出所有整行整列：一行全红的那一拍按行、按列各
+       * 算一遍（同一格算两次，E5 是 20 分，现在 16）；[红 红 蓝] 那一行一拍 3 分，现在先蓝、再红红，5 分（E4）。
+       */
       function findLineBonusGroups(): Cell[][] {
         const { rowClears, colClears, groups } = fullDotLines();
-        pendingRowClears = rowClears;
-        pendingColClears = colClears;
-        return groups;
+        const i = pickLineGroup(groups, starsOfColour);
+        if (i < 0) {
+          pendingRowClears = [];
+          pendingColClears = [];
+          return [];
+        }
+        pendingRowClears = i < rowClears.length ? [rowClears[i]] : [];
+        pendingColClears = i < rowClears.length ? [] : [colClears[i - rowClears.length]];
+        return [groups[i]];
       }
 
       function removeLines(rowClears: number[], colClears: number[]) {
@@ -752,7 +793,15 @@ export function createSquareGame(): ShapeGame {
         return live;
       }
 
+      /**
+       * Pro 局卡死时先松一级再问（controller.relaxIfStuck，10-31 方案推14 Z-B13）。方块没有收尾放开，只在控制器
+       * updateStuckState 那一处问它，包在这里和包在控制器里是同一个调用点。不是 Pro 局时原样回 findStuckGroupsRaw。
+       */
       function findStuckGroups(): Cell[][] {
+        return controller.relaxIfStuck(() => findStuckGroupsRaw());
+      }
+
+      function findStuckGroupsRaw(): Cell[][] {
         // 无限反转：反面还会翻回来，「再也翻不动」这件事不成立。
         if (flipMode) return [];
         // 随机得分目标：门槛是目标此刻还有几枚（targetNeed，跟着侵蚀走）。写死
@@ -1034,9 +1083,11 @@ export function createSquareGame(): ShapeGame {
         signInHint: opts?.signInHint,
         onLive: opts?.onLive,
         shouldTeachTotal: opts?.shouldTeachTotal,
+        shouldTeachFlip: opts?.shouldTeachFlip,
         resetBoard,
         render,
         isGameOver,
+        finalGroupNext,
         buildCascadeConfig,
         checkHazard: isBomb ? checkBombHazard : undefined,
         findStuckGroups,
@@ -1199,6 +1250,7 @@ export function createSquareGame(): ShapeGame {
       // fade, *then* collapse, matching a real row of blocks being cleared
       // and the remaining ones sliding together to close the gap.
       const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      // 收拢的两段时长乘这一拍的倍数（engine/flipSpeed.ts 的 beatScale，推14 Z-B09 第 8 条）。
       const COLLAPSE_FADE_MS = 700;
       const COLLAPSE_SLIDE_MS = 480;
       // A gentle ease-in that snaps shut with a small overshoot right at the
@@ -1249,7 +1301,7 @@ export function createSquareGame(): ShapeGame {
           void refs.boardEl.offsetHeight; // commit the frozen transform before transitioning away from it
           requestAnimationFrame(() => {
             flipEls.forEach((el) => {
-              el.style.transition = `transform ${COLLAPSE_SLIDE_MS}ms ${COLLAPSE_SLIDE_EASING}`;
+              el.style.transition = `transform ${Math.round(COLLAPSE_SLIDE_MS * beatScale())}ms ${COLLAPSE_SLIDE_EASING}`;
               el.style.transform = '';
             });
           });
@@ -1280,12 +1332,12 @@ export function createSquareGame(): ShapeGame {
           if (colorblindOn()) applyTex(ghost, prev.color, texPeriod(size, 0.16), 'back');
           refs.boardEl.appendChild(ghost);
           if (reduceMotion()) { ghost.remove(); return; }
-          ghost.style.transition = `opacity ${COLLAPSE_FADE_MS}ms ease`;
+          ghost.style.transition = `opacity ${Math.round(COLLAPSE_FADE_MS * beatScale())}ms ease`;
           requestAnimationFrame(() => { ghost.style.opacity = '0'; });
-          setTimeout(() => ghost.remove(), COLLAPSE_FADE_MS + 40);
+          setTimeout(() => ghost.remove(), Math.round(COLLAPSE_FADE_MS * beatScale()) + 40);
         });
         if (reduceMotion()) return; // final render() already shows the settled state
-        setTimeout(slideNow, COLLAPSE_FADE_MS);
+        setTimeout(slideNow, Math.round(COLLAPSE_FADE_MS * beatScale()));
       }
 
       // Returns whether it actually resolved a move (and thus already
