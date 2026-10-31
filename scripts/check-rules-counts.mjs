@@ -143,12 +143,12 @@ const generalOf = (block) => {
 // 退役的说法，一个都不许留在通用那五条里。('有效得分率' 不在其中——步步为营那一
 // 档的公式里它还真在用，只是不在通用规则里了，所以只禁 general 段。)
 const GONE = {
-  zhHans: ['连击', '时间系数', '0.95', '2×2', '整组都是星星'],
-  zhHant: ['連擊', '時間係數', '0.95', '2×2', '整組都是星星'],
+  zhHans: ['连击', '时间系数', '0.95', '2×2', '整组都是星星', '天才特供'],
+  zhHant: ['連擊', '時間係數', '0.95', '2×2', '整組都是星星', '天才特供'],
   // 规则书里的名字和界面对齐（10-09 补充方案 7-11）：move factor / shape points / Swept badge 是规则书自己起的
   // 名字，界面上叫 Move multiplier / Build score / Board cleared；法文 facteur de coups / Plateau net 同理。
-  en: ['Streak', 'time factor', '0.95', '2×2', 'made only of stars', 'move factor', 'shape points', 'Swept badge'],
-  fr: ['Série', 'facteur temps', '0,95', '2×2', 'entièrement fait d', 'facteur de coups', 'Plateau net'],
+  en: ['Streak', 'time factor', '0.95', '2×2', 'made only of stars', 'move factor', 'shape points', 'Swept badge', 'Slides genius only', 'for Slides geniuses'],
+  fr: ['Série', 'facteur temps', '0,95', '2×2', 'entièrement fait d', 'facteur de coups', 'Plateau net', 'génies de Slides'],
 };
 // 现在这套规则的三件事：每枚 +2、图案一路降到 1、综合分那唯一一个乘数。
 const MUST = {
@@ -475,6 +475,48 @@ check('flipScoringHint 不再讲连击和时间奖励', bad.length === 0, bad.jo
     const b = body(term);
     check(`⑥ ${lang}：老虎机那一条不再说「最少剩一枚」`, b !== '' && !ONE.test(b), b.slice(0, 40));
   }
+
+  // ── MODE_TIPS：局中棋盘底下那一句一句话提示也得是实话（10-31 方案推04 Z-K01，debug G01–G03）────────────
+  // 规则书早改对了（10-11 P8、10-15 S6），可头一回进老虎机 / 无限反转 / 炸弹时棋盘底下那一句还是旧说法：老虎机说
+  // 「最少剩一枚」（实际按图案大小剩，5 枚的目标到底剩 2 枚）、无限反转没写「同一组连得两次后要歇满 5 步」、炸弹说
+  // 「会被拆掉」（实际要挨两下）。同一把尺子（ONE、REST）套到 MODE_TIPS 四语上；炸弹那一句的「两下」从 bomb.ts 现读。
+  const tips = (I18N_SRC.match(/export const MODE_TIPS[\s\S]*?\n\};/) || [''])[0];
+  check('⑥（尺子）读到了 MODE_TIPS 那一段', tips.includes('bomb:') && tips.includes('zhHans: {'));
+  const tipOf = (lang, k) => {
+    const at = tips.indexOf(`  ${lang}: {`);
+    if (at < 0) return '';
+    const m = tips.slice(at).match(new RegExp(`\\n    ${k}: '((?:[^'\\\\]|\\\\.)*)'`));
+    return m ? m[1] : '';
+  };
+  for (const lang of Object.keys(SLOT)) {
+    const t = tipOf(lang, 'slot');
+    check(`⑥ ${lang}：MODE_TIPS.slot 不再说「最少剩一枚」`, t !== '' && !ONE.test(t), t.slice(0, 40));
+  }
+  check('⑥（反面尺子）旧的 MODE_TIPS.slot 喂进 ONE 认得出来',
+    ONE.test('它也会变小：每降一级少一枚，最少剩一枚。') && ONE.test('one piece fewer each time the ladder drops, down to a single piece.') &&
+      ONE.test('une pièce de moins à chaque palier, jusqu’à une seule.'));
+  for (const [lang, [twice, moves]] of Object.entries(REST)) {
+    const t = tipOf(lang, 'flip');
+    check(`⑥ ${lang}：MODE_TIPS.flip 写了同一组歇几步（两次、${moves}）`, twice.test(t) && t.includes(moves), t.slice(-70));
+  }
+  check('⑥（反面尺子）旧的 MODE_TIPS.flip 过不了 REST',
+    !(REST.zhHans[0].test('所以同色星星永远不会消除。限时 100 秒。开始吧！') && '所以同色星星永远不会消除。限时 100 秒。开始吧！'.includes(REST.zhHans[1])));
+  const BOMB_SRC = read('src/engine/bomb.ts');
+  const hits = Number((BOMB_SRC.match(/export const BOMB_HITS_TO_DEFUSE = (\d+);/) || [])[1]);
+  check('⑥（尺子）从 bomb.ts 现读到 BOMB_HITS_TO_DEFUSE', Number.isInteger(hits), String(hits));
+  const TWO_HITS = { 2: { zhHans: '两下', zhHant: '兩下', en: 'two hits', fr: 'deux coups' } }[hits];
+  check(`⑥ 炸弹挨几下才拆有对应的四语写法（现在是 ${hits} 下）`, Boolean(TWO_HITS), String(hits));
+  for (const lang of Object.keys(SLOT)) {
+    const t = tipOf(lang, 'bomb');
+    check(`⑥ ${lang}：MODE_TIPS.bomb 说炸弹要挨${TWO_HITS ? TWO_HITS[lang] : '?'}才拆`, Boolean(TWO_HITS) && t.includes(TWO_HITS[lang]), t.slice(-60));
+  }
+  check('⑥（反面尺子）旧的 MODE_TIPS.bomb 里找不到「两下」', !'得分图案旁边的炸弹会被拆掉。'.includes('两下'));
+
+  // 规则书删「天才特供」（10-31 方案推04 Z-K02，D33 甲）：规则书只给两个玩法标「天才特供」，实际锁了七个，产品又已是
+  // 「注册即天才」。只扫 rules.ts——i18n 的 geniusOnly 是主菜单读屏名，一堆门靠它找卡，推12 再处理。
+  const GENIUS = ['天才特供', 'Slides genius only', 'for Slides geniuses', 'génies de Slides'];
+  const geniusHits = GENIUS.filter((w) => RULES_SRC.includes(w));
+  check('⑥ 规则书（rules.ts 全文，四语）里不再出现「天才特供」', geniusHits.length === 0, geniusHits.join(' / '));
 }
 
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');

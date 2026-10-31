@@ -17,7 +17,7 @@ import type { Lang } from './i18n';
  *
  * 0 = 还没有写过一条：这一套从 10-11 起才有，线上的旧页面不认 `release`，照旧比 `sha`（见 engine/newVersion.ts）。
  */
-export const RELEASE = 6;
+export const RELEASE = 7;
 
 export type ReleaseNote = Record<Lang, string>;
 
@@ -56,6 +56,13 @@ export const CHANGELOG: Readonly<Record<number, ReleaseNote>> = {
     zhHant: '色盲友好配色加上紋理',
     en: 'Colourblind palette now adds patterns',
     fr: 'Des motifs sur les pièces pour les daltoniens',
+  },
+  // 10-31 方案推04（Z-K01、Z-K02）：老虎机 / 无限反转 / 炸弹那三句一句话提示改成实话，规则书删「天才特供」。
+  7: {
+    zhHans: '改进：玩法提示更准确',
+    zhHant: '改進：玩法提示更準確',
+    en: 'Clearer tips for each game mode',
+    fr: 'Astuces de mode plus précises',
   },
 };
 
