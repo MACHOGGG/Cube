@@ -1,6 +1,7 @@
 {
   "name": "slides",
   "private": true,
+  "license": "UNLICENSED",
   "version": "0.1.0",
   "description": "Slides · Web/App",
   "type": "module",
