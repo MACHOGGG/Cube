@@ -3864,6 +3864,10 @@ body:has(.center-pick--back) .home-nav { display: none; }
    算不了 max() 时的兜底（390 宽、安全区报 0 时的值）。 */
 .slot-page .start-stage { padding-bottom: 208px; }
 .slot-page .start-stage { padding-bottom: calc(118px + clamp(73px, 19.5vw, 99px) + max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 14px)); }
+/* 老虎机转轮子那一幕（开局页那一层，.overlay--start-slot）：底下那颗《退出》也是全站统一的 .page-exit（站长 10-31），
+   所以底下照样让出「它离底的距离 ＋ 它自己 ＋ 16px」，和挑图形那一页同一个写法。 */
+.overlay--start-slot .start-stage { padding-bottom: 208px; }
+.overlay--start-slot .start-stage { padding-bottom: calc(118px + clamp(73px, 19.5vw, 99px) + max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 14px)); }
 /* 和开局页一样是整屏的一幕，底下那一排导航在这儿只会挡住《退出》。 */
 body:has(.slot-page) .home-nav { display: none; }
 /* 三张图占的是开局页放倒数窗口的那一格，所以横着摊开、上下居中。 */
@@ -4609,6 +4613,7 @@ html:has(body > .overlay) .home-card { visibility: hidden; pointer-events: none;
      第一版是 24px：步步为营那一句标语最长，844 宽的横屏上它的右沿离键只剩 15px。不去收标语的
      宽——收了它就折行，整块往上挪，横屏那个老位置就变了。 */
   .slot-page .page-exit.icon-btn,
+  .overlay--start-slot .page-exit.icon-btn,
   .center-pick--back .page-exit.icon-btn {
     /* 上下居中：上下都钉 0 ＋ 上下 margin auto，盒子有定高，auto 平分剩下的（从前是 top 50% ＋
        负的半个高度 -31px）。
@@ -4622,6 +4627,9 @@ html:has(body > .overlay) .home-card { visibility: hidden; pointer-events: none;
   }
   .slot-page .start-stage { padding-bottom: 36px; }
   .slot-page .start-stage { padding-bottom: calc(22px + max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 14px)); }
+  /* 老虎机转轮子那一幕：键站到右边去了，底下不用让；右边让出键的那一列（16 ＋ 62 ＋ 16），机器和倒数窗不碰它。 */
+  .overlay--start-slot .start-stage { padding-bottom: 36px; padding-right: 94px; }
+  .overlay--start-slot .start-stage { padding-bottom: calc(22px + max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 14px)); padding-right: calc(94px + env(safe-area-inset-right, 0px)); }
   .center-pick--back { padding-bottom: 24px; }
   /* 老虎机介绍页那颗《开始 〉》：竖屏时它和《退出》同一行；横屏《退出》挪到右边正中，它回
      到右下角那个老位置，两颗不叠。 */

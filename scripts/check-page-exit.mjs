@@ -12,7 +12,7 @@
  *   第 5 条：360×740、390×844、430×932 下 scrollHeight ≤ innerHeight，面板 ≥ 1.5 倍原高，
  *            按钮完整可见、互不重叠。
  *
- * 七页：计时、老虎机（主菜单进的挑图形页，和个人主页进的介绍页）、无限反转、步步为营、炸弹
+ * 八页：计时、老虎机（主菜单进的挑图形页、挑完图形转轮子那一幕——10-31 站长要它和挑图形页站在一处——和个人主页进的介绍页）、无限反转、步步为营、炸弹
  * （10-08 方案 3-G 起是一整页，从前是一扇挑选窗）、多人小屋、成绩与排名。小红书那几张二级页走的是同一颗 .page-exit，样式由
  * xhs/check-pickup.mjs 在那一端的包上量。
  *
@@ -131,6 +131,18 @@ const PAGES = [
       await p.click('#randomRow');
     },
     root: '.slot-intro-page', exit: '#slotBack', back: '.profile-page', pad: '.slot-intro-page .start-stage',
+  },
+  // 老虎机挑完图形、转轮子那一幕（开局页那一层，.overlay--start-slot）：只有《退出》一颗键，它也是统一的 .page-exit，
+  // 和紧挨着的上一页（挑图形）站在同一个地方（站长 10-31：「老虎机点击后选图形的部分的退出键和老虎机随机处的退出键现在
+  // 完全不在一个位置，需要和网页中其他所有的统一位置和形式」）。原先它是倒数页那一排的 .start-act，离底 22px。
+  {
+    n: '老虎机转轮子',
+    open: async (p) => {
+      await tap(p, '.home-icon-btn[aria-label="老虎机模式"]');
+      await p.waitForSelector('.slot-page [data-family="square"]', { timeout: 10000 });
+      await tap(p, '.slot-page [data-family="square"]');
+    },
+    root: '#startOverlay.show', exit: '#startBackBtn', back: '.slot-page, .home-page', pad: '#startOverlay .start-stage',
   },
   { n: '无限反转', open: (p) => tap(p, '.home-icon-btn[aria-label="无限反转"]'), root: '.flip-page', exit: '#flipBack', back: '.home-page', pad: '.flip-page .start-stage' },
   { n: '步步为营', open: (p) => tap(p, '.home-icon-btn[aria-label="步步为营"]'), root: '.flip-page', exit: '#puzzleBack', back: '.home-page', pad: '.flip-page .start-stage' },
@@ -347,7 +359,7 @@ for (const size of SIZES) {
     const ok = await page.waitForSelector(pg.back, { timeout: 8000 }).then(() => true).catch(() => false);
     check(`${tag}：按下去回到 ${pg.back}`, ok);
   }
-  // 七页彼此：水平中线、底边差不过 1px（成绩页那颗大一号，比中心就比错了，见文件头）。
+  // 各页彼此：水平中线、底边差不过 1px（成绩页那颗大一号，比中心就比错了，见文件头）。
   if (centers.length) {
     const xs = centers.map((c) => c.cx);
     const bs = centers.map((c) => c.b);

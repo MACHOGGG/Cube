@@ -409,7 +409,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
          下半屏 3、2、1 数完直接开打。真正把一局叫起来的仍然是 #startBtn，只是
          现在它藏起来，由倒数替玩家按下去：这样游戏本身的开始/暂停/结束那套状
          态机一个字都不用改。 -->
-    <div class="overlay opaque show overlay--start" id="startOverlay">
+    <div class="overlay opaque show overlay--start${meta.slotTarget ? ' overlay--start-slot' : ''}" id="startOverlay">
       ${startStageHtml({
         // 这一局是什么：编号表里的那一行（玩法 ＋ 棋盘）。图由它定（ui/modeIcons.ts 的 iconFor），
         // 和第二层上按下去的那一格是同一张（10-08 方案 3-F-4）——从前这儿递的是棋盘 ＋ bomb ＋
@@ -434,12 +434,20 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
         offer: cvdOffered ? cvdOfferHtml(colorblindOn(), s.colorblindBtn) : undefined,
         // 老虎机那一局底下只留《退出》：轮子已经在转了，「暂停」停不住它，
         // 而这一幕本来就只有五秒。玩家的原话：「下面还是只有那个《退出》」。
-        actions:
-          `<button class="icon-btn start-act" id="startBackBtn" aria-label="${s.back}">${CTL_BACK}</button>` +
-          (meta.slotTarget
-            ? ''
-            : `<button class="icon-btn start-act" id="startPauseBtn" aria-label="${s.pauseBtn}">${CTL_PAUSE}</button>`),
+        // 那一颗不在这一排里，是下面那颗全站统一的 .page-exit（见下）。
+        actions: meta.slotTarget
+          ? undefined
+          : `<button class="icon-btn start-act" id="startBackBtn" aria-label="${s.back}">${CTL_BACK}</button>` +
+            `<button class="icon-btn start-act" id="startPauseBtn" aria-label="${s.pauseBtn}">${CTL_PAUSE}</button>`,
       })}
+      ${
+        // 老虎机转轮子那一幕只有《退出》一颗键，它就是全站统一的那颗 .page-exit（站长 10-31：「老虎机点击后选图形的
+        // 部分的退出键和老虎机随机处的退出键现在完全不在一个位置，需要和网页中其他所有的统一位置和形式」）。原先它
+        // 是倒数页那一排的 .start-act，站在离底 22px；紧挨着它的上一页（挑图形）和别的二级页都是离底 116 的 .page-exit，
+        // 点完图形那颗键往下一跳；横屏更是一大一小、一个靠右边沿一个在中间。别的玩法的倒数页照旧是《返回》《暂停》
+        // 并排那一排（那两颗是一组，10-08 方案 3-F 统一过）。id 照旧是 startBackBtn：点它的那两处（离开、停轮子）不用改。
+        meta.slotTarget ? `<button class="icon-btn page-exit" id="startBackBtn" aria-label="${s.back}">${CTL_BACK}</button>` : ''
+      }
       <button id="startBtn" class="start-hidden-go" hidden aria-hidden="true" tabindex="-1">${s.startBtn}</button>
     </div>
 
