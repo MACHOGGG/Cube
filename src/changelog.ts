@@ -17,7 +17,7 @@ import type { Lang } from './i18n';
  *
  * 0 = 还没有写过一条：这一套从 10-11 起才有，线上的旧页面不认 `release`，照旧比 `sha`（见 engine/newVersion.ts）。
  */
-export const RELEASE = 9;
+export const RELEASE = 10;
 
 export type ReleaseNote = Record<Lang, string>;
 
@@ -77,6 +77,13 @@ export const CHANGELOG: Readonly<Record<number, ReleaseNote>> = {
     zhHant: '再來一局也有倒數',
     en: 'Play again now counts down first',
     fr: 'Rejouer lance un compte à rebours',
+  },
+  // 10-31 方案推10（Z-D11）：电脑端个人主页两栏上下居中，《返回》换成全站那颗大《退出》（手机一起换）。
+  10: {
+    zhHans: '电脑版个人主页居中',
+    zhHant: '電腦版個人主頁居中',
+    en: 'Profile page centred on desktop',
+    fr: 'Profil centré sur ordinateur',
   },
 };
 

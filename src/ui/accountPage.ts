@@ -358,7 +358,9 @@ export function renderAccountPage(
           </section>
         </section>
       </div>
-      <div class="page-back-row"><button class="icon-btn page-back" id="backBtn" aria-label="${s.back}">${CTL_BACK}</button></div>
+      <!-- 《退出》：全站那一颗 .page-exit（10-31 方案推10 Z-D11，站长 10-21、D60 手机一起换）——钉在屏幕上、和别的二级页同一个
+           位置同一个大小。原先是内容流里那颗 62 的 .page-back。id 留着 backBtn：别的代码和门按 id 找它。 -->
+      <button class="icon-btn page-exit" id="backBtn" aria-label="${s.back}">${CTL_BACK}</button>
     </div>
   `;
 

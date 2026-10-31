@@ -508,9 +508,13 @@ for (const size of SIZES) {
           : null,
         legalWidthDiff: legal.length === 2 ? Math.round(Math.abs(legal[0].width - legal[1].width)) : null,
         hscroll: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        // 《返回》10-31 方案推10 起是全站那颗 .page-exit（#backBtn，fixed 在屏幕底部），不再是内容流里那一行
+        // .page-back-row——量的仍是「它在页面里、有高度」。
         back: (() => {
-          const r = document.querySelector('.page-back-row').getBoundingClientRect();
-          return { top: Math.round(r.top + window.scrollY), h: Math.round(r.height) };
+          const el = document.querySelector('#backBtn.page-exit');
+          if (!el) return { top: -1, h: 0 };
+          const r = el.getBoundingClientRect();
+          return { top: Math.round(r.top), h: Math.round(r.height) };
         })(),
       };
     });

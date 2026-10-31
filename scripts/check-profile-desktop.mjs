@@ -15,7 +15,12 @@
  *   ① 四种语言 × 1000×700、1280×720、1366×768、1440×900、1920×1080：
  *      · 整页不滑（scrollHeight − innerHeight ≤ 1）；
  *      · 十二格一格都不溢出（字没被裁、没顶出格子）；
- *      · 《返回》上沿到两栏内容底 ≥ 24，《返回》下沿到底部导航那颗键的上沿 ≥ 16；
+ *      · 两栏内容底 ≤《退出》上沿 − 16（不重叠），《退出》下沿到底部导航那颗键的上沿 ≥ 16；
+ *      · 《退出》是全站那颗 .page-exit（10-31 方案推10 Z-D11：原先是内容流里那颗 62 的《返回》，「上沿到两栏内容底 ≥ 24」
+ *        量的是它；现在它钉在屏幕上，量的是「两栏不压它」）；
+ *      · 1280×720、1366×768、1440×900、1920×1080：两栏在招牌底和「《退出》上沿 − 16」之间上下居中——「招牌底 → 两栏顶」
+ *        与「两栏底 → 《退出》上沿 − 16」相差 ≤ 12（站长 10-21）；1000×700 那一档挤紧，只量不重叠、不滑；
+ *      · 招牌玻璃的上沿和成绩页那一张一样高（主菜单、个人主页、成绩页三页招牌同高，2026-09 第七轮）——居中只挪两栏；
  *      · 右栏三列、四行；吉祥物 54 高，和徽章同一行（两个的垂直中线差 ≤ 4）；
  *      · 左栏 360 宽（1000–1099 宽那一档 300），两栏并排、顶端对齐。
  *   ② 手机 390×844、360×740：十二格仍是两列、吉祥物仍是 90 高、徽章仍在吉祥物底下——这几样是「手机上一个
@@ -61,6 +66,10 @@ const MEASURE = () => {
   const main = box(document.querySelector('.profile-col--main'));
   const genius = box(document.querySelector('.profile-col--genius'));
   const back = box(document.getElementById('backBtn'));
+  const head = box(document.querySelector('.profile-page > .home-head'));
+  const glass = box(document.querySelector('.profile-page .home-head-glass'));
+  const colsBox = box(document.querySelector('.profile-cols'));
+  const isExit = document.getElementById('backBtn').classList.contains('page-exit');
   // 底部导航：和《返回》左右有交叠的那颗键；一颗都不交叠就拿整条底排。
   const navBtns = [...document.querySelectorAll('.home-nav .home-nav-btn')].map(box);
   const under = navBtns.filter((n) => n.r > back.l && n.l < back.r);
@@ -70,7 +79,7 @@ const MEASURE = () => {
     cells: cells.length, overflow, cols: lefts.length, rows: tops.length,
     logo: box(document.querySelector('.genius-crest .genius-logo')),
     badge: box(document.querySelector('.genius-badge')),
-    main, genius, back, navTop,
+    main, genius, back, navTop, head, glass, colsBox, isExit,
   };
 };
 
@@ -105,8 +114,21 @@ for (const [w, h] of DESK) {
     check(`${tag}：十二格一格都不溢出`, m.overflow.length === 0, m.overflow.join(' | '));
     check(`${tag}：右栏三列四行`, m.cols === 3 && m.rows === 4, `${m.cols} 列 ${m.rows} 行`);
     const contentBottom = Math.max(m.main.b, m.genius.b);
-    check(`${tag}：《返回》上沿到两栏内容底 ≥ 24`, m.back.t - contentBottom >= 24 - 0.5, `${Math.round(m.back.t - contentBottom)}`);
-    check(`${tag}：《返回》下沿到底部导航那颗键的上沿 ≥ 16`, m.navTop - m.back.b >= 16 - 0.5, `${Math.round(m.navTop - m.back.b)}`);
+    check(`${tag}：《退出》是全站那颗 .page-exit`, m.isExit);
+    check(`${tag}：两栏内容底 ≤《退出》上沿 − 16（不重叠）`, contentBottom <= m.back.t - 16 + 0.5, `${Math.round(m.back.t - 16 - contentBottom)}`);
+    check(`${tag}：《退出》下沿到底部导航那颗键的上沿 ≥ 16`, m.navTop - m.back.b >= 16 - 0.5, `${Math.round(m.navTop - m.back.b)}`);
+    const up = m.colsBox.t - m.head.b;
+    const down = m.back.t - 16 - m.colsBox.b;
+    if (!(w === 1000 && h === 700)) {
+      check(`${tag}：两栏上下居中（招牌底 → 两栏顶 ${Math.round(up)}、两栏底 → 《退出》上沿 − 16 ${Math.round(down)}，相差 ≤ 12）`,
+        Math.abs(up - down) <= 12, `差 ${Math.round(Math.abs(up - down))}`);
+    }
+    // 招牌和成绩页那一张一样高：同一个上下文里点开成绩页量它的玻璃上沿（三页同高的规矩）。
+    await page.click('#navRecords');
+    await page.waitForSelector('.records-page .home-head-glass', { timeout: 10000 });
+    await page.waitForTimeout(200);
+    const ref = await page.$eval('.records-page .home-head-glass', (e) => e.getBoundingClientRect().top);
+    check(`${tag}：招牌玻璃上沿和成绩页一样（居中只挪两栏）`, Math.abs(m.glass.t - ref) <= 0.5, `${m.glass.t.toFixed(1)} / ${ref.toFixed(1)}`);
     check(`${tag}：吉祥物 54 高`, Math.abs(m.logo.h - 54) <= 0.5, `${m.logo.h.toFixed(1)}`);
     const dy = Math.abs((m.logo.t + m.logo.b) / 2 - (m.badge.t + m.badge.b) / 2);
     check(`${tag}：吉祥物和徽章同一行（垂直中线差 ≤ 4）`, dy <= 4 && m.badge.l >= m.logo.r, `差 ${dy.toFixed(1)}`);
@@ -114,7 +136,7 @@ for (const [w, h] of DESK) {
     check(`${tag}：左栏 ${leftW} 宽`, Math.abs(m.main.w - leftW) <= 0.5, `${m.main.w.toFixed(1)}`);
     check(`${tag}：两栏并排、顶端对齐`, m.main.r <= m.genius.l && Math.abs(m.main.t - m.genius.t) <= 1, JSON.stringify({ main: m.main, genius: m.genius }));
     check(`${tag}：没有页面报错`, errors.length === 0, errors.join(' | '));
-    table.push(`${tag.padEnd(18)} 页 ${m.scroll <= 0 ? '不滑' : `滑 ${m.scroll}`} · 返回上沿离内容底 ${Math.round(m.back.t - contentBottom)} · 下沿离底排 ${Math.round(m.navTop - m.back.b)}`);
+    table.push(`${tag.padEnd(18)} 页 ${m.scroll <= 0 ? '不滑' : `滑 ${m.scroll}`} · 招牌底→两栏 ${Math.round(up)} · 两栏→退出上沿−16 ${Math.round(down)} · 退出下沿离底排 ${Math.round(m.navTop - m.back.b)}`);
     await ctx.close();
   }
 }

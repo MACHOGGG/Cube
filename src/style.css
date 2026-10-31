@@ -3368,8 +3368,8 @@ body:has(.center-pick--back) .home-nav { display: none; }
   padding-bottom: calc(102px + max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 14px));
 }
 /* 成绩页底下多了那颗《退出》（第 18 推，.page-exit：站在底排上面 16px），所以这一页的页
-   底留白再加它那一截——它离底的距离 ＋ 它自己 ＋ 16 的空。个人主页没有这颗键，照旧是上面
-   那一条。
+   底留白再加它那一截——它离底的距离 ＋ 它自己 ＋ 16 的空。个人主页 10-31 方案推10 起也是这一颗
+   （原先是内容流里那颗 62 的 .page-back），一起走这一条。
    10-08 方案 3-C-3 起这颗键是 --exit-disc 那个尺寸（73–99，跟着屏宽），所以「它自己」那一截
    也跟着屏宽：118 ＝ 102 ＋ 16，中间那个 clamp 就是那颗键的尺寸。手机上两块面板吃的正是这条
    留白以上的全部高度（见下面「一屏装下」那一段），所以这儿差一个像素，面板底就压到键上，或者
@@ -3380,7 +3380,7 @@ body:has(.center-pick--back) .home-nav { display: none; }
    （「页底留白 ≥ 离底 ＋ 它自己 ＋ 16」和「面板底正好在键顶往上 16」两条）。
    前一行是给算不了 clamp() 的老内核的（390 宽、安全区报 0 时的值）；其实走不到——小红书那一
    版的这一页挂着 .xhs-profile。 */
-.records-page:not(.xhs-profile) {
+.records-page:not(.xhs-profile), .profile-page {
   padding-bottom: 208px;
   padding-bottom: calc(118px + clamp(73px, 19.5vw, 99px) + max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 14px));
 }
@@ -4733,7 +4733,13 @@ html:has(body > .overlay) .home-card { visibility: hidden; pointer-events: none;
     column-gap: var(--gap-lg); align-items: start;
   }
   .profile-page > .home-head { margin-bottom: 12px; }
-  .profile-page .page-back-row { margin-top: 16px; }
+  /* 两栏在「招牌底」和「《退出》上沿再往上 16」之间上下居中（10-31 方案推10 Z-D11，站长 10-21）；招牌不动（主菜单、
+     个人主页、成绩页三页招牌同高，2026-09 第七轮）。整页至少一屏高，两栏上下 margin auto 平分剩下的；页底留白已经是
+     「《退出》离底 ＋ 它自己 ＋ 16」（上面那条），所以两栏往下最多到《退出》上沿往上 16。招牌底下那一截是 12 ＋ 一道
+     gap，底下用 ::after 垫一块同样的 12（它前面也有一道 gap），两头才一样。 */
+  .app.profile-page { min-height: 100vh; min-height: 100svh; }
+  .profile-cols { margin-top: auto; margin-bottom: auto; }
+  .app.profile-page::after { content: ''; flex: none; height: 12px; }
   .genius-panel {
     display: grid; grid-template-columns: auto 1fr; align-items: center;
     column-gap: 14px; row-gap: 12px; padding-top: 12px;
@@ -4772,6 +4778,13 @@ html:has(body > .overlay) .home-card { visibility: hidden; pointer-events: none;
    分卡的上下内边距从 14 / 12 收到 11 / 9（省 6）——三块整体往上挪 22px，面板一个像素都不缩。
    量出来三块排到 464，离《退出》上沿 21，整页 695。 */
 @media (min-width: 1000px) and (max-height: 760px) {
+  /* 个人主页同一档（10-31 方案推10 Z-D11 第 4 条）：《退出》换成钉在屏幕上的那颗 99 之后，页底留白从 116 涨到 231，
+     1000×700 上两栏底压到《退出》上沿往下 20px、整页要滑 48px（量过）。照成绩页这一档收：招牌底下 12 → 0、行距
+     16 → 6、居中用的那块垫子不要了——两栏一个像素不缩，量出来两栏底离《退出》上沿正好还有 16 以上，整页不滑。
+     这一档还有剩的高度（1280×720）照旧上下居中，只是上头多一道 6px 的行距（门放 12 以内）。 */
+  .profile-page > .home-head { margin-bottom: 0; }
+  .app.profile-page { row-gap: 6px; }
+  .app.profile-page::after { display: none; }
   .records-page:not(.xhs-profile) > .home-head { margin-bottom: 0; }
   .app.records-page:not(.xhs-profile) { row-gap: 6px; }
   .records-page:not(.xhs-profile) .total-card { padding-top: 11px; padding-bottom: 9px; }

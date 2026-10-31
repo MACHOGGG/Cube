@@ -150,6 +150,8 @@ const PAGES = [
   { n: '炸弹', open: (p) => tap(p, '.home-bomb-mini, .home-bomb-card'), root: '.bomb-page', exit: '#bombBack', back: '.home-page', pad: '.bomb-page .start-stage' },
   { n: '多人小屋', open: (p) => tap(p, '.home-icon-btn[aria-label="多人游玩"]'), root: '.mp-page--home', exit: '#mpBack', back: '.home-page', blue: true, pad: '.mp-page--home' },
   { n: '成绩与排名', open: (p) => p.click('#navRecords'), root: '.records-page', exit: '#recordsBack', back: '.home-page', records: true, pad: '.records-page' },
+  // 个人主页（10-31 方案推10 Z-D11，站长 10-21、D60 手机一起换）：原先是内容流里那颗 62 的《返回》（.page-back），现在也是这一颗。
+  { n: '个人主页', open: (p) => p.click('#navProfile'), root: '.profile-page', exit: '#backBtn', back: '.home-page', pad: '.profile-page' },
 ];
 
 /** 在页面里量：键、内容件、几处颜色。 */
