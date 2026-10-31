@@ -157,9 +157,22 @@ const TOTAL_MODE = 'lb:total:mode';
  * 限」）：交卷还是 push，看榜还是 board，mode 传 'daily'。
  */
 const dailyBoardKey = (key) => 'lb:daily:' + key;
-/** 零点之后还收前一天那一局多久：在 23:59 开局的人，打完已经是第二天了。 */
-const DAILY_GRACE_MS = 10 * 60_000;
+/**
+ * 零点之后还收前一天那一局多久：在 23:59 开局的人，打完已经是第二天了。原先 10 分钟（10-31 方案推09 Z-H05，verify-G G26、
+ * D41 改成 30）：二十天轮换里有十四天的玩法不限时，23:50 开局、打二十几分钟的人交上来已经过了宽限。
+ */
+const DAILY_GRACE_MS = 30 * 60_000;
 const DAILY_TTL_S = 8 * 86_400;
+/**
+ * 最近 `days` 天（含今天，北京时间）的今日榜键（10-31 方案推09 Z-H05）。和 pushDaily 同一个拼法（dailyBoardKey(dayKey(…))）：
+ * 换邮箱搬今日榜（moveScores）用它；删号（推25）要清的键也复用它。今日榜的键活 DAILY_TTL_S（8 天），所以默认 8 天。
+ */
+export function dailyBoardKeys(days = 8, now = Date.now()) {
+  const today = dayIndexOf(now);
+  const out = [];
+  for (let d = 0; d < days; d++) out.push(dailyBoardKey(dayKey(today - d)));
+  return out;
+}
 
 /**
  * 一张榜的名字。
@@ -800,7 +813,9 @@ async function push(res, body, who) {
 
     // ③ stats 最后写。同一局报第二次：前面几步都已经写成过了（seen 在就说明这一点），这里不再累计。
     if (!duplicate) {
-      stats.total += score;
+      // 缺字段的旧客户端局（legacy）不上榜，可原先照样把它报的分整个加进累计（实测 999,999,999 也加了，10-14 I-4 ③）：封到
+      // 这张榜的上界（boardCeiling），查不到上界的玩法不加（10-31 方案推09 Z-H05）。
+      stats.total += legacy ? Math.min(score, boardCeiling(boardId)) : score;
       stats.runs += 1;
       if (onBoards) stats.best[boardId] = best;
       stats.bestRules = SCORING_RULES;
@@ -1201,7 +1216,8 @@ const rebuildTicketKey = (t) => 'rebuild:resume:' + t;
  *     那是他的记录。
  *
  * 做法：先把这个人从每一张榜（含老版本那几张）撤下来，再按重算的账写回去，
- * 总榜跟着重算。存档只留最近 60 局（KEEP_RUNS），更早的翻不出来也就不算——
+ * 总榜跟着重算。存档只留最近 60 局（KEEP_RUNS），存档以外的老高分照「重建保留旧值」那六条（见下面
+ * 那一段）留着：现行的榜、没被点名清掉、没换过规则、人没被撤下来、不超过这张榜的上界——满足就留旧的。
  * 回包里报了动过几个人、写了几行、跳过了几个人。
  *
  * ── 一个人一把锁，而且是整段进锁 ──────────────────────────────
@@ -1405,8 +1421,19 @@ async function rebuild(req, res, body) {
         const rulesOk = !stats.bestRules || stats.bestRules === SCORING_RULES;
         for (const boardId of ALL_BOARDS) {
           const old = num(stats.best?.[boardId]);
-          if (!(old > (best[boardId] || 0))) continue;
+          /*
+           * 步步为营同分（10-31 方案推09 Z-H05，10-14 I-4 ①）：存档里翻得出同一个分，可那一局「剩几步」比榜上那一行少
+           * （剩得多的那一局已经挤出存档了）——原先「不比存档高就跳过」，重建之后 300009 掉成 300000。同分时榜上现值
+           * 和重算值取大的；同样要过下面保留旧值那四道（规则没换、没点名清、不超上界、榜上那一行的分就是这个分）。
+           */
+          const tie = isPuzzleBoard(boardId) && old > 0 && old === (best[boardId] || 0);
+          if (!(old > (best[boardId] || 0)) && !tie) continue;
           if (!rulesOk || droppedBoards.includes(boardId) || old > boardCeiling(boardId)) continue;
+          if (tie) {
+            const cur = await zscore(boardKey(boardId), id);
+            if (cur !== null && Math.floor(cur / PUZZLE_SCALE) === old && cur > (onBoard[boardId] || 0)) onBoard[boardId] = cur;
+            continue;
+          }
           best[boardId] = old;
           if (isPuzzleBoard(boardId)) {
             const cur = await zscore(boardKey(boardId), id);
@@ -1832,6 +1859,15 @@ async function moveScores(from, to) {
    */
   await repointNickname(name, from, to);
   await hdel(NAMES, from);
+
+  // 今日榜也搬（10-31 方案推09 Z-H05）：原先换邮箱只搬常规榜和总榜，换完当天今日榜上还挂着旧 id——新 id 再交一局就是
+  // 两行。近 8 天（今日榜的键活这么久）每一张：旧 id 有分就写到新 id（两者取高），再撤旧 id。
+  for (const key of dailyBoardKeys()) {
+    const there = await zscore(key, from);
+    if (there === null) continue;
+    await zaddIfHigher(key, there, to);
+    await zrem(key, from);
+  }
 
   // 旧 id 下的存档最后清。到这一行为止，新 id 那边什么都齐了。
   await del(statsKey(from));

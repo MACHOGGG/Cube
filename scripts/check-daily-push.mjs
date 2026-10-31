@@ -201,6 +201,8 @@ const C = await makePlayer('daily-c@example.com');
 // ── ① 零点后的宽限 ──────────────────────────────────────────────────────────
 const D = await makePlayer('daily-d@example.com');
 {
+  // 宽限 30 分钟（10-31 方案推09 Z-H05，原先 10）：二十天轮换里十四天的玩法不限时，23:50 开局的人 00:20 前交卷要照收。
+  check('①（尺子）宽限是 30 分钟', GRACE === 30 * 60_000, `${GRACE / 60000} 分钟`);
   const midnight = SC.dayStartOf(today);
   const yKey = SC.dayKey(today - 1);
   setNow(midnight + GRACE);

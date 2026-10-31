@@ -550,7 +550,9 @@ check('不在榜上的人没有名次', (await store.zrevrank('zt', 'nobody')) =
   const pz = (score, left, cleared = true, extra = {}) => ({
     shapeId: 'square', modeKey: 'puzzle', puzzleRules: 3, boardTiles: 36, totalScore: score,
     reason: cleared ? CLEAR : '步数用尽',
-    puzzle: { ...pzTally(score), spent: 20, scoredMoves: 5, left },
+    // 走的步数跟着「剩几步」算（10-31 方案推09 起服务器对这三个数的账：left = max(0, 起手 22 − (spent − scoredMoves))）。
+    // 原先一律「走 20、得分 5」配各种 left，账对不上，加了账核对之后整节被拒。
+    puzzle: { ...pzTally(score), spent: 22 - left + 5, scoredMoves: 5, left },
     ...extra,
   });
   // 名字也是故意挑的：并列时内存替身按成员名**正序**破平（pz-a… 在 pz-z… 前面）。清三是
@@ -761,7 +763,8 @@ check('不在榜上的人没有名次', (await store.zrevrank('zt', 'nobody')) =
   const W = await makePlayer('k-pz@example.com');
   const pz = (score, seedSource) => ({
     shapeId: 'square', modeKey: 'puzzle', puzzleRules: 3, boardTiles: 36, totalScore: score, reason: '步数用尽',
-    puzzle: { ...pzTally(score), spent: 20, scoredMoves: 5, left: 0 },
+    // 剩 0：走 27、得分 5（空走 22 步正好用完，见上面那一节的说明）。
+    puzzle: { ...pzTally(score), spent: 27, scoredMoves: 5, left: 0 },
     ...(seedSource ? { seedSource } : {}),
   });
   await call({ action: 'push', ...W, runId: 'w1', mode: 'square', score: 120, name: '代号壬', data: pz(120, 'random') });

@@ -260,8 +260,11 @@ const sortKeys = (o) => Object.fromEntries(Object.entries(o || {}).sort(([a], [b
   check('⑤ 缺字段的旧局报二十亿：照收进存档、不上榜（200 stored:false legacy）',
     r.status === 200 && r.payload?.stored === false && r.payload?.reason === 'legacy', `${r.status} ${JSON.stringify(r.payload)}`);
   const mine = await call({ action: 'mine', ...F });
-  check('⑤ 存下来的数被削到上限（累计十亿，不是二十亿），best 里没有它',
-    mine.payload?.total === MAX_SCORE && Object.keys(mine.payload?.best || {}).length === 0,
+  // 累计那一笔：原先削到十亿（num 的上限）照加；10-31 方案推09 Z-H05（10-14 I-4 ③）起缺字段的局只加这张榜的上界——
+  // 它不上榜，却能把累计一口气抬到十亿（实测 999,999,999 也加了）。
+  const { stepCeiling } = await import('../api/_maxscore.js');
+  check('⑤ 累计只加方块基础那张榜的上界（不是十亿、更不是二十亿），best 里没有它',
+    mine.payload?.total === stepCeiling('square') && Object.keys(mine.payload?.best || {}).length === 0,
     `total=${mine.payload?.total} best=${JSON.stringify(mine.payload?.best)}`);
   check('⑤ 记了一行日志', lines.length === 1, JSON.stringify(lines));
   check('⑤ 那一行里有 runId 和那个离谱的数', lines[0]?.includes('f1') && lines[0]?.includes(String(MAX_SCORE * 2)),
@@ -371,7 +374,10 @@ const sortKeys = (o) => Object.fromEntries(Object.entries(o || {}).sort(([a], [b
       vetData('square', 4, { modeKey: 'flip', flipRules: 2 }, { flips: 4, patternPoints: 4, comboBonusPoints: 0, score: 4, moves: 1, elapsedSec: 3 }), 4],
     ['无限反转（小球）：连击把分抬得很高', 'circle:flip2', vetData('circle', 120000, { modeKey: 'flip', flipRules: 2 }), 120000],
     ['步步为营：消除 20、星星 8', 'square:puzzle3', pz2('square', 240, { cleared: 20, stars: 8 }), 240],
-    ['步步为营（小球）：一盘全消掉、起手 15 步一步没空走', 'circle:puzzle3', pz2('circle', 280, { cleared: 28, stars: 0, left: 15 }), 280],
+    // 「一步没空走」：走的每一步都得分（spent = scoredMoves），剩的正是起手那 15 步。原先夹具只改了 left，spent / scoredMoves
+    // 还是 fakeRun 默认的「起手 + 10 步、得分 10 步」——三个数对不上账，推09 加了账核对之后要照这一局真实的样子写全。
+    ['步步为营（小球）：一盘全消掉、起手 15 步一步没空走', 'circle:puzzle3',
+      { ...pz2('circle', 280, { cleared: 28, stars: 0, left: 15, spent: 10, scoredMoves: 10 }), moves: 10 }, 280],
     // 还开着旧页面的人交的第 2 版局：那一版有退步，剩多少都可能——照收，落归档榜 puzzle2（10-15 补充 S9）。
     ['步步为营第 2 版（旧页面）：剩 50 步照收、落归档榜', 'square:puzzle2', pz2('square', 240, { cleared: 20, stars: 8, left: 50 }, 2), 240],
     ['计时（步数系数抬到 4 倍）', 'square:timed',
@@ -668,6 +674,41 @@ const sortKeys = (o) => Object.fromEntries(Object.entries(o || {}).sort(([a], [b
     check('⑬ L-9 没登录：看榜说 signedOut', (await fresh.fetchBoard()).reason === 'signedOut');
   } finally {
     Object.assign(globalThis, saved);
+  }
+}
+
+// ── 步步为营第 3 版：三个计数对得上账（10-31 方案推09 Z-H05，verify-F F1、D11 甲）──────────────────────────────
+//
+// 原先只核 left ≤ 起手步数，手改一个 left 就过。现在 left === max(0, 起手 − (spent − scoredMoves))、scoredMoves ≤ spent。
+// **不比 spent 和 moves**（站长 10-30）：连锁动画没演完就暂停、在暂停面板《结束游戏》，moves 比 spent 多 1 是正常操作——
+// 反例那一局（小球：moves 21、spent 20、scoredMoves 10、left 5）必须照收。
+{
+  const P = await makePlayer('guard-puzzle@example.com');
+  const pzOf = (mode, score, puzzle, over = {}) => {
+    const d = vetData(mode, score, { modeKey: 'puzzle', puzzleRules: 3 });
+    return { ...d, ...over, puzzle: { ...d.puzzle, ...puzzle } };
+  };
+  const OK = [
+    ['自洽（方块：走 30 步、得分 10 步、剩 2）', pzOf('square', 240, { spent: 30, scoredMoves: 10, left: 2 }, { moves: 30 })],
+    ['步数刚好用完（方块：走 32、得分 10、剩 0）', pzOf('square', 240, { spent: 32, scoredMoves: 10, left: 0 }, { moves: 32 })],
+    ['空走超过起手（方块：走 40、得分 10、剩 0——max(0, …) 夹子）', pzOf('square', 240, { spent: 40, scoredMoves: 10, left: 0 }, { moves: 40 })],
+    ['缺 spent 的在途旧局：不拦', (() => { const d = pzOf('square', 240, {}); delete d.puzzle.spent; return d; })()],
+    ['反例：小球 moves 21、spent 20、scoredMoves 10、left 5（暂停中《结束游戏》，moves 比 spent 多 1）',
+      pzOf('circle', 200, { spent: 20, scoredMoves: 10, left: 5 }, { moves: 21 })],
+  ];
+  let n = 0;
+  for (const [name, data] of OK) {
+    const r = await vetPush(P, `pz-ok-${++n}`, data.shapeId, data);
+    check(`步步为营账：${name}——照收`, r.status === 200, `${r.status} ${JSON.stringify(r.payload)} why=${r.why}`);
+  }
+  const BAD = [
+    ['left 多 1（方块：走 30、得分 10，该剩 2、报 3）', pzOf('square', 240, { spent: 30, scoredMoves: 10, left: 3 }, { moves: 30 })],
+    ['得分的步数比走的还多（方块：走 10、得分 11）', pzOf('square', 240, { spent: 10, scoredMoves: 11, left: 22 }, { moves: 10 })],
+  ];
+  for (const [name, data] of BAD) {
+    const r = await vetPush(P, `pz-bad-${++n}`, data.shapeId, data);
+    check(`步步为营账：${name}——400 implausible，拒在「puzzleSteps」`,
+      r.status === 400 && r.payload?.error === 'implausible' && r.why === 'puzzleSteps', `${r.status} ${JSON.stringify(r.payload)} why=${r.why}`);
   }
 }
 

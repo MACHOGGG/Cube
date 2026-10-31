@@ -195,6 +195,25 @@ export function vetRun(board, data) {
     if (Number(data.puzzleRules) >= 3) {
       const left = data.puzzle.left;
       if (!isCount(left) || left > (PUZZLE_START[board] ?? 0)) return { verdict: 'implausible', why: 'puzzleLeft' };
+      /*
+       * 三个计数要对得上账（10-31 方案推09 Z-H05，verify-F F1、D11 甲）：原先只核 left ≤ 起手步数，手改一个 left 就过。
+       * 第 3 版没得分的一步扣 1（puzzleScore.ts 的 PUZZLE_STEP_COST）、得分的不扣，left 用 max(0, …) 夹住——所以
+       *   · left === max(0, 起手 − (spent − scoredMoves))（**一定带夹子**：步数刚好用完的正常局 spent − scoredMoves 会
+       *     超过起手，不夹就被误判）；
+       *   · scoredMoves ≤ spent。
+       * **不核 spent === moves**（站长 10-30 定）：连锁动画还没演完就暂停（或切后台自动暂停）、在暂停面板按《结束游戏》，
+       * moves++ 在 resolveMove 开头早已记上（gameController.ts 的 resolveMove），endGame 撤掉下一拍、在途那一步的 finish
+       * 不再跑（finish 开头那几处提前返回），bank.spend 漏记，于是 moves = spent + 1——这是代码自己认的正常操作，模拟的
+       * 11,200 局里这样的 547 局全差 1；加这一条，这些正常局的成绩会被静默丢掉。上面两条那 547 局照样成立（在途那一步
+       * 两边都没记）。缺 spent 的在途旧局不拦（和 legacy 一个口径）。不设任何分数硬顶（Q41、D11 甲）。
+       */
+      const { spent, scoredMoves } = data.puzzle;
+      if (isCount(spent) && isCount(scoredMoves)) {
+        const start = PUZZLE_START[board] ?? 0;
+        if (scoredMoves > spent || left !== Math.max(0, start - (spent - scoredMoves))) {
+          return { verdict: 'implausible', why: 'puzzleSteps' };
+        }
+      }
     }
     return { verdict: 'ok' };
   }

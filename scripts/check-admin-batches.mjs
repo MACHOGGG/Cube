@@ -408,5 +408,53 @@ check('（尺子）25 个人都在无限反转那张榜上', (await flipBoard())
     JSON.stringify(odd.nicknames));
 }
 
+// ── ⑲ 重建：步步为营同分「剩几步」不丢；缺字段的旧局累计封顶（10-31 方案推09 Z-H05，10-14 I-4 ①③）────────────────
+//
+// ① 同分：先交一局 300 分剩 9 步（榜上 300009），再交一局 300 分剩 0 步（榜上照旧 300009，只上不下），再把剩 9 步那一局
+//    从他的存档里拿掉（等于被后来的 60 局挤出去了）——原先重建只认「比存档高」，同分就照存档写回 300000。
+// ③ 只带分数、明细缺字段的旧客户端局（legacy）报 5e9：不上榜，累计只加这张榜的上界那么多（原先整个加进去，实测
+//    999,999,999 也加了）。
+{
+  const { PUZZLE_START, stepCeiling } = await import('../api/_maxscore.js');
+  let ipN = 0;
+  const rebuildAll = async () => {
+    let r = await call(scores, { action: 'rebuild', token: TOKEN, batch: 50 }, `10.19.1.${++ipN}`);
+    let guard = 0;
+    while (r.body?.done === false && guard++ < 60) {
+      r = await call(scores, { action: 'rebuild', token: TOKEN, resume: r.body.resume, batch: 50 }, `10.19.1.${++ipN}`);
+    }
+    return r;
+  };
+  const email = 'tie-puzzle@example.com';
+  const acct = accounts.newAccount('secret', 'code');
+  acct.until = Date.now() + 30 * 24 * 3600e3;
+  await accounts.saveAccount(email, acct);
+  const push = async (runId, data, score) =>
+    call(scores, { action: 'push', email, token: acct.token, runId, mode: 'square', score, data }, `10.19.0.${++ipN}`);
+  const base = fillRun('square', 300, { modeKey: 'puzzle', puzzleRules: 3, rules: SCORING_V });
+  // 剩 9 步的那一局：账要对得上（left = 起手 − (spent − scoredMoves)，见 api/_maxscore.js）。
+  const spent9 = PUZZLE_START.square - 9 + 10;
+  // 「剩几步」只有清盘的局才拼进榜上那个数（api/scores.js 的 puzzleLeft 认结局那一句）。
+  const nine = { ...base, reason: '全部方块已翻成点面', moves: spent9, puzzle: { ...base.puzzle, spent: spent9, scoredMoves: 10, left: 9 } };
+  const a = await push('tieA', nine, 300);
+  const b = await push('tieB', base, 300);
+  const board = 'lb:square:puzzle3';
+  const before = await store.zscore(board, email);
+  check('⑲（尺子）两局都收了，榜上是剩 9 步那一局的 300009', a.status === 200 && b.status === 200 && before === 300009,
+    `${a.status}/${b.status} · ${before}`);
+  const runs = (await store.get('runs:' + email)) || [];
+  await store.set('runs:' + email, runs.filter((r) => r.runId !== 'tieA'));
+  await rebuildAll();
+  const after = await store.zscore(board, email);
+  check('⑲ ① 剩 9 步那一局已经不在存档里，重建之后榜上仍是 300009（同分不把「剩几步」冲掉）', after === 300009, String(after));
+
+  const t0 = (await store.get('stats:' + email))?.total ?? 0;
+  const legacy = await push('legacy5e9', { shapeId: 'square', modeKey: 'base', totalScore: 5e9, rules: SCORING_V }, 5e9);
+  const t1 = (await store.get('stats:' + email))?.total ?? 0;
+  check('⑲ ③（尺子）缺字段的旧局照收（200 stored:false legacy）', legacy.status === 200 && legacy.body?.reason === 'legacy',
+    `${legacy.status} ${JSON.stringify(legacy.body)}`);
+  check('⑲ ③ 报 5e9 的缺字段旧局：累计只加这张榜的上界那么多', t1 - t0 === stepCeiling('square'), `加了 ${t1 - t0}，上界 ${stepCeiling('square')}`);
+}
+
 console.log(fail ? `\n${fail} 条红` : '\n全绿');
 process.exit(fail ? 1 : 0);

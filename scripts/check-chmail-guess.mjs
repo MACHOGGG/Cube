@@ -129,6 +129,23 @@ const wrongFor = (real) => (real === '000000' ? '111111' : '000000');
   check('⑤ 成功之后那个猜测计数删掉了', (await get('chmail:guess:' + W)) === null, JSON.stringify(await get('chmail:guess:' + W)));
 }
 
+// ── ⑥ 今日榜跟着搬（10-31 方案推09 Z-H05）：原先换邮箱只搬常规榜和总榜，换完当天今日榜上还挂着旧 id ──────────────
+{
+  const { dailyBoardKeys } = await import('../api/scores.js');
+  const { zadd, zscore } = await import('../api/_store.js');
+  const g = await person('daily-move@example.com');
+  const W = 'daily-moved@example.com';
+  const [today, yesterday] = dailyBoardKeys(2);
+  await zadd(today, 1234, g.email);
+  await zadd(yesterday, 777, g.email);
+  await ask(g, W);
+  const moved = await tryCode(g, W, await codeOf(g));
+  check('⑥（尺子）换邮箱成功', moved.status === 200 && moved.body.moved === true, `${moved.status} ${moved.body.error ?? ''}`);
+  const now = { newToday: await zscore(today, W), oldToday: await zscore(today, g.email), newY: await zscore(yesterday, W), oldY: await zscore(yesterday, g.email) };
+  check('⑥ 今日榜：新地址在榜、分数不变（1234），旧地址不在', now.newToday === 1234 && now.oldToday === null, JSON.stringify(now));
+  check('⑥ 前一天那一张（今日榜的键活 8 天）也一样搬了', now.newY === 777 && now.oldY === null, JSON.stringify(now));
+}
+
 globalThis.fetch = realFetch;
 console.log(fail ? `\n${fail} 项没过` : '\n全部通过');
 process.exit(fail ? 1 : 0);
