@@ -4153,22 +4153,8 @@ html:has(body > .overlay) .home-card { visibility: hidden; pointer-events: none;
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   width: 100%;
 }
-/* 暂停面板里那颗《Pro》局中锁住时的那句说明（10-15 补充 S10）：折到开关下面一整行；开关本身淡一档。
-   用 aria-disabled 不用 disabled（读屏还要读得到原因），所以样式也认它。 */
-.pause-switch-note[hidden] { display: none; }
-.pause-switch .pause-switch-note {
-  order: 3; flex: 0 0 100%; margin: 2px 0 0;
-  font-size: 0.78rem; line-height: 1.3; font-weight: 400; color: var(--ink-soft); text-align: left;
-}
-.pause-switch[aria-disabled='true'] { flex-wrap: wrap; cursor: default; }
-.pause-switch[aria-disabled='true'] .pill-switch { opacity: 0.45; }
-@media (orientation: landscape) and (max-height: 560px) {
-  .pause-switch[aria-disabled='true'] { flex-wrap: nowrap; }
-  .pause-switch .pause-switch-note {
-    order: 0; flex: 1 1 auto; min-width: 0; margin: 0 8px 0 10px;
-    font-size: 0.72rem; line-height: 1.25;
-  }
-}
+/* 这儿原先有《Pro》那一行局中锁住时的说明（.pause-switch-note）和锁住的样子（.pause-switch[aria-disabled]）——
+   暂停面板拿掉 Pro 之后（11-01 补充方案推15C）没有用的人了，一起删。 */
 .profile-pill--switch {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
 }
@@ -4259,8 +4245,6 @@ html:has(body > .overlay) .home-card { visibility: hidden; pointer-events: none;
 #pauseOverlay .pause-extras .icon-btn > :first-child { grid-column: 2; }
 #pauseOverlay .pause-switch > .pill-switch,
 #pauseOverlay .pause-switch > .pause-chev { grid-column: 3; justify-self: end; }
-/* 《Pro》局中锁住时那句说明（推15C 连同 Pro 那一行一起拿掉）：在字底下另起一行，和字同一条左边线。 */
-#pauseOverlay .pause-switch > .pause-switch-note { grid-column: 2 / 4; grid-row: 2; justify-self: stretch; }
 #pauseOverlay .modal .btn-row.pause-exits { flex-direction: column; }
 /* 手机横屏、矮于 560（10-18 补充 M-3）：一列装不下，改成左右两栏——左边是各个开关，
    右边上面标题、下面三颗键。用 grid-template-areas 不用 gap：小红书老内核（Chrome 61）认

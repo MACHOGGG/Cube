@@ -973,14 +973,10 @@ export interface I18nStrings {
   /**
    * 《Pro》那颗开关的名字。四种语言写的都是同一个词——玩家 2026-09 点名要这个词
    * （「加入《Pro》按钮开关」），而它在四种语言里都读得通，翻译反而会让同一个设置在
-   * 不同语言里成了不同的东西。摆在色盲友好那一条旁边，两处（个人主页、暂停面板）同
-   * 一个说法。
+   * 不同语言里成了不同的东西。开关只在个人主页（摆在色盲友好那一条旁边；暂停面板那一行 11-01 补充方案推15C 拿掉了），
+   * 记录页、结算页标题旁的小标也用这个词。
    */
   proBtn: string;
-  /** 暂停面板里那颗《Pro》局中锁住时旁边那句（10-15 补充 S10）：单人局开打之后。 */
-  proLockedNote: string;
-  /** 同上，但这一局本来就不用 Pro：每日挑战、输代号、散场转单人那一局。 */
-  proNotHereNote: string;
   /** 个人主页《Pro》那一行的 title 和读屏说明。 */
   proRowHint: string;
   /** 颜色关系轮盘的读屏名（ui/proWheel.ts）。 */
@@ -1418,8 +1414,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     shareFooterHint: 'Drag a whole row, column, or diagonal to match same-colour patterns',
     colorblindBtn: 'Colourblind-friendly palette',
     proBtn: 'Pro',
-    proLockedNote: 'Locked mid-run — changes apply next run',
-    proNotHereNote: 'Not used in the daily challenge, game codes or rooms',
     proRowHint: 'When on, solo runs flip each colour into the next one, always',
     proWheelLabel: 'Pro flip order: each colour turns into the one its arrow points to',
   },
@@ -1828,8 +1822,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     shareFooterHint: 'Faites glisser une ligne, colonne ou diagonale entière pour assortir les couleurs',
     colorblindBtn: 'Palette adaptée aux daltoniens',
     proBtn: 'Pro',
-    proLockedNote: 'Bloqué en cours de partie — effet à la suivante',
-    proNotHereNote: 'Sans effet au défi du jour, aux codes et en salle',
     proRowHint: 'Activé : en solo, chaque couleur devient toujours la suivante',
     proWheelLabel: 'Ordre Pro : chaque couleur devient celle que montre sa flèche',
   },
@@ -2238,8 +2230,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     shareFooterHint: '拖動整行整列或整條斜線，拼出同色圖案',
     colorblindBtn: '色盲友好配色',
     proBtn: 'Pro',
-    proLockedNote: '本局開打後不能改，下一局生效',
-    proNotHereNote: '每日挑戰、代號局和小屋局不用 Pro',
     proRowHint: '開著時，單人局裡每種顏色得分後固定翻成下一種顏色',
     proWheelLabel: 'Pro 翻面順序：每種顏色翻成箭頭指向的下一種',
   },
@@ -2648,8 +2638,6 @@ export const STRINGS: Record<Lang, I18nStrings> = {
     shareFooterHint: '拖动整行整列或整条斜线，拼出同色图案',
     colorblindBtn: '色盲友好配色',
     proBtn: 'Pro',
-    proLockedNote: '本局开打后不能改，下一局生效',
-    proNotHereNote: '每日挑战、代号局和小屋局不用 Pro',
     proRowHint: '开着时，单人局里每种颜色得分后固定翻成下一种颜色',
     proWheelLabel: 'Pro 翻面顺序：每种颜色翻成箭头指向的下一种',
   },

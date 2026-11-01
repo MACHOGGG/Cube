@@ -9,7 +9,8 @@
  *     随机数，同一串代号就发出另一副牌（每日挑战、输代号、小屋全都对不上），而屏幕上只是「一副普通的牌」。
  *   · **只在单人局**。每日挑战、输代号、小屋一律照普通规则发牌；少了 launchSeedGame 那一句 proAllowed: false，
  *     开着 Pro 的人打每日挑战，翻出来的颜色和别人不一样，榜上的分数就不是同一副牌打出来的。
- *   · **开局那一刻定**：局中开关锁住，旁边写明原因。
+ *   · **开局那一刻定**：原先局中暂停面板里那颗开关锁住、旁边写明原因；11-01 补充方案推15C 起暂停面板里没有 Pro 了，
+ *     只能在个人主页拨（⑤ 量它真的没了）。
  *
  * 从前（2026-09 起）这道门量的是每枚色块外侧那一圈描边（engine/proHint.ts），10-14 改版时那一套整个删了，这道门
  * 跟着重写；原来的第 ⑧ 条（--mark-edge 那三条）和这次改版无关，原样留着。界面那一半（轮盘摆在哪儿、箭头淡不淡、
@@ -131,23 +132,23 @@ function sourceChecks(src, check) {
     const iRun = ctl.indexOf(line);
     const iReset = ctl.indexOf('hooks.resetBoard({ pro: runPro });');
     check('④ 顺序：plantSeed() → runPro = … → resetBoard({ pro: runPro })', iPlant >= 0 && iRun > iPlant && iReset > iRun, `${iPlant} · ${iRun} · ${iReset}`);
-    check('④ 局中锁开关：开局那一刻 refs.proSwitch.lock(…)', /refs\.proSwitch\.lock\(hooks\.proAllowed \? s\.proLockedNote : s\.proNotHereNote\)/.test(ctl));
+    // 11-01 补充方案推15C（原推28 Z-D15，站长 10-29 D34）：暂停面板里没有 Pro 了，开局那一刻也就没有开关可锁。
+    check('④ 控制器不再锁暂停面板那颗开关（refs.proSwitch 整个没了）', !/proSwitch/.test(ctl) && !/proLockedNote|proNotHereNote/.test(ctl));
     check('④ data-pro-run 用 set/removeAttribute（不用 toggleAttribute：Chrome 61 没有）',
       /setAttribute\('data-pro-run', '1'\)/.test(ctl) && /removeAttribute\('data-pro-run'\)/.test(ctl) && !/toggleAttribute\('data-pro-run'/.test(ctl));
     check('④ 存档里写 pro: runPro ? true : undefined', /pro: runPro \? true : undefined,/.test(ctl));
   }
 
-  // ---- ⑤ 开关：锁住时第一句就回、用 aria-disabled；四语都有那四个新键 ----
+  // ---- ⑤ 开关：暂停面板里没有 Pro（推15C）；个人主页那一行；四语都有那两个键 ----
   {
     const shell = src['src/ui/gameShell.ts'];
-    check('⑤ 暂停面板那颗：点击处理第一句 if (proLocked) return',
-      /proBtn\?\.addEventListener\('click', \(\) => \{\s*if \(proLocked\) return;/.test(shell));
-    check('⑤ 锁住用 aria-disabled（不用 disabled：读屏还要读得到原因）',
-      /setAttribute\('aria-disabled', 'true'\)/.test(shell) && !/proBtn\.disabled = true/.test(shell));
-    check('⑤ 按钮里有那一段说明 #proNote', /id="proNote" hidden/.test(shell));
+    // 推15C：暂停面板那一行（#proBtn、#proNote、锁住那一套）整个拿掉，Pro 只在个人主页设置。
+    check('⑤ 暂停面板里没有 Pro 那一行（#proBtn、#proNote、proLocked、proSwitch 都不在 gameShell 里）',
+      !/id="proBtn"|id="proNote"|proLocked|proSwitch|setPro\(/.test(shell), (shell.match(/id="proBtn"|id="proNote"|proLocked|proSwitch|setPro\(/g) || []).join(' ') || '干净');
     check('⑤ 个人主页那一行：外观不改，加 title 和读屏说明', /id="proRow"[\s\S]{0,200}title="\$\{s\.proRowHint\}" aria-describedby="proRowHint"/.test(src['src/ui/accountPage.ts']) && /id="proRowHint"/.test(src['src/ui/accountPage.ts']));
     const i18n = src['src/i18n.ts'];
-    for (const k of ['proLockedNote', 'proNotHereNote', 'proRowHint', 'proWheelLabel']) {
+    check('⑤ 那两句锁住的说明删干净了（proLockedNote、proNotHereNote 不在 i18n 里）', !/proLockedNote|proNotHereNote/.test(i18n));
+    for (const k of ['proRowHint', 'proWheelLabel']) {
       const hits = i18n.match(new RegExp(`^ {4}${k}: '[^']+',$`, 'gm')) ?? [];
       check(`⑤ 四种语言都写了 ${k}`, hits.length === 4 && new RegExp(`^ {2}${k}: string;$`, 'm').test(i18n), `${hits.length} 处`);
     }

@@ -17,7 +17,7 @@ import type { Lang } from './i18n';
  *
  * 0 = 还没有写过一条：这一套从 10-11 起才有，线上的旧页面不认 `release`，照旧比 `sha`（见 engine/newVersion.ts）。
  */
-export const RELEASE = 14;
+export const RELEASE = 15;
 
 export type ReleaseNote = Record<Lang, string>;
 
@@ -117,6 +117,14 @@ export const CHANGELOG: Readonly<Record<number, ReleaseNote>> = {
     zhHant: '改進：暫停鍵和面板更整齊',
     en: 'Tidier pause button and pause menu',
     fr: 'Pause\u00a0: bouton et menu mieux align\u00e9s',
+  },
+  // 11-01 补充方案推15C（原推28 Z-D15，站长 10-29 D34）：暂停面板拿掉 Pro，Pro 只在个人主页设置。站长给的原文「改进：Pro 开关
+  // 统一放在个人主页」17 个字，简繁上限 12 个字，收成「Pro 开关移到个人主页」。
+  15: {
+    zhHans: 'Pro 开关移到个人主页',
+    zhHant: 'Pro 開關移到個人主頁',
+    en: 'Pro switch now lives on your profile',
+    fr: 'Le r\u00e9glage Pro est dans votre profil',
   },
 };
 

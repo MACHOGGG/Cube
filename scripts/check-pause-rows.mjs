@@ -6,7 +6,7 @@
  *
  * 从前局中关不了声音（只有个人主页那一颗；小红书那一版哪儿都关不掉），振动不受任何设置管；暂停面板在手机
  * 横屏、高 ≤560 时一列本来就装不下。这一道量六件事：
- *   1. 手机竖屏：按键按 id 依次是 怎么玩、色盲、Pro、声音、振动、再来一局、结束游戏、继续；行距和改之前一样
+ *   1. 手机竖屏：按键按 id 依次是 怎么玩、色盲、声音、振动、再来一局、结束游戏、继续（推15C 起没有 Pro）；行距和改之前一样
  *      （组内 8、组间 20）。
  *   2. 振动那一行只在能振动的设备上有：电脑（鼠标）没有；删掉 navigator.vibrate 的手机（模拟 iPhone）也没有。
  *   3. 声音那一行和个人主页那一颗是同一个设置：在这儿关了，个人主页那颗也是关的；再开一局还是关的。
@@ -130,7 +130,6 @@ const LAYOUT = () => {
     go: r(document.querySelector('#pauseOverlay .pause-go')),
     lastSwitch: r(switches[switches.length - 1]),
     cont: r(document.querySelector('#continueBtn')),
-    note: (() => { const n = document.querySelector('#proNote'); return !!n && !n.hidden && n.getBoundingClientRect().height > 0; })(),
     vh: innerHeight,
     vw: innerWidth,
   };
@@ -142,12 +141,13 @@ for (const [w, h] of [[390, 844], [320, 568]]) {
   const { ctx, p } = await device({ w, h });
   await pauseInGame(p);
   const got = await ids(p);
-  const want = ['howBtn', 'cvdBtn', 'proBtn', 'soundBtn', 'vibrateBtn', 'pauseRestartBtn', 'pauseFinishBtn', 'continueBtn'];
-  check(`${w}×${h} 手机竖屏：按键依次是 怎么玩、色盲、Pro、声音、振动、再来一局、结束游戏、继续`,
+  // 11-01 补充方案推15C：暂停面板里没有 Pro 那一行了（Pro 只在个人主页设置）。
+  const want = ['howBtn', 'cvdBtn', 'soundBtn', 'vibrateBtn', 'pauseRestartBtn', 'pauseFinishBtn', 'continueBtn'];
+  check(`${w}×${h} 手机竖屏：按键依次是 怎么玩、色盲、声音、振动、再来一局、结束游戏、继续（没有 Pro）`,
     JSON.stringify(got) === JSON.stringify(want), JSON.stringify(got));
   const gaps = await rowGaps(p);
-  // 开关那一组 5 行（行间 8），再是两颗出口（20），最后《继续》（20）。
-  const wantGaps = [8, 8, 8, 8, 20, 20];
+  // 开关那一组 4 行（行间 8），再是两颗出口（20），最后《继续》（20）。
+  const wantGaps = [8, 8, 8, 20, 20];
   check(`${w}×${h} 手机竖屏：行距和改之前一样（组内 8、组间 20）`, JSON.stringify(gaps) === JSON.stringify(wantGaps), JSON.stringify(gaps));
   await ctx.close();
 }
@@ -273,8 +273,8 @@ for (const [w, h, vib] of [[568, 320, false], [640, 360, true], [667, 375, true]
       const got = await ids(p);
       await ctx.close();
       if (lang === 'zhHans') {
-        check(`${tag}：（尺子）${vib ? '有' : '没有'}振动那一行${mode === '局中' ? '，Pro 那一行露着说明' : ''}`,
-          got.includes('vibrateBtn') === vib && (mode !== '局中' || m.note), `${JSON.stringify(got)} · 说明 ${m.note}`);
+        check(`${tag}：（尺子）${vib ? '有' : '没有'}振动那一行，没有 Pro 那一行`,
+          got.includes('vibrateBtn') === vib && !got.includes('proBtn'), JSON.stringify(got));
       }
       const cols = !!m.set && !!m.title && !!m.go && m.set.right <= m.title.left + 0.5 && m.go.top >= m.title.bottom - 0.5 &&
         !crosses(m.set, m.title) && !crosses(m.set, m.go) && !crosses(m.title, m.go);

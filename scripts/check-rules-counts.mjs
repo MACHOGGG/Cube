@@ -559,20 +559,24 @@ check('flipScoringHint 不再讲连击和时间奖励', bad.length === 0, bad.jo
   check('⑥（反面尺子）旧那几句喂进来认得出',
     AT_LEAST_3.test('最外面一条至少 3 枚同色星星就消除') && AT_LEAST_3.test('at least 3 same-colour stars') && AT_LEAST_3.test('au moins 3 étoiles'));
 
-  // ── 《Pro》推14 版（附录甲 §17.4，Z-B13）────────────────────────────────────────────────
+  // ── 《Pro》推28 版（附录甲 §17.4；11-01 补充方案推15C 把推28 那一条提前）──────────────────────────────────
+  // 推14 版不提「只能在个人主页」（那时暂停面板里还有 Pro 开关）；推15C 拿掉暂停面板那一行之后它才是实话，MUST NOT 反过来
+  // 成了 MUST（附录甲 §17.4 末尾那句：「推28 加 MUST『只能在个人主页里开关』四语」）。
   const PRO = [...RULES_SRC.matchAll(/term: 'Pro', body: '([^']*)'/g)].map((m) => m[1]);
   check('⑥（尺子）四语《Pro》都读到了', PRO.length === 4, String(PRO.length));
   const PRO_MUST = [
-    ['排行榜上可以单独看 Pro 的成绩', '教学局'], ['排行榜上可以單獨看 Pro 的成績', '教學局'],
-    ['Pro scores on their own', 'tutorial runs'], ['scores Pro à part', 'parties du tutoriel'],
+    ['排行榜上可以单独看 Pro 的成绩', '教学局', '只能在个人主页里开关'], ['排行榜上可以單獨看 Pro 的成績', '教學局', '只能在個人主頁裡開關'],
+    ['Pro scores on their own', 'tutorial runs', 'from your profile only'], ['scores Pro à part', 'parties du tutoriel', 'uniquement depuis votre profil'],
   ];
-  const PRO_NOT = /成绩照常进同一张排行榜|成績照常進同一張排行榜|same leaderboards as usual|mêmes classements que d’habitude|只能在个人主页|只能在個人主頁|from your profile only|uniquement depuis votre profil|翻面颜色|翻面顏色/;
+  const PRO_NOT = /成绩照常进同一张排行榜|成績照常進同一張排行榜|same leaderboards as usual|mêmes classements que d’habitude|翻面颜色|翻面顏色/;
   const proOk = (texts) => texts.length === 4 && texts.every((b, i) => PRO_MUST[i].every((w) => b.includes(w)) && !PRO_NOT.test(b));
-  check('⑥《Pro》四语是推14 版：末句「排行榜上可以单独看 Pro 的成绩」、提到教学局，不说「同一张排行榜」「只能在个人主页」「翻面颜色」',
-    proOk(PRO), PRO.map((b) => b.slice(-30)).join(' / '));
-  // 反面尺子：b43f86a 那一版的旧《Pro》（简体那一句）喂进来要红。
+  check('⑥《Pro》四语是推28 版：说了只能在个人主页里开关、末句「排行榜上可以单独看 Pro 的成绩」、提到教学局，不说「同一张排行榜」「翻面颜色」',
+    proOk(PRO), PRO.map((b) => b.slice(-60)).join(' / '));
+  // 反面尺子：b43f86a 那一版的旧《Pro》（简体那一句）喂进来要红；推14 版（没有「只能在个人主页」）喂进来也要红。
   const OLD_PRO = '只在单人局起作用，每日挑战、代号局和小屋局一律照普通规则。开着它开局：色块翻面颜色固定绕一圈……成绩照常进同一张排行榜。只能在个人主页里开关。';
   check('⑥（反面尺子）旧的《Pro》喂进来要红', !proOk([OLD_PRO, ...PRO.slice(1)]));
+  const P14 = PRO[0].replace('Pro 只能在个人主页里开关，开局那一刻定下，局中不能改。', 'Pro 在开局那一刻定下，局中不能改。');
+  check('⑥（反面尺子）推14 版的《Pro》（不提个人主页）喂进来要红', P14 !== PRO[0] && !proOk([P14, ...PRO.slice(1)]));
 
   // 规则书删「天才特供」（10-31 方案推04 Z-K02，D33 甲）：规则书只给两个玩法标「天才特供」，实际锁了七个，产品又已是
   // 「注册即天才」。只扫 rules.ts——i18n 的 geniusOnly 是主菜单读屏名，一堆门靠它找卡，推12 再处理。

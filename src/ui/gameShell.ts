@@ -7,7 +7,6 @@ import { cvdOfferDue, markCvdOfferDone } from '../engine/firstPlay';
 import { colorblindOn, setColorblind } from '../engine/palettePref';
 import { setSoundOn, soundOn } from '../engine/juice';
 import { canVibrate, setVibrateOn, vibrateOn } from '../engine/haptics';
-import { proOn, setPro } from '../engine/proMode';
 import { openRulesModal, type ExtraTipView } from './rulesModal';
 import { landscapePlayed, markLandscapePlayed } from '../engine/landscapeSeen';
 import { planFor, slotMachineHtml, spinSlot } from './slotReels';
@@ -172,11 +171,6 @@ export interface ShellRefs {
   shareImageEl: HTMLImageElement;
   /** 《Pro》颜色关系轮盘的壳子（ui/proWheel.ts 往里画）。非 Pro 局一直 hidden。 */
   proWheelEl: HTMLElement;
-  /**
-   * 暂停面板里那颗《Pro》：开局那一刻控制器把它锁住，旁边写明原因（这一局用不用固定翻色开局就定了）。
-   * 小红书那一版把这一行整个摘掉了，lock 找不到它就什么都不做。
-   */
-  proSwitch: { lock(note: string): void };
   buttons: {
     /** 多人局里它藏着——同步竞赛暂停不了，那个位置让给了《离开小屋》。
      *  屋主散场、这一局转成单人之后它才露面。 */
@@ -528,15 +522,9 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
             <span class="pill-switch" aria-hidden="true"><span class="pill-switch-knob"></span></span>
           </button>
         </div>
-        <!-- 《Pro》和色盲友好同一副样子。局中是灰的：这一局用不用固定翻色，开局那一刻就定了（见
-             engine/proMode.ts），所以局中不让拨，旁边写明原因。 -->
-        <div class="btn-row">
-          <button class="icon-btn pause-switch" id="proBtn" role="switch" aria-checked="false">
-            <span>${s.proBtn}</span>
-            <span class="pause-switch-note" id="proNote" hidden></span>
-            <span class="pill-switch" aria-hidden="true"><span class="pill-switch-knob"></span></span>
-          </button>
-        </div>
+        <!-- 这儿原先有《Pro》那一行（局中锁住、旁边写明原因）。站长 10-29（D34）：暂停面板里 Pro 的开关和提示都不出现，
+             Pro 只在个人主页设置——11-01 补充方案推15C 拿掉（原排在推28 Z-D15）。副作用（站长认过）：开局倒数页也拨不了
+             Pro 了，只能在个人主页拨。 -->
         <!-- 声音、振动（10-18 补充 M-3）：从前局中关不了声音（只有个人主页那一颗；小红书那一版哪儿都关不掉），
              振动不受任何设置管。振动那一行只在能振动的设备上**不渲染**而不是渲染了再 hidden：.btn-row 是
              display: flex，作者样式压得过浏览器对 [hidden] 的默认隐藏。 -->
@@ -757,35 +745,6 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     setVibrateOn(!vibrateOn());
     vibrateBtn.setAttribute('aria-checked', String(vibrateOn()));
   });
-
-  // 《Pro》那颗开关（暂停面板里）。小屋局按不了暂停，所以它只有这一颗——底排那条控制
-  // 条上没有它：那儿的位置是给「这一局的事」留的（离开小屋、交卷），而 Pro 是这个人
-  // 的长期设置。
-  //
-  // 开局那一刻控制器调 proSwitch.lock（10-15 补充 S10）：这一局用不用固定翻色已经定了，再拨也改不了这一局，所以
-  // 锁住、旁边写明原因。用 aria-disabled 不用 disabled：读屏还读得到那句原因。开局倒数那一屏的暂停在开局之前，
-  // 那时还没锁，拨了从这一局起生效。
-  const proBtn = container.querySelector<HTMLButtonElement>('#proBtn');
-  const proNote = container.querySelector<HTMLElement>('#proNote');
-  let proLocked = false;
-  const showPro = () => proBtn?.setAttribute('aria-checked', String(proOn()));
-  showPro();
-  proBtn?.addEventListener('click', () => {
-    if (proLocked) return;
-    setPro(!proOn());
-    showPro();
-  });
-  const proSwitch = {
-    lock(note: string) {
-      if (!proBtn) return;
-      proLocked = true;
-      proBtn.setAttribute('aria-disabled', 'true');
-      if (proNote) {
-        proNote.textContent = note;
-        proNote.hidden = false;
-      }
-    },
-  };
 
   // 暂停面板里的《怎么玩》：开的是全站同一屏五条规则（ui/rulesModal.ts）。有
   // 没有三角那一列由整包说了算（网页版有，小红书版在自己的 main.ts 里关
@@ -1143,7 +1102,6 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
     shareOverlay: req('shareOverlay'),
     shareImageEl: req('shareImage'),
     proWheelEl: req('proWheel'),
-    proSwitch,
     buttons: {
       // 房间局里它也在，只是藏着——散场转单人的时候才露面，所以监听器必须
       // 在开局那一刻就接上（见上面控制条里的注释）。

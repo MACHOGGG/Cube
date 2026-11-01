@@ -232,7 +232,6 @@ function showGame(game: ShapeGame, opts: ShapeGameOpts, onBack: () => void) {
     // 钉在这儿而不是函数开头：教学那一屏不是棋盘，它要能上下滑、底色也照旧。
     document.documentElement.classList.add('is-playing');
     enhanceShareOverlay();
-    dropProSwitch();
     setScreenBack(onBack);
   };
 
@@ -277,22 +276,8 @@ function enhanceShareOverlay() {
   swapHintForActions(root.querySelector<HTMLImageElement>('#shareImage'), '.share-modal');
 }
 
-/**
- * 暂停面板里那颗《Pro》，这一版不要。
- *
- * 玩家定的：这一版**没有 Pro 模式**。Pro 是单人局的固定翻色加颜色轮盘（10-15 补充 S10），
- * 属于完整版；留在这儿，玩家拨得动、也真的会生效，于是这一版就凭空
- * 多了一个完整版才有的东西。
- *
- * 和上面换分享键同一条路：**挂完之后改 DOM**，不去动 src/ui/gameShell.ts——那个文
- * 件是网页版正在跑的东西，这一版的规矩是只读不写。
- *
- * 整行一起摘（不是只藏那颗键）：`.btn-row` 是个 flex，光把按钮 display:none 掉会
- * 留下一条空行的外边距，面板上多一道说不清的缝。
- */
-function dropProSwitch() {
-  root.querySelector('#proBtn')?.closest('.btn-row')?.remove();
-}
+// 这儿原先有 dropProSwitch()：挂完之后把暂停面板里《Pro》那一行整行摘掉（玩家定的：这一版没有 Pro 模式）。11-01 补充
+// 方案推15C 起网页版的暂停面板自己就没有那一行了（Pro 只在个人主页设置），这一版不用再摘。
 
 /**
  * 把 `img` 所在那一块里的「长按保存」换成两颗原生键。

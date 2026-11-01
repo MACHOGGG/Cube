@@ -725,7 +725,8 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
    */
   let seedRun: SeedRun | null = hooks.seed ?? null;
   /**
-   * 这一局开着 Pro（10-15 补充 S10）。开局那一刻定（newGame），局中不变——暂停面板那颗开关局中是锁着的。
+   * 这一局开着 Pro（10-15 补充 S10）。开局那一刻定（newGame），局中不变——开关只在个人主页（暂停面板那一行 11-01 补充方案
+   * 推15C 拿掉了），局中拨不到。
    */
   let runPro = false;
   /** Pro 轮盘：头一回用到时才建（非 Pro 局一直是 hidden 的那个空壳）。 */
@@ -969,7 +970,6 @@ export function createGameController(refs: ShellRefs, hooks: GameControllerHooks
     // 不用 toggleAttribute：Chrome 61 没有（这个文件也打进小红书的包）。
     if (runPro) appEl?.setAttribute('data-pro-run', '1');
     else appEl?.removeAttribute('data-pro-run');
-    refs.proSwitch.lock(hooks.proAllowed ? s.proLockedNote : s.proNotHereNote);
     hooks.resetBoard({ pro: runPro });
     score = 0;
     moves = 0;

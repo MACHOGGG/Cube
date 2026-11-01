@@ -14,13 +14,13 @@
  *     头一局就有。对应关系六副是同一个函数（engine/proCycle.ts），check-seed-golden ⑧ 在 node 里六副逐枚量过。
  *   ③ 尺子：Pro 关着同样走一手，翻出来的星星**不全是**下一色（不然 ① 什么也没量）。
  *   ④ 只在单人局：开着 Pro，每日挑战、输代号、小屋（两个上下文）都没有 data-pro-run、轮盘藏着；结束之后本机存档里
- *     那一局没有 pro；暂停面板写的是「每日挑战、代号局和小屋局不用 Pro」。
+ *     那一局没有 pro；暂停面板里没有 Pro 那一行（11-01 补充方案推15C 起暂停面板里一律没有）。
  *   ⑤ 非 Pro 发牌逐枚不变：Math.random 换成同一条序列，Pro 开 / 关开局的正面逐枚相同、种子码相同；同一串代号 Pro 开 /
  *     关各开一次走同一手，翻出来的星星逐枚相同。
  *   ⑥ 箭头：真局里每走一手核一次「淡掉的箭头 = 场上一枚正面都不剩的颜色」；另把 ui/proWheel.ts 打包进页面，喂一份假的
  *     ProView，量淡掉的下标、transition 0.4s、减弱动态时 0s。
- *   ⑦ 局中锁住：开打后 #proBtn[aria-disabled="true"]，点一下 aria-checked 和 slides_pro 都不变、说明对；开局倒数那一屏
- *     的暂停里拨得动，拨开之后开局就是 Pro 局。
+ *   ⑦ 暂停面板里没有 Pro（11-01 补充方案推15C，原推28 Z-D15；站长 10-29 D34）：局中、开局倒数那一屏的暂停里都没有
+ *     #proBtn；Pro 只在个人主页拨——拨开之后开局就是 Pro 局，开着 Pro 开局那一局照旧是 Pro 局（开局那一刻定下）。
  *   ⑧ 结算页标题后面有「Pro」、记录页那一行有「Pro」，不溢出；非 Pro 局都没有。
  *   ⑨ 不重叠：一串视口（竖屏、电脑、横屏）——轮盘露着时不碰任何一枚棋子、HUD、暂停键、计时药丸、教学条，整个在视口里，
  *     露着就 ≥ 48；竖屏棋盘尺寸和 Pro 关时一样（±1px）；电脑上和分数牌对称（中心之和 = 视口宽 ±2）。
@@ -402,8 +402,8 @@ if (PART === 'core' || PART === 'all') {
     let st = await proState(page);
     check('④ 开着 Pro 打今日挑战：没有 data-pro-run、轮盘藏着', st.run === null && !st.shown, JSON.stringify(st));
     await pause(page);
-    const note = await page.evaluate(() => ({ t: document.querySelector('#proNote')?.textContent, hidden: document.querySelector('#proNote')?.hidden, dis: document.querySelector('#proBtn')?.getAttribute('aria-disabled') }));
-    check('④ 今日挑战的暂停面板：Pro 那颗锁着，写的是「每日挑战、代号局和小屋局不用 Pro」', note.t === zh('proNotHereNote') && !note.hidden && note.dis === 'true', JSON.stringify(note));
+    const rowThere = await page.evaluate(() => !!document.querySelector('#pauseOverlay #proBtn, #pauseOverlay #proNote'));
+    check('④ 今日挑战的暂停面板：没有 Pro 那一行（推15C）', !rowThere);
     await resume(page);
     await finish(page);
     let run = await latestRun(page);
@@ -508,33 +508,36 @@ if (PART === 'core' || PART === 'all') {
     s2 ??= { errs: [] };
     check('⑤ 零脚本报错', [on, off, s1, s2].every((x) => x.errs.length === 0), [...on.errs, ...off.errs, ...s1.errs, ...s2.errs].slice(0, 3).join(' | '));
   }
-  // ⑦ 局中锁住；开局倒数那一屏拨得动
+  // ⑦ 暂停面板里没有 Pro（推15C）；Pro 只在个人主页拨
   {
     const { ctx, page, errs } = await open({ pro: true });
     await playCard(page, '经典方块');
+    const st0 = await proState(page);
+    check('⑦ 开着 Pro 开局：这一局是 Pro 局（开局那一刻定下）', st0.run === '1' && st0.shown, JSON.stringify(st0));
     await pause(page);
-    const before = await page.evaluate(() => ({ c: document.querySelector('#proBtn')?.getAttribute('aria-checked'), d: document.querySelector('#proBtn')?.getAttribute('aria-disabled'), k: localStorage.getItem('slides_pro'), note: document.querySelector('#proNote')?.textContent, hidden: document.querySelector('#proNote')?.hidden }));
-    // 在页面里点：Playwright 把 aria-disabled 当成「点不了」，会一直等它变回可点。
-    await page.evaluate(() => document.querySelector('#proBtn')?.click());
-    const after = await page.evaluate(() => ({ c: document.querySelector('#proBtn')?.getAttribute('aria-checked'), k: localStorage.getItem('slides_pro') }));
-    check('⑦ 开打之后暂停：#proBtn 是 aria-disabled="true"，说明露着、写的是「本局开打后不能改，下一局生效」',
-      before.d === 'true' && !before.hidden && before.note === zh('proLockedNote'), JSON.stringify(before));
-    check('⑦ 锁着点一下：aria-checked 和 slides_pro 都不变', before.c === 'true' && after.c === 'true' && before.k === '1' && after.k === '1', JSON.stringify({ before, after }));
+    const inGame = await page.evaluate(() => !!document.querySelector('#pauseOverlay #proBtn, #pauseOverlay #proNote'));
+    check('⑦ 局中暂停面板里没有 Pro 那一行（#proBtn）', !inGame);
     await ctx.close();
-    // 开局倒数那一屏的暂停：还没开局，拨得动；拨开之后开局就是 Pro 局。
+    // Pro 关着：开局倒数那一屏的暂停里也没有；去个人主页拨开，回来开局就是 Pro 局。
     const b = await open({ pro: false });
     await tapCard(b.page, '经典方块');
     await b.page.waitForSelector('#startPauseBtn', { timeout: 10000 });
     await b.page.click('#startPauseBtn');
     await b.page.waitForSelector('#pauseOverlay.show', { timeout: 8000 });
-    const pre = await b.page.evaluate(() => document.querySelector('#proBtn')?.getAttribute('aria-disabled'));
-    await b.page.click('#proBtn');
-    const flipped = await b.page.evaluate(() => ({ c: document.querySelector('#proBtn')?.getAttribute('aria-checked'), k: localStorage.getItem('slides_pro') }));
-    check('⑦ 开局倒数那一屏的暂停：开关没锁、拨得动', pre !== 'true' && flipped.c === 'true' && flipped.k === '1', JSON.stringify({ pre, flipped }));
-    await b.page.click('#continueBtn');
-    await waitBoard(b.page);
+    const pre = await b.page.evaluate(() => !!document.querySelector('#pauseOverlay #proBtn, #pauseOverlay #proNote'));
+    check('⑦ 开局倒数那一屏的暂停里也没有 Pro 那一行', !pre);
+    await b.page.goto(BASE, { waitUntil: 'load' });
+    await b.page.waitForSelector('#navProfile', { timeout: 20000 });
+    await b.page.click('#navProfile');
+    await b.page.waitForSelector('#proRow', { timeout: 10000 });
+    await b.page.click('#proRow');
+    const flipped = await b.page.evaluate(() => ({ c: document.querySelector('#proRow')?.getAttribute('aria-checked'), k: localStorage.getItem('slides_pro') }));
+    check('⑦ 个人主页那颗 Pro 开关照旧拨得动', flipped.c === 'true' && flipped.k === '1', JSON.stringify(flipped));
+    await b.page.goto(BASE, { waitUntil: 'load' });
+    await b.page.waitForSelector('.home-icon-btn', { timeout: 20000 });
+    await playCard(b.page, '经典方块');
     const st = await proState(b.page);
-    check('⑦ 倒数那一屏拨开之后开局：这一局就是 Pro 局', st.run === '1' && st.shown, JSON.stringify(st));
+    check('⑦ 个人主页拨开之后开局：这一局就是 Pro 局', st.run === '1' && st.shown, JSON.stringify(st));
     check('⑦ 零脚本报错', errs.length === 0 && b.errs.length === 0, [...errs, ...b.errs].slice(0, 3).join(' | '));
     await b.ctx.close();
   }

@@ -545,16 +545,13 @@ const SCREENS = [
       面板文字: { sel: '#pauseOverlay .modal h2, #pauseOverlay .modal p', kind: 'text' },
       面板按键: { sel: '#pauseOverlay .modal button', kind: 'label' },
     },
-    // 说好的差别，只有一处：**这一版没有 Pro 开关**（玩家定的「无 pro 模式」，
-    // xhs/src/main.ts 的 dropProSwitch 把那一行摘掉）。除掉那一颗之后，剩下的按键必须
-    // 一个不差、次序也一样——所以这儿不是「放过整项」，是拿网页版那一串减掉 Pro 再比。
+    // 11-01 补充方案推15C 起两边的暂停面板都没有 Pro 那一行了（网页版 Pro 只在个人主页设置；这一版本来就没有 Pro），
+    // 原先「拿网页版那一串减掉 Pro 再比」的那一条放行删掉——两边必须一模一样。哪一边又冒出一颗 Pro，这一项就红。
     accept: (k, web, xhs) => {
       if (k !== '面板按键') return null;
-      // 认「Pro 开头」而不是「正好叫 Pro」：10-15 补充 S10 起网页版那颗 Pro 局中锁住、键里多一句说明（「Pro 本局开打
-      // 后不能改，下一局生效」），原先那句 `t !== 'Pro'` 从那天起就摘不掉它，这一项一直红着。
-      const want = web.filter((t) => !/^Pro(\s|$)/.test(t));
-      return JSON.stringify(want) === JSON.stringify(xhs)
-        ? '这一版没有 Pro 开关（玩家定的），其余几颗一个不差、次序一样'
+      const pro = (t) => /^Pro(\s|$)/.test(t);
+      return !web.some(pro) && !xhs.some(pro) && JSON.stringify(web) === JSON.stringify(xhs)
+        ? '两边都没有 Pro 那一行，按键一个不差、次序一样'
         : null;
     },
   },
