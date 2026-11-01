@@ -911,6 +911,10 @@ jobs:
         run: node scripts/check-mail-trace.mjs
       - name: CSS 兜底
         run: node scripts/check-css-fallbacks.mjs
+      # 暂停｜灯泡那块牌分两半时：暂停图形在左（上）半正中、灯泡那一半圆角接上牌、电脑上两半都不画圆盘（11-01 补充方案
+      # 推15B）。读 style.css 零点几秒；浏览器那一半是 check-hint-bulb ⑨–⑬（h 片）。
+      - name: 暂停和灯泡分两半的样子
+        run: node scripts/check-bulb-geometry.mjs
       # 会呼吸的光：@keyframes 里 drop-shadow 的模糊半径一整圈都不许变，要明灭
       # 就改颜色。半径一变，滤镜区域每帧都跟着变，iOS 的 Safari 会把挨着的几个
       # 发光元素并成一块不透明的方框——玩家实拍到的「主菜单两张卡外面罩着个发

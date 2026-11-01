@@ -322,7 +322,8 @@ check('flipScoringHint 不再讲连击和时间奖励', bad.length === 0, bad.jo
  */
 {
   const shell = readFileSync(new URL('../src/ui/gameShell.ts', import.meta.url), 'utf8');
-  const btn = (shell.match(/id="pauseFinishBtn"[^>]*>\$\{([^}]+)\}/) || [, ''])[1];
+  // 11-01 补充方案推15B 起药丸里的字包了一层 <span>（暂停面板每一行是 grid，裸文字会被排进图标那一列）。
+  const btn = (shell.match(/id="pauseFinishBtn"[^>]*>(?:<span>)?\$\{([^}]+)\}/) || [, ''])[1];
   check('暂停面板那颗键念的是 i18n 的 endRunBtn', btn.trim() === 's.endRunBtn', btn || '（没找到那颗键）');
   const names = [...i18n.matchAll(/endRunBtn: '((?:[^'\\]|\\.)*)'/g)].map((m) => m[1]);
   check('endRunBtn 四种语言都在', names.length === 4, names.join(' / '));

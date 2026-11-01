@@ -15,6 +15,8 @@
  *   6  点 #stopBtn 的正中照旧是暂停（灯泡那 42% 盖不到它的中心）；#stopBtn 的盒子和没有灯泡的那一局一个像素不差。
  *   7  横屏（844×390）：上下分，两半都 ≥44 高；七色圆球（强制横屏）同样。
  *   8  一路零脚本报错。
+ *   9–13（11-01 补充方案推15B）：暂停两根竖条在左（上）半正中、灯泡记号在灯泡那一半正中、按下不露直角、电脑上灯泡也
+ *      不画圆盘、电脑头一局 has-coach 开打后灯泡叠得对——竖屏 390 / 320、横屏、电脑 1440×900 / 1000×700。
  *
  * 本门专门清掉 slides_bulb_*（scripts/lib/unlockAll.mjs 默认把它们记满）。
  */
@@ -193,6 +195,88 @@ for (const [card, name] of [['square', '方块'], ['circleSeven', '七色圆球'
   const top = g.stop ? g.stop.height * 0.58 : 0;
   check(`7 横屏 · ${name}：上下分（灯泡在下）`, g.hint && g.vertical && !!g.hintBox && Math.abs(g.hintBox.top + g.hintBox.height - (g.stop.top + g.stop.height)) <= 1, JSON.stringify(g));
   check(`7 横屏 · ${name}：两半都 ≥44 高`, top >= 44 && (g.hintBox?.height ?? 0) >= 44, `暂停 ${top.toFixed(0)} · 灯泡 ${g.hintBox?.height?.toFixed(0)}`);
+  await ctx.close();
+}
+
+// ── 9–13：图形摆在自己那一半、按下不露直角、电脑上两半同样子（11-01 补充方案推15B）───────────────────────────
+//
+// 推12 只把暂停图形收窄到 58%，#stopBtn 是居中的弹性盒，图形仍在整颗正中，压在分缝上（390 竖屏偏 37px、320 偏 30px、
+// 电脑偏 51.5px）。量：
+//   ⑨ 暂停两根竖条的并框中心离「左（上）半正中」≤ 4（stop.left + 0.29·stop.width；横屏换 y），右（下）沿离灯泡那一半 > 2；
+//   ⑩ 灯泡记号（圆盘以外那几笔）的并框中心离 #hintBtn 盒子中心 ≤ 3；
+//   ⑪ #hintBtn 按下（chip--press）时外侧两角的圆角和 #stopBtn 一样；
+//   ⑫ 电脑档：灯泡和暂停的 --ctl-disc 一样（都没有圆盘，站长 11-01）；
+//   ⑬ 电脑档头一局（.has-coach）开打 200ms 后：hint.left = stop.left + stop.width − round(0.42·stop.width)（±1）。
+const GEOM = () => {
+  const stop = document.querySelector('#stopBtn');
+  const hint = document.querySelector('#hintBtn');
+  const union = (els) => {
+    const rs = els.map((e) => e.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
+    if (!rs.length) return null;
+    const left = Math.min(...rs.map((r) => r.left)), right = Math.max(...rs.map((r) => r.right));
+    const top = Math.min(...rs.map((r) => r.top)), bottom = Math.max(...rs.map((r) => r.bottom));
+    return { left, right, top, bottom, cx: (left + right) / 2, cy: (top + bottom) / 2 };
+  };
+  const box = (e) => { const r = e.getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height, right: r.right, bottom: r.bottom }; };
+  const radii = (e) => { const c = getComputedStyle(e); return { tl: c.borderTopLeftRadius, tr: c.borderTopRightRadius, br: c.borderBottomRightRadius, bl: c.borderBottomLeftRadius }; };
+  hint.classList.add('chip--press');
+  const pressed = radii(hint);
+  hint.classList.remove('chip--press');
+  return {
+    shown: !hint.hidden,
+    vertical: hint.classList.contains('hint-btn--v'),
+    stop: box(stop), hint: box(hint),
+    bars: union([...stop.querySelectorAll('svg.ctl-glyph rect')]),
+    bulb: union([...hint.querySelectorAll('svg.ctl-glyph > :not(circle)')]),
+    stopR: radii(stop), hintPressedR: pressed,
+    stopDisc: getComputedStyle(stop).getPropertyValue('--ctl-disc').trim(),
+    hintDisc: getComputedStyle(hint).getPropertyValue('--ctl-disc').trim(),
+  };
+};
+for (const [vp, tag, desk] of [[[390, 844], '竖屏 390', false], [[320, 568], '竖屏 320', false], [[844, 390], '横屏 844×390', false],
+  [[1440, 900], '电脑 1440×900', true], [[1000, 700], '电脑 1000×700', true]]) {
+  const { ctx, p } = await device(vp, NO_BULBS, vp[0] > vp[1] && !desk);
+  await tap(p, 'square');
+  await started(p);
+  const g = await p.evaluate(GEOM);
+  if (!g.shown || !g.bars || !g.bulb) {
+    check(`⑨ ${tag}：（尺子）灯泡露着、量得到两根竖条和灯泡记号`, false, JSON.stringify(g));
+    await ctx.close();
+    continue;
+  }
+  const S = g.stop, H = g.hint;
+  if (!g.vertical) {
+    const want = S.left + 0.29 * S.width;
+    check(`⑨ ${tag}：暂停两根竖条在左半正中（|cx − (left + 0.29·w)| ≤ 4）`, Math.abs(g.bars.cx - want) <= 4, `cx ${g.bars.cx.toFixed(1)} · 要 ${want.toFixed(1)}`);
+    check(`⑨ ${tag}：竖条右沿离灯泡那一半 > 2`, g.bars.right < H.left - 2, `右沿 ${g.bars.right.toFixed(1)} · 灯泡 ${H.left.toFixed(1)}`);
+  } else {
+    const want = S.top + 0.29 * S.height;
+    check(`⑨ ${tag}：暂停两根竖条在上半正中（|cy − (top + 0.29·h)| ≤ 4）`, Math.abs(g.bars.cy - want) <= 4, `cy ${g.bars.cy.toFixed(1)} · 要 ${want.toFixed(1)}`);
+    check(`⑨ ${tag}：竖条下沿离灯泡那一半 > 2`, g.bars.bottom < H.top - 2, `下沿 ${g.bars.bottom.toFixed(1)} · 灯泡 ${H.top.toFixed(1)}`);
+  }
+  const hc = { x: H.left + H.width / 2, y: H.top + H.height / 2 };
+  check(`⑩ ${tag}：灯泡记号在灯泡那一半正中（≤ 3）`, Math.hypot(g.bulb.cx - hc.x, g.bulb.cy - hc.y) <= 3,
+    `记号 ${g.bulb.cx.toFixed(1)},${g.bulb.cy.toFixed(1)} · 盒子 ${hc.x.toFixed(1)},${hc.y.toFixed(1)}`);
+  const outer = g.vertical ? ['bl', 'br'] : ['tr', 'br'];
+  check(`⑪ ${tag}：灯泡按下时外侧两角的圆角和暂停那颗一样`, outer.every((k) => g.hintPressedR[k] === g.stopR[k] && g.stopR[k] !== '0px'),
+    `灯泡 ${outer.map((k) => g.hintPressedR[k]).join(' ')} · 暂停 ${outer.map((k) => g.stopR[k]).join(' ')}`);
+  if (desk) check(`⑫ ${tag}：灯泡和暂停的 --ctl-disc 一样（都不画圆盘）`, g.hintDisc === g.stopDisc, `灯泡 ${g.hintDisc} · 暂停 ${g.stopDisc}`);
+  await ctx.close();
+}
+for (const vp of [[1440, 900], [1000, 700]]) {
+  const { ctx, p } = await device(vp, {});
+  await tap(p, 'circle');
+  await p.waitForFunction(() => !document.querySelector('#startOverlay.show') && document.querySelectorAll('.tile, .ball, .tri').length > 0, null, { timeout: 40000 });
+  await p.waitForTimeout(200);
+  const m = await p.evaluate(() => {
+    const s = document.querySelector('#stopBtn').getBoundingClientRect();
+    const h = document.querySelector('#hintBtn');
+    const hr = h.getBoundingClientRect();
+    return { coach: !!document.querySelector('.app--game.has-coach'), shown: !h.hidden, sl: s.left, sw: s.width, hl: hr.left };
+  });
+  const want = m.sl + m.sw - Math.round(0.42 * m.sw);
+  check(`⑬ 电脑 ${vp[0]}×${vp[1]} 头一局（has-coach）开打 200ms：灯泡叠在暂停那块的右 42%（±1）`, m.coach && m.shown && Math.abs(m.hl - want) <= 1,
+    `has-coach ${m.coach} · 灯泡 left ${m.hl.toFixed(1)} · 要 ${want.toFixed(1)}`);
   await ctx.close();
 }
 

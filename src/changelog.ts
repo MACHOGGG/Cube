@@ -17,7 +17,7 @@ import type { Lang } from './i18n';
  *
  * 0 = 还没有写过一条：这一套从 10-11 起才有，线上的旧页面不认 `release`，照旧比 `sha`（见 engine/newVersion.ts）。
  */
-export const RELEASE = 13;
+export const RELEASE = 14;
 
 export type ReleaseNote = Record<Lang, string>;
 
@@ -108,6 +108,15 @@ export const CHANGELOG: Readonly<Record<number, ReleaseNote>> = {
     zhHant: '修復：慢慢滑也能換玩法',
     en: 'Fixed: slow swipes now switch modes',
     fr: 'Corrig\u00e9\u00a0: glisser lentement change de mode',
+  },
+  // 11-01 补充方案推15B：暂停｜灯泡那块牌两半各摆正中、电脑上灯泡也不画圆盘；暂停面板标题和每一行靠左、两颗出口竖排。
+  // 站长给的原文「改进：暂停键、教学灯泡和暂停面板排得更整齐」21 个字，简繁上限 12 个字，收成「暂停键和面板」——灯泡是
+  // 暂停那块牌的另一半。
+  14: {
+    zhHans: '改进：暂停键和面板更整齐',
+    zhHant: '改進：暫停鍵和面板更整齊',
+    en: 'Tidier pause button and pause menu',
+    fr: 'Pause\u00a0: bouton et menu mieux align\u00e9s',
   },
 };
 

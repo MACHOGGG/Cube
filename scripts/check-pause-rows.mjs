@@ -15,6 +15,8 @@
  *      不相交，《继续》和左栏最后一颗开关都整颗在首屏内（不用滚）。
  *   6. 小红书预览页：按键依次是 怎么玩、色盲、声音、振动、再来一局、结束游戏、继续（没有 Pro）；横屏
  *      640×360 两栏照第 5 条量一遍。
+ *   7. 统一靠左、两颗出口竖排（11-01 补充方案推15B）：四语言 × 竖屏 / 横屏两栏 / 电脑，标题和每一行第一段字左边对齐
+ *      （±1）；《再来一局》《结束游戏》上下排；折成两行的那几行每一行字都从同一条左边线起。
  *
  * 第 5 条要是哪一档出了首屏，方案原话是「停下回报，不要自己缩字或改间距」——这一道照实报红。
  */
@@ -281,6 +283,73 @@ for (const [w, h, vib] of [[568, 320, false], [640, 360, true], [667, 375, true]
       check(`${tag}：《继续》和左栏最后一颗开关都整颗在首屏内`, inView(m.cont, m.vw, m.vh) && inView(m.lastSwitch, m.vw, m.vh),
         `继续 ${r0(m.cont)} · 最后一颗开关 ${r0(m.lastSwitch)} / 屏高 ${m.vh}`);
     }
+  }
+}
+
+// ── 7. 统一靠左、两颗出口竖排（11-01 补充方案推15B）─────────────────────────────────────────────
+//
+// 站长 11-01：标题和所有行全部靠左，《再来一局》《结束游戏》改成竖排。每一行 =「图标列 24px｜字靠左｜右端开关 / › / 空」，
+// 字体统一。量：标题的字和每一行第一段字的左边在同一条竖线上（±1）；横屏两栏时标题在右栏，和右栏那三颗键比、左栏那几行
+// 自己比；两颗出口上下排（结束游戏的 top ≥ 再来一局的 bottom）；每一行折成两行时，每一行字都从同一条左边线起（尺子：
+// 把《怎么玩》那一行的字拉长到折行，再量一次）。四语言 × 竖屏 390×844 / 横屏 844×390 / 电脑 1440×900，竖屏另量倒数页。
+const ALIGN = () => {
+  const textLeft = (el) => {
+    if (!el) return null;
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const rects = [...range.getClientRects()].filter((r) => r.width > 0.5);
+    if (!rects.length) return null;
+    return { left: Math.min(...rects.map((r) => r.left)), lines: rects.map((r) => r.left), n: new Set(rects.map((r) => Math.round(r.top))).size };
+  };
+  const rowsOf = (sel) => [...document.querySelectorAll(sel)].filter((b) => b.getBoundingClientRect().height > 0).map((b) => ({
+    id: b.id, ...textLeft(b.querySelector(':scope > span:first-child')),
+  }));
+  return {
+    title: textLeft(document.querySelector('#pauseOverlay .modal > h2')),
+    set: rowsOf('#pauseOverlay .pause-set button'),
+    go: rowsOf('#pauseOverlay .pause-go button'),
+    restart: (() => { const b = document.querySelector('#pauseRestartBtn').getBoundingClientRect(); return { top: b.top, bottom: b.bottom, h: b.height }; })(),
+    finish: (() => { const b = document.querySelector('#pauseFinishBtn').getBoundingClientRect(); return { top: b.top, bottom: b.bottom, h: b.height }; })(),
+    twoCols: (() => {
+      const set = document.querySelector('#pauseOverlay .pause-set').getBoundingClientRect();
+      const go = document.querySelector('#pauseOverlay .pause-go').getBoundingClientRect();
+      return set.right <= go.left + 0.5;
+    })(),
+  };
+};
+const spread = (xs) => (xs.length ? Math.max(...xs) - Math.min(...xs) : 0);
+for (const lang of LANGS) {
+  for (const [w, h, mobile, mode] of [[390, 844, true, '局中'], [390, 844, true, '倒数页'], [844, 390, true, '局中'], [1440, 900, false, '局中']]) {
+    const tag = `7 ${w}×${h} ${lang} ${mode}`;
+    const { ctx, p } = await device({ w, h, lang, mobile });
+    if (mode === '局中') await pauseInGame(p);
+    else await pauseInCount(p);
+    const m = await p.evaluate(ALIGN);
+    const title = m.title?.left ?? NaN;
+    // 横屏两栏：标题在右栏，和右栏那三颗比；左栏那几行自己比。一栏时全部和标题比。
+    const withTitle = m.twoCols ? m.go : [...m.set, ...m.go];
+    const own = m.twoCols ? m.set : [];
+    const offT = withTitle.map((r) => Math.abs(r.left - title));
+    const ok = Number.isFinite(title) && withTitle.length > 0 && offT.every((d) => d <= 1) && spread(own.map((r) => r.left)) <= 1;
+    check(`${tag}：标题和每一行第一段字左边对齐（±1）${m.twoCols ? '（两栏：右栏和标题比、左栏自己比）' : ''}`, ok,
+      `标题 ${title.toFixed(1)} · ${[...m.set, ...m.go].map((r) => `${r.id} ${r.left?.toFixed(1)}`).join(' / ')}`);
+    if (mode === '局中') {
+      check(`${tag}：《再来一局》《结束游戏》上下排（结束游戏 top ≥ 再来一局 bottom）`, m.finish.top >= m.restart.bottom - 0.5,
+        `再来一局 ${m.restart.top.toFixed(0)}–${m.restart.bottom.toFixed(0)} · 结束游戏 ${m.finish.top.toFixed(0)}–${m.finish.bottom.toFixed(0)}`);
+    }
+    const wrapped = [...m.set, ...m.go].filter((r) => r.n > 1);
+    check(`${tag}：折成两行的那几行，每一行字都从同一条左边线起`, wrapped.every((r) => spread(r.lines) <= 1),
+      wrapped.map((r) => `${r.id} ${r.lines.map((x) => x.toFixed(0)).join('/')}`).join(' · ') || '没有折行的');
+    if (lang === 'en' && w === 390 && mode === '局中') {
+      // 尺子：把《怎么玩》那一行的字拉长到折行，再量。
+      await p.$eval('#howBtn > span:first-child', (e) => { e.textContent = (e.textContent + ' ').repeat(4).trim(); });
+      await p.waitForTimeout(100);
+      const m2 = await p.evaluate(ALIGN);
+      const how = m2.set.find((r) => r.id === 'howBtn');
+      check(`${tag}：（尺子）《怎么玩》拉长到折行之后，两行字都从标题那条线起`, !!how && how.n >= 2 && spread(how.lines) <= 1 && Math.abs(how.left - m2.title.left) <= 1,
+        how ? `${how.n} 行 · ${how.lines.map((x) => x.toFixed(1)).join('/')} · 标题 ${m2.title.left.toFixed(1)}` : '没量到');
+    }
+    await ctx.close();
   }
 }
 

@@ -296,7 +296,7 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
   // 各的就会一个画了、另一个取不到。
   const inRoom = !!currentRoom();
   const extraButtonsHtml = (meta.extraControls ?? [])
-    .map((b) => `<button class="icon-btn" id="${b.id}">${b.label}</button>`)
+    .map((b) => `<button class="icon-btn" id="${b.id}"><span>${b.label}</span></button>`)
     .join('');
 
   /*
@@ -556,10 +556,10 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
         </div>
         <div class="pause-go">
         <div class="btn-row pause-exits">
-          <button class="secondary" id="pauseRestartBtn">${s.restartRunBtn}</button>
-          <button class="secondary" id="pauseFinishBtn">${s.endRunBtn}</button>
+          <button class="secondary" id="pauseRestartBtn"><span>${s.restartRunBtn}</span></button>
+          <button class="secondary" id="pauseFinishBtn"><span>${s.endRunBtn}</span></button>
         </div>
-        <div class="btn-row pause-resume"><button class="primary" id="continueBtn">${s.resume}</button></div>
+        <div class="btn-row pause-resume"><button class="primary" id="continueBtn"><span>${s.resume}</span></button></div>
         </div>
       </div>
     </div>
@@ -851,10 +851,32 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
    */
   const hintEl = container.querySelector<HTMLButtonElement>('#hintBtn');
   const stopEl = container.querySelector<HTMLButtonElement>('#stopBtn');
+  /**
+   * #stopBtn 的盒子变了就重量一次（11-01 补充方案推15B）。原先只听 resize / orientationchange：电脑档头一局 .has-coach
+   * 一挂一摘，右栏宽度跟着变，#stopBtn 挪了位置、改了大小，窗口却没变——灯泡还叠在旧位置上。有 ResizeObserver 的内核
+   * 盯 #stopBtn 本身（灯泡露面时盯、藏起来或这一局不在页面上了就撒手）；没有的（小红书那一版的 Chrome 61）照旧靠
+   * resize。.has-coach 挂上、摘下另各量一次（只挪位置、不改大小时 ResizeObserver 不来）。
+   */
+  const stopRo: ResizeObserver | null =
+    hintEl && stopEl && typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => placeHint()) : null;
+  const appEl = container.querySelector<HTMLElement>('.app--game');
+  let coachOn = !!appEl?.classList.contains('has-coach');
+  const coachMo: MutationObserver | null =
+    hintEl && stopEl && appEl && typeof MutationObserver !== 'undefined'
+      ? new MutationObserver(() => {
+          const now = appEl.classList.contains('has-coach');
+          if (now === coachOn) return;
+          coachOn = now;
+          placeHint();
+        })
+      : null;
+  coachMo?.observe(appEl!, { attributes: true, attributeFilter: ['class'] });
   const placeHint = (): void => {
     if (!hintEl || !stopEl) return;
     if (!shellAlive()) {
       for (const ev of ['resize', 'orientationchange']) window.removeEventListener(ev, placeHint);
+      stopRo?.disconnect();
+      coachMo?.disconnect();
       return;
     }
     if (hintEl.hidden) return;
@@ -874,9 +896,14 @@ export function buildShell(container: HTMLElement, meta: ShellMeta): ShellRefs {
   const showHint = (on: boolean): void => {
     if (!hintEl || !stopEl) return;
     hintEl.hidden = !on;
-    if (!on) stopEl.classList.remove('stop-btn--split-h', 'stop-btn--split-v');
-    // 等开局页收起来、版面排好了再量（#startBtn 按下去之后开局页才收）。
-    else requestAnimationFrame(placeHint);
+    if (!on) {
+      stopEl.classList.remove('stop-btn--split-h', 'stop-btn--split-v');
+      stopRo?.disconnect();
+    } else {
+      // 等开局页收起来、版面排好了再量（#startBtn 按下去之后开局页才收）。
+      requestAnimationFrame(placeHint);
+      stopRo?.observe(stopEl);
+    }
   };
   if (hintEl) {
     for (const ev of ['resize', 'orientationchange']) window.addEventListener(ev, placeHint);

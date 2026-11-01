@@ -4210,7 +4210,7 @@ html:has(body > .overlay) .home-card { visibility: hidden; pointer-events: none;
    四件事分三组，看一眼就知道哪一颗把你带出这一局（玩家选的「方案 B」）：
 
      怎么玩 ／ 色盲友好      看一眼就回来，不动这一局      ┐ 8px
-     再来一局 ／ 结束游戏    离开这一局，两颗并排          ┤ 20px
+     再来一局 ／ 结束游戏    离开这一局，两颗竖排（11-01） ┤ 20px
      继续                    回棋盘，单独一颗              ┘ 20px
 
    .btn-row 自己没有上下外边距（好几处弹窗靠这一点把两排贴在一起），所以组
@@ -4228,6 +4228,40 @@ html:has(body > .overlay) .home-card { visibility: hidden; pointer-events: none;
 /* 开局倒数那一屏借的是同一层面板。那时候还没开局，「再来一局 / 结束游戏」
    无从谈起（见 gameShell 里 #startPauseBtn 那段）。 */
 #pauseOverlay.pause--pre .pause-exits { display: none; }
+/* 每一行一个样子（11-01 补充方案推15B，站长定「标题和所有行全部靠左、两颗出口竖排」）：
+
+     [图标列 24px] 字，靠左占满 ……………… [开关 / › / 空]
+
+   原先开关那几行靠 .pause-switch 的 space-between 字贴左、开关贴右，标题和三颗药丸却被 .modal { text-align: center }
+   摆在正中；字也是两套（开关行是 .icon-btn 的 12px 等宽，药丸是 Karla .95rem）。现在统一成 Karla .95rem / 600，一律
+   靠左；图标列先空着占位，推28 只往里填图。.modal 是全站共用的类，所以每一条都用 #pauseOverlay 限定，别的弹窗不动；
+   开局倒数页借的是同一块面板，一并生效。
+   列间距两种写法都写：小红书老内核（Chrome 61）只认 grid-column-gap，不认 grid 上的 column-gap（Chrome 66 才有）。
+   左内边距：开关那几行是 .icon-btn（1px 边框 + 16px），药丸没有边框，给 17px——两种行的字才落在同一条竖线上；标题的
+   左内边距 = 1 + 16 + 24 + 12 = 53px，和行首的字对齐（check-pause-rows 量「标题与每一行第一个字 ±1」）。 */
+#pauseOverlay .modal { text-align: left; }
+#pauseOverlay .modal > h2 { text-align: left; padding-left: 53px; }
+#pauseOverlay .pause-switch,
+#pauseOverlay .pause-exits button,
+#pauseOverlay .pause-resume button,
+#pauseOverlay .pause-extras .icon-btn {
+  display: grid; grid-template-columns: 24px minmax(0, 1fr) auto;
+  grid-column-gap: 12px; column-gap: 12px; align-items: center;
+  text-align: left; justify-items: start;
+  font-family: 'Karla', sans-serif; font-size: 0.95rem; font-weight: 600;
+  padding-left: 16px; padding-right: 16px;
+}
+#pauseOverlay .pause-exits button,
+#pauseOverlay .pause-resume button { padding-left: 17px; padding-right: 17px; }
+#pauseOverlay .pause-switch > span:first-child,
+#pauseOverlay .pause-exits button > :first-child,
+#pauseOverlay .pause-resume button > :first-child,
+#pauseOverlay .pause-extras .icon-btn > :first-child { grid-column: 2; }
+#pauseOverlay .pause-switch > .pill-switch,
+#pauseOverlay .pause-switch > .pause-chev { grid-column: 3; justify-self: end; }
+/* 《Pro》局中锁住时那句说明（推15C 连同 Pro 那一行一起拿掉）：在字底下另起一行，和字同一条左边线。 */
+#pauseOverlay .pause-switch > .pause-switch-note { grid-column: 2 / 4; grid-row: 2; justify-self: stretch; }
+#pauseOverlay .modal .btn-row.pause-exits { flex-direction: column; }
 /* 手机横屏、矮于 560（10-18 补充 M-3）：一列装不下，改成左右两栏——左边是各个开关，
    右边上面标题、下面三颗键。用 grid-template-areas 不用 gap：小红书老内核（Chrome 61）认
    grid-column-gap，不认 grid 上的 gap（Chrome 66 才有），两种写法都写上。
@@ -5458,6 +5492,13 @@ html.is-playing body { background: var(--play-bg); }
 .app--game .controls { position: relative; }
 .app--game .controls #stopBtn.stop-btn--split-h .ctl-glyph { width: 58%; }
 .app--game .controls #stopBtn.stop-btn--split-v .ctl-glyph { height: 58%; }
+/* 11-01 补充方案推15B：上面两条只把图形收窄到 58%，可 #stopBtn 是居中的弹性盒，收窄了的图形照旧摆在整颗的正中——压在
+   分缝上（390 竖屏偏 37px、320 偏 30px、电脑偏 51.5px），没照 Z-J03 第 3 条「暂停挪到左半正中」。主轴改成从头排、
+   图形不许伸缩，它就落在左（上）那 58% 的正中。#stopBtn 的盒子一个像素不动。 */
+.app--game .controls #stopBtn.stop-btn--split-h { justify-content: flex-start; }
+.app--game .controls #stopBtn.stop-btn--split-v { align-items: flex-start; }
+.app--game .controls #stopBtn.stop-btn--split-h .ctl-glyph { flex: none; }
+.app--game .controls #stopBtn.stop-btn--split-v .ctl-glyph { flex: none; }
 .app--game .controls #hintBtn {
   position: absolute; z-index: 1; margin: 0; flex: none; min-width: 0; min-height: 0; aspect-ratio: auto;
   padding: 4px; background: transparent; border: none; border-radius: 0;
@@ -5465,6 +5506,10 @@ html.is-playing body { background: var(--play-bg); }
 }
 .app--game .controls #hintBtn.hint-btn--v { border-left: none; border-top: 2px solid rgba(255, 255, 255, 0.55); }
 .app--game .controls #hintBtn[hidden] { display: none; }
+/* 灯泡半：圆角接上那块牌的右（下）两角——按下去换了底色时不露直角（推15B）。数值照 .controls .icon-btn 的圆角抄
+   （各档都没另写，一个式子）。 */
+.app--game .controls #hintBtn { border-radius: 0 clamp(11px, 1.9vh, 17px) clamp(11px, 1.9vh, 17px) 0; }
+.app--game .controls #hintBtn.hint-btn--v { border-radius: 0 0 clamp(11px, 1.9vh, 17px) clamp(11px, 1.9vh, 17px); }
 /* The pressed flip: ground to the same family's terracotta, type from the
    chip's near-white to its near-black. Deliberately small — this is the
    feel of a key going down, not a state change. */
@@ -7793,6 +7838,10 @@ body.is-room-host::after {
   .app.app--game > .controls--solo #stopBtn { --ctl-disc: transparent; --ctl-mark: var(--play-chip-ink); }
   /* 按下去那一下底色换成深的，两根条跟着换浅色（10-18 补充 M-1：深条压按下底只有 2.33:1）。 */
   .app.app--game > .controls--solo #stopBtn:active, .app.app--game > .controls--solo #stopBtn.chip--press { --ctl-mark: var(--play-chip-press-ink); }
+  /* 灯泡那一半也去掉圆盘，和暂停同样子：墨色记号直接印在牌面上（站长 11-01，推15B）。 */
+  .app.app--game > .controls--solo #hintBtn { --ctl-disc: transparent; --ctl-mark: var(--play-chip-ink); }
+  .app.app--game > .controls--solo #hintBtn.chip--press,
+  .app.app--game > .controls--solo #hintBtn:active { --ctl-mark: var(--play-chip-press-ink); }
   /* 教学：稿上 270 宽的白框，右栏居中（不再贴右沿），字居中。 */
   .app.app--game.has-coach {
     /* 稿上 270/1500 = 18vw。下限 240 和边栏下限对齐，上限 330 免得在超宽屏上
