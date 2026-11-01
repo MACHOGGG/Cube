@@ -53,6 +53,8 @@ const RANGE: Record<string, readonly [number, number]> = {
   carry: [0, 1],
   vmax: [0, 30],
   stale: [0, 500],
+  // 11-01 补充方案推15A：手指拖够这么多像素松手至少换一站（axisMotion 的 COMMIT_PX）。模拟台那份 JSON 里没有这个键。
+  commitPx: [10, 120],
   springK: [10, 600],
   zeta: [0.2, 2],
   shift: [0, 0.45],

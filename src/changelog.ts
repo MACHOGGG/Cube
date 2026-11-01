@@ -17,7 +17,7 @@ import type { Lang } from './i18n';
  *
  * 0 = 还没有写过一条：这一套从 10-11 起才有，线上的旧页面不认 `release`，照旧比 `sha`（见 engine/newVersion.ts）。
  */
-export const RELEASE = 12;
+export const RELEASE = 13;
 
 export type ReleaseNote = Record<Lang, string>;
 
@@ -100,6 +100,14 @@ export const CHANGELOG: Readonly<Record<number, ReleaseNote>> = {
     zhHant: '新規則上線，戰績重新開始',
     en: 'New rules are live: records start fresh',
     fr: 'Nouvelles r\u00e8gles en ligne \u2014 palmar\u00e8s \u00e0 z\u00e9ro',
+  },
+  // 11-01 补充方案推15A：主菜单触屏慢拖没反应（onLostCapture 把卡片交出隐式捕获当成松手；慢拖不到约 160px 本来也不换站）。
+  // 站长给的原文是「修复：主菜单慢慢滑也能换玩法」（14 个字），简繁上限 12 个字，删「主菜单」三个字：「换玩法」已经说了是哪儿。
+  13: {
+    zhHans: '修复：慢慢滑也能换玩法',
+    zhHant: '修復：慢慢滑也能換玩法',
+    en: 'Fixed: slow swipes now switch modes',
+    fr: 'Corrig\u00e9\u00a0: glisser lentement change de mode',
   },
 };
 

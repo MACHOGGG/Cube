@@ -174,7 +174,7 @@ BOT_DEBUG=1 …    # 每一手印一行；BOT_DEBUG2=1 印「以为要得分、�
 **CI 之外那一批要开浏览器的没有脚本串起来**（CI 里那一批是 `node scripts/ci-browser.mjs all`），
 全靠手跑（例如 `check-coach-anim`：教学呼吸灯在浏览器里实际生效的动画名、减弱动态效果时的静止光晕；`check-flip-batch`）。CI 里那一批也值得推之前先在本地跑相关的那一道——比如改了主菜单的摆位、图标尺寸、
 style.css 里任何一条 `.mode-axis` 的规则，**或者 `src/engine/axisMotion.ts` / `modeAxis.ts`
-里任何一个跟手感有关的数**，先跑这一道（它在 CI 的 b 片里，等 CI 告诉你要十几分钟）：
+里任何一个跟手感有关的数**，先跑这一道（它在 CI 的 i 片里，等 CI 告诉你要十几分钟；11-01 推15A 加了触屏慢拖那一节，从 b 片挪过去）：
 
 ```bash
 node scripts/dev-server.mjs 8958 dist &

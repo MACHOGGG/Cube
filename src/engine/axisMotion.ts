@@ -255,3 +255,77 @@ export function skewFor(v: number): number {
   if (a < SKEW_DEAD) return 0;
   return Math.sign(v) * Math.min(SKEW_MAX, (a - SKEW_DEAD) * SKEW_K);
 }
+
+// ---------------------------------------------------------------------------
+// 松手：投影一段、定在哪一站（原先写在 ui/modeAxis.ts 的 onUp 里，11-01 补充方案推15A 抽出来）
+// ---------------------------------------------------------------------------
+
+/**
+ * 松手之后再滑一段——「轻微的物理动感」。
+ *
+ * 上一版是松手即刻弹到最近那一项：手感干净，但没有「甩出去」这回事，玩家第六轮
+ * 要的正是那点惯性。现在按松手那一刻的速度往前**投影**一段，落在哪一项就弹去哪
+ * 一项，再由弹簧（engine/spring 的 SETTLE_SPRING，k=150、阻尼比 0.78）收尾——它
+ * 自带 2% 的过冲，落定时有一记轻轻的回弹。
+ *
+ * 投影要封顶，而且要**轻**——玩家要的是「轻微的物理动感」，不是甩出去半张菜单：
+ *   · FLING_MS：把速度换成距离的那个系数（等效「再滑 18ms」）。头一版拍了 45，
+ *     实测一次 90px 的中速滑（本该走 1 项）被它推到 3 项、240px 的快甩多走 3
+ *     项——那不是「轻微」，那是「按下去以后它自己又走了两站」。
+ *   · FLING_MAX：最多再滑两站。
+ *   · FLING_MIN：**低于两成项的投影一律当没有。** 慢慢拖到位再松手的那一下，
+ *     手上其实还有一点残速，算出来是 0.1–0.4 项；不设这道下限的话，它正好够
+ *     把「停在 5.45」推过 5.5 那条线，于是松手定在 6——玩家眼睛看着 5，手一松
+ *     跳到 6。站点原则第三条（不要让玩家出现意料之外的疏漏操作）说的就是这个。
+ *   · FLING_CARRY / FLING_VMAX：交给弹簧的初速度（只给三成、并且封顶），过冲才
+ *     是「轻轻一荡」而不是「冲过头好几张」。
+ *   · 手指在松手前已经停住（超过 FLING_STALE 没有新的 move）就不投影——那是
+ *     「放下」，不是「甩出去」。
+ */
+export const FLING_MS = tune('flingMs', 56);
+export const FLING_MAX = tune('flingMax', 2);
+export const FLING_MIN = tune('flingMin', 0.1);
+export const FLING_CARRY = tune('carry', 0.15);
+export const FLING_VMAX = tune('vmax', 3);
+export const FLING_STALE = tune('stale', 70);
+/**
+ * **手指拖够这么多像素，松手至少换一站**（11-01 补充方案推15A，站长定）。
+ *
+ * 慢拖那一档的倍率调得很低（gain 0.9 × slowK 0.45 × CARD_K 0.8 ≈ 0.324），一站约 202px：慢慢拖不到约 160px，目标值
+ * 连半站都没走到，round 回原地——玩家拖了一大截，松手什么都没发生（推15A 的次因；主因是 onLostCapture，见 ui/modeAxis.ts）。
+ * 所以 round 完还在原地、而手指确实拖了 ≥ COMMIT_PX，就往手指的方向换一站。快甩的投影（FLING_*）一点没动，它本来就走
+ * 得出去；靠边那两条点点（rail）不兜：那是位置直接映到项上，手指停在哪一颗就是哪一颗。
+ */
+export const COMMIT_PX = tune('commitPx', 36);
+
+export interface ReleaseInput {
+  /** 按下那一刻画面在第几项（可能不是整数：弹簧还没停稳就被按住）。 */
+  startFocus: number;
+  /** 松手那一刻的目标值（手指指着第几项，见 ui/modeAxis.ts 的 aimFocus）。 */
+  aimFocus: number;
+  /** 平滑过的目标值速度（项/毫秒，带正负）。 */
+  vFocus: number;
+  /** 手指松手前已经停住了（超过 FLING_STALE 没有新的 move）：那是放下，不投影。reduced-motion 也传 true（投影是动画）。 */
+  stale: boolean;
+  /** 按下到最后一次 move，手指在 y 上走了多少像素（往下为正）。 */
+  fingerDy: number;
+  /** 这一把拖的是靠边那两条点点。 */
+  rail: boolean;
+  /** 一共几排（橡皮筋两端照现行夹住）。 */
+  rows: number;
+}
+
+/**
+ * 松手停在哪一站，和交给弹簧的那一段投影。
+ *
+ * round 的是**目标值**，不是画面值（画面永远落后一点点，拿它 round 就会在「慢慢拖到某一张、停住、松手」时停到上一张去）。
+ * 手指往下 = 焦点往**前**（索引变小），所以 fingerDy > 0 退一站。
+ */
+export function releaseTarget(o: ReleaseInput): { target: number; glide: number } {
+  const raw = o.stale ? 0 : o.vFocus * FLING_MS;
+  const glide = Math.abs(raw) < FLING_MIN ? 0 : Math.max(-FLING_MAX, Math.min(FLING_MAX, raw));
+  const home = Math.round(o.startFocus);
+  let target = Math.round(o.aimFocus + glide);
+  if (!o.rail && target === home && Math.abs(o.fingerDy) >= COMMIT_PX) target = home + (o.fingerDy > 0 ? -1 : 1);
+  return { target: Math.min(Math.max(target, 0), o.rows - 1), glide };
+}

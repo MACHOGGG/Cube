@@ -60,7 +60,9 @@
 import { fisheye, hitTest, influence, type FisheyeParams } from '../engine/fisheye';
 import { createSpring, snapSpring, springAtRest, type SpringState } from '../engine/spring';
 import { tune, tuneFlag } from '../engine/axisTune';
-import { AXIS_LAMBDA, AXIS_SETTLE_LAMBDA, blurFor, chase, flatFor, rubber, settleStep, skewFor } from '../engine/axisMotion';
+import {
+  AXIS_LAMBDA, AXIS_SETTLE_LAMBDA, FLING_CARRY, FLING_STALE, FLING_VMAX, blurFor, chase, flatFor, releaseTarget, rubber, settleStep, skewFor,
+} from '../engine/axisMotion';
 import { reducedMotion } from '../engine/reducedMotion';
 import { motionTier } from '../engine/frameTier';
 import { playAxisTick } from '../engine/juice';
@@ -260,34 +262,8 @@ const RAIL_GRAB = 56;
  * 这是这一轮唯一改动的旧常量。
  */
 const CARD_K = 0.8;
-/**
- * 松手之后再滑一段——「轻微的物理动感」。
- *
- * 上一版是松手即刻弹到最近那一项：手感干净，但没有「甩出去」这回事，玩家第六轮
- * 要的正是那点惯性。现在按松手那一刻的速度往前**投影**一段，落在哪一项就弹去哪
- * 一项，再由弹簧（engine/spring 的 SETTLE_SPRING，k=150、阻尼比 0.78）收尾——它
- * 自带 2% 的过冲，落定时有一记轻轻的回弹。
- *
- * 投影要封顶，而且要**轻**——玩家要的是「轻微的物理动感」，不是甩出去半张菜单：
- *   · FLING_MS：把速度换成距离的那个系数（等效「再滑 18ms」）。头一版拍了 45，
- *     实测一次 90px 的中速滑（本该走 1 项）被它推到 3 项、240px 的快甩多走 3
- *     项——那不是「轻微」，那是「按下去以后它自己又走了两站」。
- *   · FLING_MAX：最多再滑两站。
- *   · FLING_MIN：**低于两成项的投影一律当没有。** 慢慢拖到位再松手的那一下，
- *     手上其实还有一点残速，算出来是 0.1–0.4 项；不设这道下限的话，它正好够
- *     把「停在 5.45」推过 5.5 那条线，于是松手定在 6——玩家眼睛看着 5，手一松
- *     跳到 6。站点原则第三条（不要让玩家出现意料之外的疏漏操作）说的就是这个。
- *   · FLING_CARRY / FLING_VMAX：交给弹簧的初速度（只给三成、并且封顶），过冲才
- *     是「轻轻一荡」而不是「冲过头好几张」。
- *   · 手指在松手前已经停住（超过 FLING_STALE 没有新的 move）就不投影——那是
- *     「放下」，不是「甩出去」。
- */
-const FLING_MS = tune('flingMs', 56);
-const FLING_MAX = tune('flingMax', 2);
-const FLING_MIN = tune('flingMin', 0.1);
-const FLING_CARRY = tune('carry', 0.15);
-const FLING_VMAX = tune('vmax', 3);
-const FLING_STALE = tune('stale', 70);
+// 松手之后再滑一段的那几个数（FLING_*）和「松手停在哪一站」（releaseTarget）挪到了 engine/axisMotion.ts（11-01 补充方案
+// 推15A）：定站抽成纯函数，check-axis-motion 才能拿 node 回放它。
 /*
  * **这条轴上没有震动。**
  *
@@ -476,6 +452,13 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
   let raf = 0;
   let dragging = false;
   let captured = false;
+  /**
+   * 轴**自己**此刻是不是捕获着这根手指（gotpointercapture 落在 host 上置真，onDown / onUp 清掉）。
+   *
+   * 11-01 补充方案推15A：`captured` 只说明「我们要过捕获」，不说明捕获真的落在轴上、也不说明此刻还在。onLostCapture
+   * 只在它为真时收尾——见那一处。
+   */
+  let hostHasCapture = false;
   let moved = 0;
   let startY = 0;
   let startFocus = 0;
@@ -1087,6 +1070,7 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
     activeId = e.pointerId;
     dragging = true;
     captured = false;
+    hostHasCapture = false;
     moved = 0;
     startY = e.clientY;
     startFocus = focus;
@@ -1178,8 +1162,26 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
     schedule();
   }
 
-  /** 捕获被收走了：只在真捕获过时算松手（onUp 自己 releasePointerCapture 也会来这一条，那时 dragging 已经是假）。 */
+  /** 捕获真的落到了轴上（setPointerCapture 成功之后浏览器派来的）。卡片上那一条冒泡上来的不算。 */
+  function onGotCapture(e: PointerEvent): void {
+    if (e.target === host && dragging && (activeId === null || e.pointerId === activeId)) hostHasCapture = true;
+  }
+
+  /**
+   * 捕获被收走了：等于松手（推07 Z-H04 G12 要防的「捕获被收走、松手丢失」）。**只认轴自己丢的那一条。**
+   *
+   * 11-01 补充方案推15A（严重，所有玩家）：原先这儿不看 `e.target`。触屏按下时浏览器把触点**隐式捕获**在按到的那张卡片
+   * 上；手指走过 TAP_SLOP（10px），onMove 调 host.setPointerCapture 把捕获拿到轴上——卡片于是收到一条
+   * lostpointercapture，它冒泡到轴上，被当成松手：拖动在第 10px 就结束了，慢慢拖整条轴一动不动。门全用 page.mouse
+   * （鼠标没有隐式捕获），所以一直绿；check-mode-axis 的「触屏慢拖」那一节用 CDP 真触点量它。
+   * onUp 自己 releasePointerCapture 也会来这一条，那时 dragging 已经是假、hostHasCapture 已经清掉。
+   */
   function onLostCapture(e: PointerEvent): void {
+    // 卡片交出隐式捕获（触屏按下时浏览器替它捕获的）那一条会冒泡上来，不是松手。
+    if (e.target !== host || !dragging) return;
+    if (activeId !== null && e.pointerId !== activeId) return;
+    if (!hostHasCapture) return;
+    hostHasCapture = false;
     if (captured) onUp(e);
   }
 
@@ -1187,6 +1189,7 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
     if (!dragging || (activeId !== null && e.pointerId !== activeId)) return;
     activeId = null;
     dragging = false;
+    hostHasCapture = false;
     host.classList.remove('mode-axis--rail');
     if (captured) {
       try {
@@ -1196,27 +1199,26 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
       }
     }
     /**
-     * 松手：先按速度投影出「还会再滑到哪儿」，再定格到那一项上。
+     * 松手：先按速度投影出「还会再滑到哪儿」，再定格到那一项上（engine/axisMotion.ts 的 releaseTarget）。
      *
      * 投影只在「手指还在动的时候松开」才算数——停住超过 FLING_STALE 没有新的
      * move，那是把它放下，不是甩出去（而且那会儿 vFocus 还留着最后一次的值，不
      * 拦一下就会凭空飞走一段）。
-     */
-    const stale = e.timeStamp - lastT > FLING_STALE;
-    const raw = stale ? 0 : vFocus * FLING_MS;
-    const glide = Math.abs(raw) < FLING_MIN ? 0 : Math.max(-FLING_MAX, Math.min(FLING_MAX, raw));
-    ruler = null;
-    /**
-     * §5.3 离散定格：松手必须停在某一项上，不能停在两项中间。
      *
-     * round 的是**目标值**，不是画面值。画面永远落后一点点（追赶），拿它去 round
-     * 就会在「慢慢拖到某一张、停住、松手」的时候停到上一张去——那正是玩家最怕的
-     * 「选不准」。目标值是手指指着的那一项，落点从此和追赶无关。
+     * §5.3 离散定格：松手必须停在某一项上，不能停在两项中间。round 的是**目标值**，不是画面值（见 releaseTarget）。
+     * 手指拖够 COMMIT_PX（36px）而 round 完还在原地的，往手指的方向换一站（11-01 补充方案推15A）。
+     *
+     * fingerDy 拿最后一次 move 的位置算，不拿这一条事件的：lostpointercapture、pointercancel 带的坐标靠不住。
      */
-    const target = Math.min(Math.max(Math.round(aimFocus + glide), 0), rows - 1);
+    const release = {
+      startFocus, aimFocus, vFocus, rail, rows,
+      stale: e.timeStamp - lastT > FLING_STALE,
+      fingerDy: lastY - startY,
+    };
+    ruler = null;
     if (reducedMotion()) {
-      // §5.1：这台设备要求少动画，那就直接跳过去，不要过渡。也不投影：那是动画。
-      const near = Math.min(Math.max(Math.round(aimFocus), 0), rows - 1);
+      // §5.1：这台设备要求少动画，那就直接跳过去，不要过渡。也不投影：那是动画（stale 传真）；36px 兜底照样算。
+      const near = releaseTarget({ ...release, stale: true }).target;
       focus = near;
       aimFocus = near;
       springTarget = near;
@@ -1225,6 +1227,7 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
       settled();
       return;
     }
+    const { target, glide } = releaseTarget(release);
     springTarget = target;
     // 弹簧从**画面当前的位置**起步，不是从目标值起步——从目标值起步等于松手那
     // 一刻画面凭空跳过去补上那点落后，一次可见的闪动。
@@ -1399,6 +1402,7 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
   host.addEventListener('pointermove', onMove);
   host.addEventListener('pointerup', onUp);
   host.addEventListener('pointercancel', onUp);
+  host.addEventListener('gotpointercapture', onGotCapture);
   host.addEventListener('lostpointercapture', onLostCapture);
   host.addEventListener('click', onClickCapture, true);
   host.addEventListener('focusin', onFocusIn);
@@ -1426,6 +1430,7 @@ export function mountModeAxis(host: HTMLElement, opts: ModeAxisOpts): ModeAxis {
       host.removeEventListener('pointermove', onMove);
       host.removeEventListener('pointerup', onUp);
       host.removeEventListener('pointercancel', onUp);
+      host.removeEventListener('gotpointercapture', onGotCapture);
       host.removeEventListener('lostpointercapture', onLostCapture);
       host.removeEventListener('click', onClickCapture, true);
       host.removeEventListener('focusin', onFocusIn);

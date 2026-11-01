@@ -25,6 +25,8 @@
  *     延伸」）。上一版停在底排上沿，两头各空一条带子，在他眼里就是「被挡住」。
  *   · **力道分档。** 同样的位移，快甩要比慢拖走得远（第四轮：「根据力道会有不同
  *     速度」「现在的 0.75 倍作为正常滑动的灵敏度」）。
+ *   · **触屏慢拖拖得动**（4o，11-01 补充方案推15A）。别的节全用 page.mouse，鼠标没有「隐式捕获」，所以「卡片交出捕获
+ *     被当成松手、慢拖在第 10px 就断」那个毛病在这道门里一直是绿的；4o 用 CDP 真触点量。
  */
 import { chromium } from 'playwright';
 import { UNLOCK_ALL } from './lib/unlockAll.mjs';
@@ -1736,6 +1738,107 @@ let page = await menuPage({ slides_played_square: '1' });
   check('4n（尺子）点第一张那一下真的在淡出（softSwap 那一路，不是直接换）', out.ok && out.leaving, JSON.stringify(out));
   check('4n 120ms 里连点计时、炸弹两张：最后停在炸弹那一页（后点的）', out.ok && out.bomb && !out.timed, JSON.stringify(out));
   await ps.close();
+}
+
+// ── 4o. 触屏慢拖（11-01 补充方案推15A，严重，所有玩家）─────────────────────────
+//
+// 玩家：主菜单慢慢拖没反应。主因：推07 加的 onLostCapture 不看 e.target——触屏按下时浏览器把触点**隐式捕获**在卡片上，
+// 手指走过 10px 轴调 setPointerCapture，卡片收到的 lostpointercapture 冒泡到轴上被当成松手，拖动在第 10px 就结束了。
+// 这道门别的节全用 page.mouse（鼠标没有隐式捕获），所以一直绿。这一节用 CDP 的 Input.dispatchTouchEvent 发真触点，
+// 按在对着选中线的那张卡上：
+//   ① 40 / 80 / 120 / 200px × 100 / 200 / 400px/s 慢拖，每一组松手都换站（≥1 站，往手指的方向）——次因（慢拖倍率低，
+//      不到约 160px 本来就不换站）由 engine/axisMotion 的 COMMIT_PX（36px）兜，那条另在 check-axis-motion 里回放；
+//   ② touchEnd 之前，轴上收到的 target === host 的 lostpointercapture 是 0（卡片那一条冒泡上来的不算）；
+//   ③ 第一站往上拖 40px 能换站；
+//   ④ 第 3 步（slides_played_stage=3，4 排）也量一遍。
+{
+  const STAGE3_TOUCH = { slides_played_migrated_v1: '1', slides_played_stage: '3', slides_played_stage_shown: '3', slides_played_circle: '1', slides_played_square: '1', slides_played_finished: '1', slides_cvd_offer: '1' };
+  /** 对着选中线的是第几排，和那一排第一张卡的正中（按在卡上，不按在空隙：空隙按下去隐式捕获就在轴上，量不到那个毛病）。 */
+  const where = (pg) => pg.evaluate(() => {
+    const host = document.querySelector('.mode-axis');
+    const hr = host.getBoundingClientRect();
+    const mid = hr.top + hr.height / 2 - (parseFloat(getComputedStyle(host).getPropertyValue('--axis-shift')) || 0);
+    const rows = new Map();
+    for (const el of [...host.children].filter((e) => e.classList.contains('home-icon-btn'))) {
+      const r = el.getBoundingClientRect();
+      const key = Math.round((r.top + r.height / 2) * 2) / 2;
+      if (!rows.has(key)) rows.set(key, { cy: r.top + r.height / 2, x: r.left + r.width / 2 });
+    }
+    const list = [...rows.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
+    let best = 0;
+    list.forEach((v, i) => { if (Math.abs(v.cy - mid) < Math.abs(list[best].cy - mid)) best = i; });
+    return { row: best, x: list[best].x, y: list[best].cy, rows: list.length, menu: !!document.querySelector('.mode-axis') };
+  });
+  const armLost = (pg) => pg.evaluate(() => {
+    const host = document.querySelector('.mode-axis');
+    window.__lpcHost = 0;
+    window.__lpcCard = 0;
+    host.addEventListener('lostpointercapture', (e) => {
+      if (e.target === host) window.__lpcHost++;
+      else window.__lpcCard++;
+    });
+  });
+  /** 真触点慢拖：dy 像素（负 = 往上）、speed px/s，16ms 一条 touchMove；松手前读一次 lostpointercapture 计数。 */
+  const touchDrag = async (pg, cdp, x, y, dy, speed) => {
+    // 每一把从 0 数起：上一把松手时轴自己 releasePointerCapture 那一条（正常的）不能算进这一把。
+    await pg.evaluate(() => { window.__lpcHost = 0; window.__lpcCard = 0; });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y, id: 1 }] });
+    const t0 = Date.now();
+    let done = 0;
+    while (Math.abs(done) < Math.abs(dy)) {
+      await pg.waitForTimeout(16);
+      done = Math.sign(dy) * Math.min(Math.abs(dy), (speed * (Date.now() - t0)) / 1000);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y + done, id: 1 }] });
+    }
+    const lost = await pg.evaluate(() => ({ host: window.__lpcHost, card: window.__lpcCard }));
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await pg.waitForTimeout(700);
+    return lost;
+  };
+  const fresh = async (base) => {
+    const pg = await menuPage({ slides_played_square: '1' }, base);
+    await forgetAxis(pg);
+    await pg.reload({ waitUntil: 'load' });
+    await pg.waitForSelector('.mode-axis .home-icon-btn', { timeout: 20000 });
+    await pg.waitForTimeout(500);
+    await armLost(pg);
+    return { pg, cdp: await pg.context().newCDPSession(pg) };
+  };
+  for (const [tag, base] of [['第 5 步', UNLOCK_ALL], ['第 3 步（4 排）', STAGE3_TOUCH]]) {
+    const { pg, cdp } = await fresh(base);
+    const bad = [];
+    let hostLost = 0;
+    let cardLost = 0;
+    let groups = 0;
+    for (const dy of [40, 80, 120, 200]) {
+      for (const speed of [100, 200, 400]) {
+        // 从第 1 排起往上拖（往后走一站），再从那儿往下拖回来（往前走一站）：两个方向都量，而且不撞两头。
+        for (const dir of [-1, 1]) {
+          const a = await where(pg);
+          if (dir === 1 && a.row === 0) continue;
+          const lost = await touchDrag(pg, cdp, a.x, a.y, dir * dy, speed);
+          const b = await where(pg);
+          groups++;
+          hostLost += lost.host;
+          cardLost += lost.card;
+          const moved = b.row - a.row;
+          if (!b.menu || (dir === -1 ? moved < 1 : moved > -1)) bad.push(`${dir < 0 ? '↑' : '↓'}${dy}px@${speed}: ${a.row}→${b.row}`);
+        }
+      }
+    }
+    check(`4o ① ${tag}：触屏慢拖 40–200px × 100/200/400px/s，每一组松手都换站（往手指的方向）`, bad.length === 0, bad.join(' ') || `${groups} 组`);
+    check(`4o ② ${tag}：松手之前轴上收到的 lostpointercapture（target 是轴自己）是 0`, hostLost === 0,
+      `轴 ${hostLost} 次 · 卡片冒泡上来 ${cardLost} 次`);
+    check(`4o ②（尺子）${tag}：卡片确实交出过隐式捕获（冒泡上来的那一条有）`, cardLost > 0, `${cardLost} 次`);
+    await pg.close();
+    // ③ 第一站往上拖 40px。
+    const f = await fresh(base);
+    const a = await where(f.pg);
+    await touchDrag(f.pg, f.cdp, a.x, a.y, -40, 200);
+    const b = await where(f.pg);
+    check(`4o ③ ${tag}：第一站往上拖 40px 能换站`, a.row === 0 && b.row >= 1, `${a.row} → ${b.row}`);
+    await f.pg.close();
+  }
 }
 
 // ── 4h. 点点轨：十四颗全程都看得见 ──────────────────────────────────

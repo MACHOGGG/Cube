@@ -20,7 +20,8 @@ if (!motionSrc || !springSrc) {
   process.exit(2);
 }
 const { damp, chase, settleStep, AXIS_LERP, AXIS_LAMBDA, AXIS_SETTLE_LAMBDA, AXIS_VMAX_ROWS, blurFor, BLUR_EDGE, BLUR_MAX, BLUR_EXEMPT,
-  flatFor, FLAT_MAX, FLAT_DEAD, FLAT_VMAX, rubber, RUBBER_D, skewFor, SKEW_DEAD, SKEW_MAX } = await import(motionSrc);
+  flatFor, FLAT_MAX, FLAT_DEAD, FLAT_VMAX, rubber, RUBBER_D, skewFor, SKEW_DEAD, SKEW_MAX,
+  releaseTarget, COMMIT_PX, FLING_MS, FLING_MIN, FLING_MAX } = await import(motionSrc);
 const { createSpring, stepSpring } = await import(springSrc);
 
 let fail = 0;
@@ -322,6 +323,52 @@ const check = (name, ok, extra = '') => {
   // 量化成 0.5px 一档：filter 一改就要重新栅格化那张卡，量化之后一次滑动只写几次。
   const qs = [0, 20, 40, 60, 80, 100, 130].map((r) => blurFor(r, 0));
   check('量化成 0.5px 一档', qs.every((v) => Math.abs(v * 2 - Math.round(v * 2)) < 1e-9), qs.join(' '));
+}
+
+// ── 松手停在哪一站（releaseTarget，11-01 补充方案推15A）──────────────────
+//
+// 慢拖那一档倍率很低：0.9（gain）× 0.45（slowK）× 0.8（CARD_K）≈ 0.324，一站约 202px（方案 11-01 用 node 模拟量的数），慢慢拖
+// 不到约 160px 目标值连半站都没走到，round 回原地——拖了一大截，松手什么都没发生。站长定：手指拖够 COMMIT_PX（36px）松手
+// 至少换一站。这儿拿那两个数回放手指：位移 dy、手速 v（px/ms）→ 目标值走了 dy × 倍率 / 站距、速度 v × 倍率 / 站距（项/ms）。
+// 快甩不打 slowK（0.9 × 0.8 = 0.72）。手指往上（dy < 0）= 焦点往后（索引变大）。
+{
+  const STATION = 202;
+  const SLOW = 0.324;
+  const FAST = 0.72;
+  const ROWS = 7;
+  const play = (dy, v, gain, { start = 3, stale = false, rail = false } = {}) => {
+    const per = gain / STATION;
+    return releaseTarget({
+      startFocus: start, aimFocus: start - dy * per, vFocus: -Math.sign(dy) * v * per, stale, fingerDy: dy, rail, rows: ROWS,
+    }).target - start;
+  };
+  check('COMMIT_PX 默认 36px', COMMIT_PX === 36, String(COMMIT_PX));
+  // 20px：不到 COMMIT_PX，慢拖原地不动（点一下、手指抖一下都不该换站）。
+  const tiny = [0.1, 0.2, 0.4].flatMap((v) => [play(-20, v, SLOW), play(20, v, SLOW)]);
+  check('慢拖 20px：原地不动', tiny.every((d) => d === 0), tiny.join(' '));
+  // ≥ 36px 慢拖：每一组至少一站，方向跟着手指。
+  const rowsSlow = [];
+  for (const dy of [36, 40, 80, 120, 160, 200]) for (const v of [0.1, 0.2, 0.4]) rowsSlow.push([dy, v, play(-dy, v, SLOW), play(dy, v, SLOW)]);
+  const badSlow = rowsSlow.filter(([, , up, down]) => !(up >= 1 && down <= -1));
+  check('慢拖 ≥36px（36–200px × 0.1/0.2/0.4 px/ms）：每一组至少换一站，往手指的方向', badSlow.length === 0,
+    badSlow.map(([dy, v, u, d]) => `${dy}px@${v}: ${u}/${d}`).join(' ') || `${rowsSlow.length} 组`);
+  // 停住再松手（stale：放下，不投影；reduced-motion 也走这一支）：36px 兜底照样算。
+  check('拖 40px 停住再松手（不投影）：照样换一站', play(-40, 0.2, SLOW, { stale: true }) === 1);
+  // 快甩 ≥ 慢拖：同样的位移，快甩走得不比慢拖近。
+  const pairs = [];
+  for (const dy of [40, 80, 120, 200]) pairs.push([dy, play(-dy, 0.2, SLOW), play(-dy, 2.5, FAST)]);
+  check('同样的位移，快甩 ≥ 慢拖', pairs.every(([, s1, f1]) => f1 >= s1), pairs.map(([dy, s1, f1]) => `${dy}px 慢${s1}/快${f1}`).join(' '));
+  check('快甩照旧封顶（投影最多 FLING_MAX 站）', play(-200, 50, FAST) <= Math.round(200 * FAST / STATION) + FLING_MAX,
+    `${play(-200, 50, FAST)} 站（FLING_MS ${FLING_MS}、FLING_MIN ${FLING_MIN}）`);
+  // 目标值已经走过一站的：不再多加一站（兜底只管「还在原地」）。
+  const one = releaseTarget({ startFocus: 3, aimFocus: 4.2, vFocus: 0, stale: true, fingerDy: -260, rail: false, rows: ROWS }).target;
+  check('目标值已经走到下一站：兜底不再多加', one === 4, String(one));
+  // 靠边那两条点点：位置直接映到项上，不兜。
+  check('拖的是点点（rail）：不兜', play(-40, 0.2, SLOW, { rail: true }) === 0);
+  // 两端照现行夹住：第一站往下拖、最后一站往上拖都不越界。
+  check('第一站往下拖 40px：还在第一站（不越界）', play(40, 0.2, SLOW, { start: 0 }) === 0);
+  check('第一站往上拖 40px：换到第二站', play(-40, 0.2, SLOW, { start: 0 }) === 1);
+  check('最后一站往上拖 40px：还在最后一站', play(-40, 0.2, SLOW, { start: ROWS - 1 }) === 0);
 }
 
 console.log(fail === 0 ? '\n全部通过' : `\n${fail} 条没过`);
