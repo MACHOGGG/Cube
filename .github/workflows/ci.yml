@@ -290,6 +290,12 @@ jobs:
           npx esbuild src/engine/residueBoard.ts --bundle --format=esm --outfile=/tmp/resboard.mjs
           npx esbuild src/engine/scoreOutline.ts --bundle --format=esm --outfile=/tmp/scoreoutline.mjs
           node scripts/check-coach.mjs /tmp/coach.mjs /tmp/i18n.mjs /tmp/coachhint.mjs /tmp/outeredge.mjs /tmp/erosion.mjs /tmp/resboard.mjs /tmp/scoreoutline.mjs
+      # 教学呼吸灯的搜索拿真棋盘、真局面对（10-14 方案 D-5 第 1 条，10-31 方案推15 Z-C06）：金标那几副方块 / 小球开局牌按固定种子走
+      # 0–30 步，五百多个局面上 planGroup / planEdge / planBest 和门里一份不带估值的逐层加深逐个对——最少步数、挑的色（平手规则）、
+      # 亮哪几枚、估值不高估、E 平手亮外边、退回估值 ≤ 1%。--mutants 把搜索改坏四处（估值 +1、平手不留上一色、D 亮色块、E 平手取
+      # 图案），各自要红。棋盘交给搜索的那一份是棋盘自己的 glowView（只在门自己那一包里露出来）。约一分半钟。
+      - name: 教学呼吸灯的搜索和不带估值的参考逐个对得上
+        run: node scripts/check-coach-plan.mjs --mutants
       # 教学第 4 条（星星消除）讲不讲（2026-10-08 方案 3-E-3：starClearHintFor）。三个手摆的局面各钉一步——星星多
       # 的那一色输给外边上已经有得多的那一色；差得一样多时星星少的赢（它在盘面上排在后面，按先碰到的挑会挑错）；外边
       # 上摆满四颗却只有四颗、填不满五格的那一色被筛掉。最后一节：D 亮的是 planEdge 挑的那一色所有的星星，不是它那一组
@@ -1072,7 +1078,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [a, b, c, d, e, f, g, h, seed-deal, oldcss]
+        shard: [a, b, c, d, e, f, g, h, i, seed-deal, oldcss]
     steps:
       # v5：见 check 那一条的 steps。
       - uses: actions/checkout@v5
